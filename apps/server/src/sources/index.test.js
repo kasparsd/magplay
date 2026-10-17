@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { bitmagnetUrl, sourcesFromEnv, createSources } from './index.js'
+import { bitmagnetUrl, sourcesFromEnv, createSources, sourceHealthRequest } from './index.js'
 import { resolveLink } from './links.js'
 import { mockFetch } from './test-helpers.js'
 
@@ -40,6 +40,18 @@ test('Jackett preset builds the feed URL, or keeps a full one', async () => {
   assert.equal(fetch.calls[0].url.pathname, '/api/v2.0/indexers/tag%3Atv%2C!type%3Aprivate/results/torznab/api')
   assert.equal(fetch.calls[0].url.searchParams.get('apikey'), 'j')
   assert.equal(fetch.calls[1].url.pathname, '/api/v2.0/indexers/example-source/results/torznab/api')
+})
+
+test('health checks use the same authenticated endpoint shape as sources', () => {
+  const torznab = sourceHealthRequest({ type: 'torznab', url: 'http://indexer:9117/api', apiKey: 'key' })
+  assert.equal(torznab.url.searchParams.get('t'), 'caps')
+  assert.equal(torznab.url.searchParams.get('apikey'), 'key')
+  const jackett = sourceHealthRequest({ type: 'jackett', url: 'http://jackett:9117', apiKey: 'key', indexer: 'all' })
+  assert.equal(jackett.url.pathname, '/api/v2.0/indexers/all/results/torznab/api')
+  assert.equal(jackett.url.searchParams.get('apikey'), 'key')
+  const prowlarr = sourceHealthRequest({ type: 'prowlarr', url: 'http://prowlarr:9696/base', apiKey: 'key' })
+  assert.equal(prowlarr.url.pathname, '/base/api/v1/health')
+  assert.deepEqual(prowlarr.headers, { 'X-Api-Key': 'key' })
 })
 
 test('unknown source types and bad URLs fail at startup', () => {

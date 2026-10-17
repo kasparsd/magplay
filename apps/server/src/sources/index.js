@@ -4,6 +4,19 @@ import { createProwlarrSource } from './prowlarr.js'
 
 const trimSlash = s => s.replace(/\/+$/, '')
 
+/** A minimal authenticated request suitable for a source health check. */
+export function sourceHealthRequest (source) {
+  if (source.type === 'prowlarr') {
+    return { url: new URL('api/v1/health', `${trimSlash(source.url)}/`), headers: source.apiKey ? { 'X-Api-Key': source.apiKey } : undefined }
+  }
+  const url = new URL(source.type === 'jackett' && !/\/torznab(\/api)?\/?$/.test(new URL(source.url).pathname)
+    ? `${trimSlash(source.url)}/api/v2.0/indexers/${encodeURIComponent(source.indexer || 'all')}/results/torznab/api`
+    : source.url)
+  url.searchParams.set('t', 'caps')
+  if (source.apiKey) url.searchParams.set('apikey', source.apiKey)
+  return { url }
+}
+
 /** Adapter factories by source type. Jackett is a Torznab preset. */
 export const ADAPTERS = {
   torznab: createTorznabSource,
@@ -62,6 +75,10 @@ export function createSources (configs, deps) {
  * BitMagnet's base URL for browsing: BITMAGNET_URL (its address or its Torznab URL), otherwise a Torznab source at
  * BitMagnet's own path, /torznab/api. Null when there's no BitMagnet, which turns Explore off.
  */
+export function sourceIdentity (source) {
+  return typeof source.id === 'string' && source.id ? `id:${source.id}` : `${source.type}:${source.url}`
+}
+
 export function bitmagnetUrl (env, configs) {
   const candidate = env.BITMAGNET_URL || configs.find(c => c.type === 'torznab' && /^\/torznab(\/api)?\/?$/.test(new URL(c.url).pathname))?.url
   return candidate ? new URL(candidate).origin : null

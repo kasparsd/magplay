@@ -2,12 +2,12 @@ import http from 'node:http'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import config, { onSettingsChanged, settingsSnapshot, updateSettings } from './config.js'
+import config, { onSettingsChanged, settingsSnapshot, sourceForTest, updateSettings } from './config.js'
 import { HttpError, toHttpError } from './errors.ts'
 import { createRouter, route, sendCached, serveFile } from '@magplay/http-kit'
 import { SourceError } from './sources/release.js'
 import { createSearch } from './search.js'
-import { createSources } from './sources/index.js'
+import { createSources, sourceHealthRequest } from './sources/index.js'
 import { createBitmagnetBrowser, TYPES } from './sources/bitmagnet.js'
 import { addTorrent, describe, getFile, getTorrent, knownWarning, recent, serveRaw, serveTar, status } from './torrents.js'
 import { probe, decide, subtitleToVtt } from './media.js'
@@ -36,7 +36,9 @@ function requireSameOrigin (req) {
   if (site === 'same-origin') return
   const origin = req.headers.origin
   const host = req.headers.host
-  if (origin && host && new URL(origin).host === host) return
+  if (origin && origin !== 'null' && host) {
+    try { if (new URL(origin).host === host) return } catch {}
+  }
   throw new HttpError(403, 'This action must come from magplay itself.')
 }
 
@@ -240,12 +242,13 @@ async function saveSettings ({ req, res }) {
 async function testSettings ({ req, res }) {
   requireSameOrigin(req)
   const body = await readJson(req)
-  const source = body.source
-  if (!source || typeof source !== 'object' || typeof source.url !== 'string') throw new HttpError(400, 'Choose a source to test.')
+  const candidate = body.source
+  if (!candidate || typeof candidate !== 'object' || typeof candidate.url !== 'string') throw new HttpError(400, 'Choose a source to test.')
+  const source = sourceForTest(candidate)
   let response
   try {
-    const url = source.type === 'prowlarr' ? new URL('/api/v1/health', source.url).href : source.url
-    response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    const { url, headers } = sourceHealthRequest(source)
+    response = await fetch(url, { headers, signal: AbortSignal.timeout(5000) })
   } catch {
     json(res, 200, { level: 'error', message: 'Could not reach this source.' })
     return
@@ -260,13 +263,16 @@ function speedtest ({ req, res }) {
   const max = 256 * 1024 * 1024
   res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' })
   const write = () => {
+    if (closed) return
     while (!res.destroyed && sent < max) {
       sent += chunk.length
       if (!res.write(chunk)) { res.once('drain', write); return }
     }
-    if (!res.destroyed) res.end()
+    if (!closed && !res.destroyed) res.end()
   }
-  req.once('close', () => res.destroy())
+  let closed = false
+  const close = () => { closed = true; res.off('drain', write) }
+  res.once('close', close)
   write()
 }
 

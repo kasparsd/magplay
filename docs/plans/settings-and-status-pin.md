@@ -1,6 +1,6 @@
 # Settings page and status menu
 
-A status menu at the right of every page's top bar, and a settings page at `/settings`. The menu is one button that shows overall health (green, amber, red, or a hollow ring while unchecked), lists the checks and recent status changes, and links to Settings. The settings page edits what `.env` sets today, holds this browser's preferences, and has a Debug section. Both are driven by small declarative registries (status checks, settings schema) with one generic renderer per control type, so a new check or setting is one entry and no new UI.
+A status indicator and separate Settings button at the right of every page's top bar, and a settings page at `/settings`. The indicator shows overall health (green, amber, red, or a hollow ring while unchecked), opens the checks and recent status changes, and carries the problem count. The adjacent Settings button opens Settings directly. The settings page edits what `.env` sets today, holds this browser's preferences, and has a Debug section. Both are driven by small declarative registries (status checks, settings schema) with one generic renderer per control type, so a new check or setting is one entry and no new UI.
 
 Mockup and proposal: [magplay Settings and Status](https://claude.ai/artifact/VGDQJ8ue6DFgcH7Mni2tuB) (clickable: switch between the all good, needs attention, problem and not checked yet states, and walk through each settings section).
 
@@ -9,7 +9,18 @@ Screenshots of the mockup (light theme unless noted):
 - Status menu: [all good](settings-and-status-pin/settings-status-menu-ok.png), [needs attention](settings-and-status-pin/settings-status-menu-warn.png) ([dark](settings-and-status-pin/settings-status-menu-warn-dark.png)), [problem](settings-and-status-pin/settings-status-menu-error.png).
 - Settings page: [Sources with a failing key](settings-and-status-pin/settings-page-sources.png), [Playback](settings-and-status-pin/settings-page-playback.png), [Connection](settings-and-status-pin/settings-page-connection.png), [Server](settings-and-status-pin/settings-page-server.png), [Server with unsaved changes](settings-and-status-pin/settings-page-server-unsaved.png), [Debug](settings-and-status-pin/settings-page-debug.png), [375 px](settings-and-status-pin/settings-page-mobile.png).
 
-Status: initial Settings and Status implementation landed 2026-11-06. The shared schema, persisted server values, health registry, status pin, Settings page, browser preferences and connection test are implemented. The richer Debug log/resource views, cache-clear action, client-check merge and end-to-end coverage remain follow-up work. This replaces the earlier link-only "status pin" draft of this plan; the bandwidth test design below is kept from it.
+Status: initial Settings and Status implementation is in progress as of 2026-10-17. The shared schema, persisted server values, health registry, status indicator, Settings page, browser preferences and connection test are implemented. A 2026-10-17 review found reliability and interaction defects around source credentials, write atomicity, connection-test cancellation, restart/live boundaries and focus preservation; they are being remediated before this work is considered landed. The richer Debug log/resource views, cache-clear action and client-check merge remain follow-up work. This replaces the earlier link-only "status pin" draft of this plan; the bandwidth test design below is kept from it.
+
+## Review remediation — 2026-10-17
+
+- [ ] Make every dependency of the committed server/config/API surface present before committing the feature.
+- [x] Send Torznab/Jackett credentials for health checks and source tests, preserve saved secrets by stable source identity, and show test results inline.
+- [x] Cancel the speed-test reader/client request and stop the server stream when the response closes.
+- [x] Reject malformed or `null` origins as a 403.
+- [x] Correct numeric schema bounds, atomic persistence and restart/live setting behaviour.
+- [x] Preserve keyboard focus and avoid refetching Debug while editing settings.
+- [x] Introduce shared field anatomy for labels, visible descriptions, inline errors and optional `(i) More help` disclosures.
+- [x] Add focused unit/browser regression coverage for the reviewed cases.
 
 ## Why
 
@@ -41,7 +52,7 @@ Status: initial Settings and Status implementation landed 2026-11-06. The shared
 
 ### Status menu (top bar, right side)
 
-- **Button:** a status dot, a problem count when there are problems, and a gear icon, as one `<button>` with an accessible name that carries the state ("Status: 2 problems. Settings"). At 375 px the count hides and only the dot and gear remain. It replaces nothing: the right side of the top bar is empty today.
+- **Controls:** the status indicator is one accessible control with a dot and problem count ("Status: 2 problems"). The adjacent gear is a separate Settings link, so Settings is one direct activation away while status notifications stay independently available. Both remain visible at 375 px.
 - **Levels:** each check is `ok | warn | error | unknown`. The overall level is the worst result. Green appears only when the required checks (indexers, ffmpeg, disk) have run and passed. Until then the dot is a hollow ring, so the menu never claims health it hasn't measured.
 - **Panel** (shared `menu()` component, keyboard and Escape as today):
   1. A headline ("All good", "Needs attention", "Something isn't working") with a one-line summary.
@@ -94,7 +105,7 @@ type SettingDef = {
 
 ### Settings page
 
-Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settings.js` (picked up by the esbuild entry glob; add the page route in `server.js`). The section nav is a side list on desktop and a horizontal scroller at 375 px. The hash selects the section (`/settings#debug`), so status actions deep-link. Each section header says where values are saved ("on the server, applies to everyone" or "in this browser"). Sections with a failing check show a dot in the nav.
+Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settings.js` (picked up by the esbuild entry glob; add the page route in `server.js`). Sources, Playback, Connection, Server and Debug appear as one readable page. There is intentionally no sidebar, hash navigation or in-page jump menu; the shared top bar remains available for future primary navigation. Each section header says where values are saved ("on the server, applies to everyone" or "in this browser").
 
 - **Sources:** one group per source with type, address and API key, a Test button (`POST /api/settings/test` runs the check against unsaved values), and its live status. Also Add source, the BitMagnet address and the search timeout.
 - **Playback:** on the server, allow transcoding, transcode resolution and simultaneous conversions. In this browser, preferred subtitles and audio, default speed, and autoplay next.
@@ -149,10 +160,11 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 - [ ] Extend `GET /api/debug` from its current redacted runtime snapshot with a log ring, live resource meters and the cache-clear action.
 - [x] `GET /api/speedtest` faucet and `lib/speedtest.ts` on-demand connection measurement.
 - [x] `lib/controls.ts` renderers for the simple input controls, with accessible labels; sources use the repeatable editor on the Settings page.
-- [x] Status pin and panel in `lib/ui.ts`, shared by every page, with unread event tracking and the 375 px layout.
-- [x] `/settings` page with hash navigation, source editor, sticky save bar, inline field errors and env-locked rows.
+- [x] Separate status indicator/panel and direct Settings button in `lib/ui.ts`, shared by every page, with unread event tracking and the 375 px layout.
+- [x] `/settings` page with a source editor, sticky save bar, inline field errors and env-locked rows; no sidebar or in-page anchor navigation.
 - [x] Player reads audio/subtitle language, playback speed and autoplay-next defaults from browser settings.
-- [ ] e2e: broken-source pin/action, live save, env lock, cross-origin refusal and connection-warning coverage.
+- [x] e2e: separate indicator/direct Settings control, readable menu rows, live save/persistence, env lock, no sidebar, cross-origin refusal and generated screenshots.
+- [ ] e2e: broken-source error state/action and connection-warning coverage.
 - [x] Update [user-interface.md](../user-interface.md), the README configuration section and [architecture.md](../architecture.md).
 
 ## Open questions

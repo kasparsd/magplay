@@ -152,11 +152,11 @@ export function installStatusPin (): void {
     const { level, checks, events } = latest
     const problems = checks.filter(check => check.level === 'warn' || check.level === 'error')
     const label = level === 'ok' ? 'All good' : level === 'unknown' ? 'Checking status' : level === 'warn' ? 'Needs attention' : "Something isn't working"
-    const countText = problems.length ? ` ${problems.length}` : ''
     summary.className = `status-pin ${level}`
     summary.textContent = ''
-    summary.setAttribute('aria-label', problems.length ? `Status: ${problems.length} problem${problems.length === 1 ? '' : 's'}. Settings` : `Status: ${label}. Settings`)
-    summary.append(el('span', { className: 'status-dot', ariaHidden: 'true' }), el('span', { className: 'status-count', textContent: countText }), el('span', { className: 'status-gear', textContent: '⚙', ariaHidden: 'true' }))
+    summary.setAttribute('aria-label', problems.length ? `Status: ${problems.length} problem${problems.length === 1 ? '' : 's'}` : `Status: ${label}`)
+    summary.append(el('span', { className: 'status-dot', ariaHidden: 'true' }))
+    if (problems.length) summary.append(el('span', { className: 'status-count', textContent: String(problems.length) }))
     const unread = events.filter(event => event.at > seen)
     fill(panel,
       el('p', { className: 'status-headline', textContent: label }),
@@ -185,7 +185,16 @@ export function installStatusPin (): void {
       render()
     }
   })
-  bar.append(box)
+  const settings = el('a', { className: 'settings-shortcut', href: '/settings', title: 'Settings', ariaLabel: 'Settings' })
+  if (location.pathname === '/settings') settings.setAttribute('aria-current', 'page')
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  icon.setAttribute('viewBox', '0 0 24 24')
+  icon.setAttribute('aria-hidden', 'true')
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute('d', 'M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5m0-6 1.1 2.6 2.8.3.8 2.7 2.4 1.5-1 2.6 1 2.6-2.4 1.5-.8 2.7-2.8.3L12 21.5l-1.1-2.6-2.8-.3-.8-2.7-2.4-1.5 1-2.6-1-2.6 2.4-1.5.8-2.7 2.8-.3L12 2.5Z')
+  icon.append(path)
+  settings.append(icon)
+  bar.append(box, settings)
   load().catch(() => {})
   setInterval(() => { load().catch(() => {}) }, 30_000)
   addEventListener('focus', () => { load().catch(() => {}) })

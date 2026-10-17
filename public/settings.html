@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · magplay</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">magplay</a>
+    <a class="navlink" href="/explore">Explore</a>
+    <form id="search" class="topsearch" action="/" role="search">
+      <input name="q" type="search" placeholder="Search" aria-label="Search">
+      <button>Search</button>
+    </form>
+  </header>
+  <main class="settings-page">
+    <header class="settings-heading"><h1>Settings</h1><p>Server settings apply to everyone. Browser settings stay on this device.</p></header>
+    <div id="settings-status" class="status busy">Loading settings…</div>
+    <div id="settings-layout" hidden>
+      <div id="settings-sections"></div>
+    </div>
+  </main>
+  <div id="save-bar" class="save-bar" hidden></div>
+  <script type="module" src="/settings.js"></script>
+</body>
+</html>

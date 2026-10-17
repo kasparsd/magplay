@@ -10,18 +10,18 @@ One person (or a household) on a trusted local network, on a laptop, phone or TV
 
 ### Pages and URLs
 
-- Six pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`), Player (`/play/<infohash>/<file>`) and Settings (`/settings#section`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters, selected file and selected settings section) lives in the URL, not only in memory.
-- Every page shares the same top bar: the `magplay` home link, Explore, a search box and the status pin. The search box keeps the current query where there is one. The status pin names the overall state, opens the status menu, and links to Settings and Debug.
+- Six pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`), Player (`/play/<infohash>/<file>`) and Settings (`/settings`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters and selected file) lives in the URL, not only in memory.
+- Every page shares the same top bar: the `magplay` home link, Explore, a search box, the status indicator and a Settings button. The search box keeps the current query where there is one. The indicator opens status notifications; the Settings button opens `/settings` directly.
 - Back links name where they go ("← Big Buck Bunny", "← Results") and only appear when that destination is the real previous step.
 - Malformed URLs fall back to defaults (for example an unknown Explore `type` becomes `movie`) instead of showing a validation error.
 
 ### Settings and status
 
-The status pin sits at the right edge of every top bar. It combines a state dot, an optional problem count and a settings affordance into one accessible control. Its label states the current result, for example “Status: 2 problems. Settings”. At 375 px the count disappears but the dot and control remain.
+The status indicator and Settings button sit separately at the right edge of every top bar. The indicator combines a state dot and problem count into one accessible control; its label states only the current status, for example “Status: 2 problems”. The adjacent Settings button always opens `/settings` directly. Both remain usable at 375 px.
 
-- The four states are `ok`, `warn`, `error` and `unknown`. Green means every required check passed; amber and red mean attention or failure; a hollow ring means checks have not completed yet. The pin must never claim health before it has a result.
-- Opening the pin shows a concise heading, checks ordered from worst to best, a plain-language explanation and a direct Settings link for every fixable problem. It also shows recent state changes and links to Settings and Debug. Escape closes the shared menu. The pin refreshes while the tab is visible and on focus, not continuously in a hidden tab.
-- Settings lives at `/settings`; hashes select and deep-link to `#sources`, `#playback`, `#connection`, `#server` and `#debug`. Desktop navigation is a side list. At 375 px it becomes a horizontal scroller and problem sections carry a dot.
+- The four indicator states are `ok`, `warn`, `error` and `unknown`. Green means every required check passed; amber and red mean attention or failure; a hollow ring means checks have not completed yet. The indicator must never claim health before it has a result.
+- Opening the indicator shows a concise heading, checks ordered from worst to best, a plain-language explanation and a direct Settings link for every fixable problem. It also shows recent state changes and links to Settings and Debug. Escape closes the shared menu. The indicator refreshes while the tab is visible and on focus, not continuously in a hidden tab.
+- Settings lives at `/settings` and presents Sources, Playback, Connection, Server and Debug as one readable page. It deliberately has no sidebar or in-page anchor navigation; the shared top bar is reserved for future primary navigation.
 - Server settings apply to everyone. They use a sticky save bar with a change count, Discard and Save, and validation errors appear by the relevant control. An environment-provided value is read-only and names its variable; Settings never edits `.env`. Saved server values are written by the server, not trusted from browser storage.
 - Browser settings apply immediately and stay only in that browser. Preferred audio/subtitle language, default speed and autoplay-next are used by the Player. Browser debug toggles and the last connection-test result also stay local.
 - Sources show their type, address and API-key state, allow a connection test and can be added after any environment-defined sources. API-key text is never returned to the browser; an existing key is presented as saved and can be replaced.
@@ -54,6 +54,7 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 - Text from indexers is decoded once on the server (HTML entities) and treated as plain text in the client.
 - The `hidden` attribute always hides an element, regardless of component styles.
 - Settings renders the shared schema for server and browser preferences. Environment values are visibly locked, server edits use an explicit save bar and browser preferences apply immediately. Secrets are represented by their saved state, never their value.
+- Every editable setting uses the shared field anatomy: a visible label, a concise visible description where context is needed, an inline validation error and optional longer help in an `(i) More help` disclosure. The same anatomy is used for source fields and future forms.
 
 ### Visual and layout
 

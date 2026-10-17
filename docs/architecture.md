@@ -88,7 +88,7 @@ Vite remains an option if a dev server, fingerprinted assets or bundled browser-
 
 ## Settings and status
 
-`packages/api-contract/src/settings.ts` is the shared declarative settings schema and validator. `apps/server/src/config.js` resolves each server value in precedence order: environment, `CACHE_DIR/settings.json`, then schema default. The JSON file is written through a temporary file and rename; environment values remain locked rather than being copied into it. A settings change rebuilds the live search and Explore services and records whether a server restart is needed.
+`packages/api-contract/src/settings.ts` is the shared declarative settings schema and validator. `apps/server/src/config.js` resolves each server value in precedence order: environment, `data/settings.json` (or `SETTINGS_PATH`), then schema default. The stable settings path is deliberately separate from the configurable torrent cache. The JSON file is written through a unique temporary file and rename before in-memory state changes; environment values remain locked rather than being copied into it. A settings change rebuilds the live search and Explore services, while resources created during startup retain their startup configuration until restart.
 
 `apps/server/src/status.js` owns the TTL-cached health-check registry and in-memory recent-event ring. The server exposes its snapshot through `/api/status`; `lib/ui.ts` renders it as the one shared status pin and polls only while the document is visible. Browser preferences and the on-demand connection measurement never leave that browser.
 

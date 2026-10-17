@@ -42,6 +42,12 @@ async function startApp () {
     await exec('ffprobe', ['-version'])
     const { ih, cache, files, length } = await prepareCachedMedia(dir)
     indexer = http.createServer((req, res) => {
+      const url = new URL(req.url, 'http://indexer.test')
+      if (url.searchParams.get('t') === 'caps' && url.searchParams.get('apikey') !== 'fixture-key') {
+        res.writeHead(401)
+        res.end('missing key')
+        return
+      }
       res.writeHead(200, { 'Content-Type': 'application/rss+xml' })
       res.end(`<?xml version="1.0"?><rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><title>Local fixtures</title><item><title>Playback fixtures</title><guid>${ih}</guid><link>magnet:?xt=urn:btih:${ih}</link><size>${length}</size><torznab:attr name="infohash" value="${ih}"/><torznab:attr name="seeders" value="1"/></item></channel></rss>`)
     })
@@ -58,7 +64,9 @@ async function startApp () {
         PORT: String(port),
         TORRENT_PORT: '0',
         CACHE_DIR: cache,
+        SETTINGS_PATH: path.join(dir, 'settings.json'),
         TORZNAB_URL: `http://127.0.0.1:${indexer.address().port}/feed`,
+        TORZNAB_APIKEY: 'fixture-key',
         EXTRA_TRACKERS: '',
         ALLOW_VIDEO_TRANSCODE: 'false',
         DHT_ENABLED: 'false',

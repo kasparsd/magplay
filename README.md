@@ -174,7 +174,7 @@ response may need a hard reload/cache clear. No Node/proxy speedup has been benc
 
 ## Configuration
 
-Open **Settings** in magplay to inspect service health and change supported server defaults. Those values are saved atomically in `CACHE_DIR/settings.json` and apply to everyone using the server. Browser playback preferences stay in that browser's `localStorage`. Environment variables remain useful for deployment and always win over Settings; an environment-set field is shown as read-only with its variable name.
+Open **Settings** in magplay to inspect service health and change supported server defaults. Those values are saved atomically in `data/settings.json` (or `SETTINGS_PATH`) and apply to everyone using the server. The settings file is deliberately separate from the configurable torrent cache. Browser playback preferences stay in that browser's `localStorage`. Environment variables remain useful for deployment and always win over Settings; an environment-set field is shown as read-only with its variable name.
 
 | Var | Default | Meaning |
 |---|---|---|
@@ -188,6 +188,7 @@ Open **Settings** in magplay to inspect service health and change supported serv
 | `SEARCH_TIMEOUT_S` | `30` | Per-source search timeout (also Explore's) |
 | `BITMAGNET_URL` | from `TORZNAB_URL` | BitMagnet's address, for Explore (its GraphQL API). Found automatically when a Torznab source is at BitMagnet's path `/torznab/api`; without BitMagnet, Explore says so. |
 | `CACHE_DIR` | `./data` | Torrent data (`torrents/<infohash>/`) and HLS sessions (`hls/`). The Docker image overrides this to `/data`. |
+| `SETTINGS_PATH` | `./data/settings.json` | Persistent server settings written by the Settings page. Keep this separate from a cache location that may later change. |
 | `CACHE_MAX_GB` | `50` | Least-recently-used torrent folders are deleted above this (checked every minute; torrents in use are kept) |
 | `TORRENT_PORT` | `6881` | TCP (peers) and UDP (DHT). Publish both in Compose. |
 | `EXTRA_TRACKERS` | opentrackr, stealth.si, torrent.eu.org, explodie.org, desync.com | Comma-separated, added to every torrent (BitMagnet magnets often have none) |

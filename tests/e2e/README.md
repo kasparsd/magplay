@@ -47,6 +47,7 @@ Coverage:
 - Retryable HLS admission overload does not disrupt other admitted players.
 
 - Cache headers, conditional GET/HEAD, raw/tar ranges, completed/progressive subtitles and HLS session freshness.
+- Separate status indicator and direct Settings control, readable status rows, Settings save/persistence, environment-locked source controls, no sidebar navigation and cross-origin settings-write refusal. The test attaches status-menu and Debug screenshots for review.
 
 The deliberately failed/malformed POST responses and delayed audio-switch response are the only playback-response interventions. Codecs, probing, streams and successful decisions are not mocked. Each test uses a fresh browser context; each worker owns its server/cache. Teardown navigates away, stops leftover sessions through the API, shuts down the child and deletes its temporary files. Failure artifacts contain a screenshot, trace and server log.
 
