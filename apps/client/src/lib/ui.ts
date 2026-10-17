@@ -64,28 +64,59 @@ export function copyButton (label: string, text: string, title = text): HTMLButt
   return button
 }
 
+export interface MenuOptions {
+  /** Tooltip for the button. */
+  title?: string
+  className?: string
+  /** Accessible name, when the label is an icon. */
+  ariaLabel?: string
+  /** Open above the button, as the Player's chrome menus do. */
+  up?: boolean
+  /** The element the menu must stay inside (the Player's stage); the viewport when not given. */
+  within?: (() => Element | null) | undefined
+}
+
 /**
  * A dropdown menu built on <details>: menu('More', [menuHeading('Whole torrent'), el('a', …), menuSeparator(), copyButton(…)]).
  * Closes on an outside click, Escape, or after an item is chosen; only one is open at a time.
+ * It opens toward the side of the button that has room and is shifted and capped so it never leaves its bounds.
  */
-export function menu (label: string, items: Child[], { title = '', className = '' } = {}): HTMLDetailsElement {
-  const box = el('details', { className: `menu ${className}`.trim() },
-    el('summary', { textContent: label, title }),
-    el('div', { className: 'menu-items' }, ...items))
+export function menu (label: string | Node, items: Child[], { title = '', className = '', ariaLabel = '', up = false, within }: MenuOptions = {}): HTMLDetailsElement {
+  const summary = el('summary', { title })
+  summary.append(label)
+  if (ariaLabel) summary.setAttribute('aria-label', ariaLabel)
+  const list = el('div', { className: `menu-items${up ? ' up' : ''}` }, ...items)
+  const box = el('details', { className: `menu ${className}`.trim() }, summary, list)
   box.addEventListener('toggle', () => {
     if (!box.open) return
     for (const other of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) if (other !== box) other.open = false
-    // Open toward the side of the button that has room, so the items aren't clipped by the viewport
-    const items = $('.menu-items', box)
-    const { left, right } = box.getBoundingClientRect()
-    items.classList.toggle('end', document.documentElement.clientWidth - left < items.offsetWidth && right > document.documentElement.clientWidth - left)
+    list.style.left = ''
+    list.style.maxHeight = ''
+    const root = document.documentElement
+    const bounds = within?.()?.getBoundingClientRect() ?? new DOMRect(0, 0, root.clientWidth, root.clientHeight)
+    const button = box.getBoundingClientRect()
+    const width = list.offsetWidth
+    const gap = 4
+    // Left-aligned with the button when that fits, else right-aligned, then pushed back inside the bounds
+    let left = button.left + width > bounds.right - gap ? button.width - width : 0
+    left = Math.max(bounds.left + gap - button.left, Math.min(left, bounds.right - gap - button.left - width))
+    list.style.left = `${left}px`
+    if (up) list.style.maxHeight = `${Math.max(96, button.top - bounds.top - 2 * gap)}px`
   })
-  $('.menu-items', box).addEventListener('click', e => {
+  list.addEventListener('click', e => {
     const item = (e.target as Element).closest('a, button')
     // Copy buttons say "Copied" first, so close a moment later
     if (item) setTimeout(() => { box.open = false }, item.matches('button.copy') ? 700 : 0)
   }, true) // capture: copy buttons stop the click from bubbling
   return box
+}
+
+/** A choice in a menu that works like a radio group (Subtitles, Audio, Speed). */
+export function menuChoice (label: string, checked: boolean, onclick: () => void, { disabled = false, title = '' } = {}): HTMLButtonElement {
+  const item = el('button', { type: 'button', className: 'choice', textContent: label, onclick, disabled, title })
+  item.setAttribute('role', 'menuitemradio')
+  item.setAttribute('aria-checked', String(checked))
+  return item
 }
 export const menuHeading = (text: string): HTMLDivElement => el('div', { className: 'menu-heading', textContent: text })
 export const menuSeparator = (): HTMLHRElement => el('hr')
