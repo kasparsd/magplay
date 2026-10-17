@@ -1,14 +1,5 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "types": [
-      "node"
-    ],
-    "tsBuildInfoFile": ".tsbuild/root.tsbuildinfo"
-  },
-  "include": [
-    "eslint.config.ts"
-  ],
+  "files": [],
   "references": [
     {
       "path": "packages/api-contract"

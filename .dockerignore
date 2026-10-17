@@ -10,4 +10,4 @@ tests
 tools
 .env
 dist
-.tsbuild
+**/.tsbuild

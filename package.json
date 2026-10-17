@@ -18,14 +18,14 @@
   "scripts": {
     "prestart": "npm run build",
     "start": "node apps/server/src/server.js",
-    "test": "npm run build && node --test 'apps/**/*.test.js' 'apps/**/*.test.ts' 'packages/**/*.test.js' 'packages/**/*.test.ts'",
+    "test": "npm run build && node --test '{apps,packages}/**/*.test.{js,ts}'",
     "test:e2e": "npm run build && playwright test",
     "test:peers": "node --test tests/integration/*.test.js",
     "test:all": "npm test && npm run test:peers && npm run test:e2e",
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "build": "esbuild apps/client/src/search.js apps/client/src/explore.js apps/client/src/title.js apps/client/src/torrent.js apps/client/src/player.js --bundle --minify --format=esm --sourcemap --outdir=dist/client",
+    "build": "esbuild 'apps/client/src/*.js' --bundle --minify --format=esm --sourcemap --outdir=dist/client",
     "dev": "npm run build -- --watch & node --watch apps/server/src/server.js"
   },
   "engines": {
@@ -39,7 +39,6 @@
     "esbuild": "0.28.2",
     "eslint": "10.13.0",
     "globals": "17.13.0",
-    "jiti": "2.7.0",
     "neostandard": "0.14.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2"

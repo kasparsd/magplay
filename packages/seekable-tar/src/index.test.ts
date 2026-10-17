@@ -17,6 +17,7 @@ const files = [
 ]
 const layout = tarLayout(files.map(f => ({ path: f.path, length: f.data.length })), 1_700_000_000)
 // Mimics the torrent reader: yields the requested bytes in uneven chunks
+// eslint-disable-next-line @typescript-eslint/require-await -- async to match the AsyncIterable reader contract
 async function * readFile (i: number, start: number, end: number): AsyncGenerator<Buffer> {
   const bytes = files[i]!.data.subarray(start, end + 1)
   for (let at = 0; at < bytes.length; at += 300) yield bytes.subarray(at, at + 300)
