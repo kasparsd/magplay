@@ -48,6 +48,7 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 - Same side gutter on every page, including the Player. The Player's video band is the one exception: it runs edge to edge, and everything under it keeps the gutter.
 - Nothing is loaded from outside the NAS: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
 - Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized.
+- Search filters (All, Movies, TV) appear only once there is a query; the home page shows just the search bar and recent items.
 - Labels hide only what the source can't add to: show the source name on search results only when more than one source is configured.
 
 ### Accessibility and keyboard

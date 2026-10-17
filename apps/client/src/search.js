@@ -48,6 +48,8 @@ addEventListener('pagehide', () => { try { sessionStorage.setItem('lastScroll', 
 
 async function runSearch (q, cat) {
   const current = beginSearch()
+  $('#toolbar').hidden = false
+  $('#recent').hidden = true
   setStatus(status, 'Searching…', 'busy')
   fill($('#sources'))
   results.hidden = true
@@ -99,6 +101,7 @@ if (initial.get('q')) {
   const backForward = performance.getEntriesByType('navigation')[0]?.type === 'back_forward'
   const last = backForward && remembered(`${form.q.value}|${form.elements.cat.value}`)
   if (last) {
+    $('#toolbar').hidden = false
     show(last)
     try { scrollTo(0, Number(sessionStorage.getItem('lastScroll')) || 0) } catch {}
   } else {
