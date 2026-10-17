@@ -4,7 +4,7 @@ import Hls from 'hls.js'
 import { api } from './lib/api.ts'
 import { measureCaps } from './lib/capabilities.js'
 import { icon } from './lib/icons.ts'
-import { audioFormat, languageFromName, languageName, pickByLanguage } from './lib/naming.ts'
+import { audioFormat, languageFromName, languageName, pickByLanguage, releaseName } from './lib/naming.ts'
 import { parseVtt } from './lib/subtitles.ts'
 import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
 import { canSeekLocally, layerBackground, seekHint, seekOutcome, spans } from './lib/seek.ts'
@@ -75,7 +75,7 @@ function refusalActions () {
 
 /** A file number this torrent doesn't have: retrying can't help, so offer only the way back and hide the empty controls. */
 function missingFile (err) {
-  for (const sel of ['.options', '#details', '#chrome']) $(sel).hidden = true
+  for (const sel of ['#title-actions', '#details', '#chrome']) $(sel).hidden = true
   return notify(err.message, 'error', [linkButton('Back to files', urls.torrent(ih), true)])
 }
 
@@ -89,11 +89,12 @@ async function loadTitle (signal = pageLife.signal) {
   file = t?.files.find(x => x.idx === idx)
   if (t) $('#back').textContent = `← ${t.name}`
   if (!file) return
-  const label = episodeLabel(file)
-  $('#title').textContent = [label, baseName(file.name)].filter(Boolean).join(' · ')
-  document.title = `${label || baseName(file.name)} · magplay`
-  $('#screen-name').textContent = label || baseName(file.name)
-  $('#screen-sub').textContent = t.name
+  // The title is the release's name and episode ("Fleabag · S01E01"); the file name is in Details
+  const title = [releaseName(t.name), episodeLabel(file)].filter(Boolean).join(' · ')
+  $('#title').textContent = title
+  document.title = `${title} · magplay`
+  $('#screen-name').textContent = title
+  $('#screen-sub').textContent = baseName(file.name)
   fill($('#openin'), menu('Open in ▾', [
     menuHeading('Other players'),
     ...playerApps(ih, idx, file.name).map(([text, href, title = '']) => el('a', { href, title, textContent: text })),
@@ -146,7 +147,7 @@ function renderFacts () {
     ['Mode', cur ? `${cur.mode}: ${cur.reason}` : null],
     ['File', file ? `${baseName(file.name)} (${formatBytes(file.size)})` : null],
     ['Container', info?.container],
-    ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.height}p, ${v.bitDepth}-bit`],
+    ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.width}×${v.height}, ${(v.width * (v.sampleAspect || 1) / v.height).toFixed(2)}:1, ${v.bitDepth}-bit`],
     ['Audio', a && [audioFormat(a.codec, a.channels), languageName(a.language)].filter(Boolean).join(', ')],
     ['Peers', st?.loaded ? `${st.peers.length} · ↓ ${formatSpeed(st.downloadSpeed)}` : null],
     ['On the NAS', st?.file ? `${Math.round(st.file.progress * 100)}% of this file` : null],
@@ -461,6 +462,7 @@ async function loadInfo (signal = pageLife.signal) {
     if (err.status === 404) return missingFile(err)
     return notify(err.message, 'error', [button('Try again', () => location.reload(), true), linkButton('Back to files', urls.torrent(ih))])
   }
+  setAspect()
   // The remembered audio language picks the track, else track 1
   audio = pickByLanguage(info.audio, recall(PREF.audio))?.index ?? 0
   renderAudioMenu()
@@ -515,7 +517,7 @@ async function pollStatus (signal = pageLife.signal) {
       else if (slow) notify('')
       slow = nowSlow
     }
-    if ($('#details').open) renderFacts()
+    if (!$('#details').hidden) renderFacts()
     drawSeekbar()
   }
 }
@@ -775,7 +777,34 @@ video.addEventListener('volumechange', () => {
 })
 video.addEventListener('enterpictureinpicture', renderMore)
 video.addEventListener('leavepictureinpicture', renderMore)
-$('#details').addEventListener('toggle', () => $('#details').open && renderFacts())
+/** ⓘ Details and other disclosures under the title row: a button that shows and hides its panel. */
+function disclosure (toggle, panel, onOpen) {
+  toggle.addEventListener('click', () => {
+    panel.hidden = !panel.hidden
+    toggle.setAttribute('aria-expanded', String(!panel.hidden))
+    if (!panel.hidden) onOpen()
+  })
+}
+disclosure($('#details-toggle'), $('#details'), renderFacts)
+
+// Theater layout: the stage takes the largest box that fits the band's width and the viewport height
+// left by the top bar and the title row (see #stage in style.css). Phones in landscape give the video
+// the whole height under the top bar; the title row is one scroll away.
+const landscapePhone = matchMedia('(orientation: landscape) and (max-height: 500px)')
+function fitStage () {
+  const root = document.documentElement.style
+  root.setProperty('--topbar-h', `${$('.topbar').offsetHeight}px`)
+  root.setProperty('--title-row-h', landscapePhone.matches ? '0px' : `${$('#titlerow').offsetHeight}px`)
+}
+new ResizeObserver(fitStage).observe($('#titlerow'))
+addEventListener('resize', fitStage)
+fitStage()
+
+/** The video's display aspect ratio from the probe, corrected for non-square pixels. */
+function setAspect () {
+  const v = info?.video
+  if (v?.width && v.height) stage.style.setProperty('--ar', String(v.width * (v.sampleAspect || 1) / v.height))
+}
 
 let resumeAt = 0
 addEventListener('pagehide', () => {

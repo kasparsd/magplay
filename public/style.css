@@ -179,11 +179,17 @@ table.peers tr.choking { opacity: 0.55; }
   --ov-fg: #f5f5f4; --ov-muted: #d6d3d1; --ov-accent: #60a5fa; --ov-focus: #93c5fd; --ov-panel: rgb(20 18 16 / 0.96); --ov-line: #44403c; --ov-hover: rgb(255 255 255 / 0.12);
   --seek-track: rgb(255 255 255 / 0.16); --seek-nas: rgb(255 255 255 / 0.2); --seek-conv: rgb(255 255 255 / 0.38); --seek-buf: rgb(255 255 255 / 0.7);
   position: relative; display: grid; grid-template: minmax(0, auto) / minmax(0, 1fr); container-type: inline-size; background: #000; color: var(--ov-fg);
+  /* Theater layout: the largest box that fits both the band's width and the viewport height left by the top bar and title row.
+     --ar comes from the probe (16:9 until then); --topbar-h and --title-row-h are measured by player.js */
+  --ar: 16 / 9;
+  width: min(100%, calc((100dvh - var(--topbar-h, 0px) - var(--title-row-h, 0px)) * var(--ar)));
+  margin-inline: auto;
 }
+.band { background: #000; }
 #stage > * { grid-area: 1 / 1; }
-#stage > video { display: block; width: 100%; max-height: 80vh; align-self: center; background: #000; }
+#stage > video { display: block; width: 100%; height: auto; aspect-ratio: var(--ar); object-fit: contain; align-self: center; background: #000; }
 #stage:fullscreen { grid-template: minmax(0, 1fr) / minmax(0, 1fr); width: 100%; height: 100%; }
-#stage:fullscreen > video { height: 100%; max-height: none; }
+#stage:fullscreen > video { height: 100%; aspect-ratio: auto; }
 #stage.idle { cursor: none; }
 #stage :focus-visible { outline: 2px solid var(--ov-focus); outline-offset: -2px; }
 #stage .icon { width: 24px; height: 24px; fill: currentColor; }
@@ -279,11 +285,18 @@ kbd { display: inline-block; min-width: 1.7em; padding: 1px 5px; border: 1px sol
 
 @media (prefers-reduced-motion: reduce) { .chrome, .screen-title, .seekbar .track { transition: none; } }
 
-.options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+/* Title row under the band: back link and title on the left, Open in and the disclosures on the right */
+.player-main { padding-top: 0; }
+.titlerow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 0; }
+.titlerow .titles { flex: 1 1 280px; min-width: 0; }
+.titlerow h1 { margin: 0; font-size: 19px; }
+.title-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button.disclosure { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--fg); font-size: 14px; }
+button.disclosure:hover, button.disclosure[aria-expanded="true"] { background: var(--hover); }
+.title-actions details.menu.button > summary { font-size: 14px; }
+.panel { margin: 4px 0 16px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
 .muted { color: var(--muted); }
-details.details { margin-top: 12px; font-size: 13px; }
-details.details > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
-#facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 6px 0 0; }
+#facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
 #facts dt { color: var(--muted); }
 #facts dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 button.button { font: inherit; }
