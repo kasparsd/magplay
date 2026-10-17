@@ -7,7 +7,7 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !ke
 
 test('resource settings reject zero, negative, non-finite and fractional job counts at startup', () => {
   for (const [key, value] of [['MAX_PROBES', '0'], ['MAX_HLS_SESSIONS', '-1'], ['MAX_SUBTITLE_JOBS', '1.5'], ['HLS_MAX_GB', 'Infinity'], ['MIN_FREE_GB', 'bad']]) {
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', 'await import("./src/config.js")'], { env: { ...env, [key]: value }, encoding: 'utf8' })
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', 'await import("./apps/server/src/config.js")'], { env: { ...env, [key]: value }, encoding: 'utf8' })
     assert.notEqual(result.status, 0, key)
     assert.match(result.stderr, new RegExp(`${key} must be a positive`))
   }

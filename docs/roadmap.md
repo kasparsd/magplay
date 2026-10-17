@@ -19,7 +19,7 @@ A single-user media app for a trusted local network/NAS, with no accounts. Keep 
 | Lifetimes | Abortable page/play/subtitle waits, stale-result guards, countdown cleanup, tab-close fencing, raw/tar cancellation and separate metadata/checking deadlines | Browser crashes/dropped beacons still rely on idle cleanup; shared probe/torrent jobs can finish for other consumers rather than being destroyed by one cancellation |
 | Resource safety | Limits on HLS sessions, torrent initialization, probes and standalone subtitle conversion; free-space admission check and soft HLS disk monitor | Not an OS quota; checks can overshoot between samples; torrent LRU preserves active data; in-memory result caches still need long-session observation |
 | HTTP/static delivery | Explicit cache policies, conditional GET/HEAD, validators, safe static streaming and same-origin proxy guidance | Unversioned assets revalidate; shared proxy media caching is intentionally disabled; proxy offload has not been benchmarked |
-| Deployment | Non-root Node 22 Alpine Docker image with a separate install stage, multi-platform GHCR publishing (`edge` from `main`, versions from releases), local arm64 container acceptance, unit/peer/browser CI configuration | The recorded container acceptance predates the Alpine switch, so rerun it (native `node-datachannel` on musl, Alpine ffmpeg); actual NAS, amd64 and current Firefox/Safari/device acceptance are still unverified |
+| Deployment | Non-root Node 24 Alpine Docker image with a separate install stage, multi-platform GHCR publishing (`edge` from `main`, versions from releases), local arm64 container acceptance, unit/peer/browser CI configuration | The recorded container acceptance predates the Alpine switch, so rerun it (native `node-datachannel` on musl, Alpine ffmpeg); actual NAS, amd64 and current Firefox/Safari/device acceptance are still unverified |
 
 ## Implemented in the revised sequence
 
@@ -34,10 +34,10 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## Verification and confidence
 
-- Fast colocated suite: **108 tests**. `npm test` selects `src/**/*.test.js` and `public/**/*.test.js`, not helper modules or browser tests.
+- Fast colocated suite: **108 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
 - Chromium: **19 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
-- `npm run test:all` runs all three suites. Node 22 validation and the local Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md). Syntax and whitespace checks are also run.
+- `npm run test:all` runs all three suites. Node 22 validation and the local Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md). CI also runs `npm run typecheck` and `npm run lint`.
 - Browser fixture media is fully cached; the separate peer suite covers uncached transfer. Both generate original data/media locally and require no public swarm or live indexer.
 - Local Docker acceptance is Linux/arm64 on the development machine, **not** proof of NAS performance, browser rendering through the container, large-file hashing latency, or amd64 compatibility.
 - Back/Forward and synthetic retained-document page transitions are tested. Actual browser BFCache eligibility is not guaranteed.

@@ -51,7 +51,7 @@ async function startApp () {
     const origin = `http://127.0.0.1:${port}`
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
       !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS|ALLOW_VIDEO_TRANSCODE)/.test(key)))
-    proc = spawn(process.execPath, ['src/server.js'], {
+    proc = spawn(process.execPath, ['apps/server/src/server.js'], {
       cwd: root,
       env: {
         ...env,
@@ -93,7 +93,7 @@ async function startApp () {
 }
 
 export const test = base.extend({
-  app: [async ({}, use) => {
+  app: [async ({}, use) => { // eslint-disable-line no-empty-pattern -- Playwright requires a destructured first argument
     const app = await startApp()
     try { await use(app) } finally { await app.close() }
   }, { scope: 'worker' }],

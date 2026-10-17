@@ -2,9 +2,12 @@ node_modules
 data
 .git
 **/*.test.js
+**/*.test.ts
 **/test-fixtures
 **/test-helpers.js
 tests
 .dev
 tools
 .env
+dist
+.tsbuild

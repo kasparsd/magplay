@@ -5,3 +5,5 @@ tools/docker/*/config/
 .env
 playwright-report/
 test-results/
+dist/
+.tsbuild/

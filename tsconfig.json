@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "tsBuildInfoFile": ".tsbuild/root.tsbuildinfo"
+  },
+  "include": [
+    "eslint.config.ts"
+  ],
+  "references": [
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/client"
+    }
+  ]
+}

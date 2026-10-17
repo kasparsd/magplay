@@ -35,7 +35,6 @@ test('loopback peers: uncached bytes, disappearing seeder, cancellation, retry a
   const announce = `http://127.0.0.1:${tracker.http.address().port}/announce`
   const seeder = new WebTorrent({ dht: false, lsd: false, natUpnp: false, natPmp: false, utp: false, torrentPort: 0 })
   seeder.on('error', err => assert.fail(err.message))
-  let proc
   let logs = ''
   t.after(async () => {
     if (proc && proc.exitCode === null) {
@@ -56,7 +55,7 @@ test('loopback peers: uncached bytes, disappearing seeder, cancellation, retry a
   const cache = path.join(dir, 'cache')
   const appPort = await port()
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS)/.test(key)))
-  proc = spawn(process.execPath, ['src/server.js'], {
+  const proc = spawn(process.execPath, ['apps/server/src/server.js'], {
     env: {
       ...env,
       CACHE_DIR: cache,

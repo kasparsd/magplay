@@ -14,12 +14,16 @@ import { createRouter } from './router.js'
 import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls } from './sessions.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
-const publicDir = path.join(root, '../public')
-const CONTENT_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }
+const repoRoot = path.resolve(root, '../../..')
+const publicDir = path.join(repoRoot, 'public')
+const distDir = path.join(repoRoot, 'dist/client')
+const CONTENT_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json' }
 
 /** Serves a front-end file. Pages and scripts revalidate on every load, so a deploy shows up on reload. */
 const file = target => ({ req, res }) => serveFile(req, res, target, `${CONTENT_TYPES[path.extname(target)]}; charset=utf-8`)
 const page = name => file(path.join(publicDir, name))
+// Page bundles are built by esbuild from apps/client into dist/client (see `npm run build`)
+const asset = name => file(path.join(distDir, name))
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
@@ -207,8 +211,7 @@ const route = createRouter([
     res.end()
   }],
   ['GET', '/style.css', page('style.css')],
-  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js', 'lib/ui.js', 'lib/urls.js', 'lib/requests.js', 'lib/api.js', 'lib/api-types.js', 'lib/capabilities.js', 'lib/subtitles.js', 'lib/progress.js'].map(name => ['GET', `/${name}`, page(name)]),
-  ['GET', '/vendor/hls.min.js', file(path.join(root, '../node_modules/hls.js/dist/hls.min.js'))],
+  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js'].flatMap(name => [['GET', `/${name}`, asset(name)], ['GET', `/${name}.map`, asset(`${name}.map`)]]),
   ['GET', '/health', ({ res }) => json(res, 200, { ok: true })],
 
   // API

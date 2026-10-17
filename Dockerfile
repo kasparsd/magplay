@@ -1,18 +1,34 @@
-FROM node:22-alpine AS deps
+# Only the workspace manifests, so the install layers are cached until a package.json changes.
+FROM node:24-alpine AS manifests
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY apps ./apps
+RUN find apps -type f ! -name package.json -delete
+
+FROM node:24-alpine AS deps
+WORKDIR /app
+COPY --from=manifests /app ./
 # Install scripts fetch prebuilt native modules (node-datachannel, which WebTorrent loads at startup).
-# The server only serves hls.min.js from hls.js, and nothing reads source maps or type definitions.
+# hls.js is bundled into the client at build time, so the runtime never serves it from node_modules.
+# Nothing reads source maps or type definitions at runtime.
 RUN npm ci --omit=dev \
- && find node_modules/hls.js/dist -type f ! -name hls.min.js -delete \
  && find node_modules -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.md' \) -delete
 
-FROM node:22-alpine
+# Full install (dev dependencies: esbuild) to bundle the browser client.
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY --from=manifests /app ./
+RUN npm ci
+COPY apps ./apps
+RUN npm run build
+
+FROM node:24-alpine
 RUN apk add --no-cache ffmpeg
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
 COPY package.json ./
-COPY src ./src
+COPY apps/server ./apps/server
 COPY public ./public
 
 RUN mkdir -p /data && chown node:node /data
@@ -20,4 +36,4 @@ USER node
 ENV CACHE_DIR=/data
 EXPOSE 8080 6881/tcp 6881/udp
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
-CMD ["node", "src/server.js"]
+CMD ["node", "apps/server/src/server.js"]

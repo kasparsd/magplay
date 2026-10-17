@@ -19,7 +19,7 @@ async function freePort () {
 test('HTTP server serves pages and modules, rejects bad routes and remains healthy', { timeout: 20_000 }, async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-http-'))
   const port = await freePort()
-  const proc = spawn(process.execPath, ['src/server.js'], {
+  const proc = spawn(process.execPath, ['apps/server/src/server.js'], {
     env: {
       ...process.env,
       PORT: String(port),
@@ -50,7 +50,7 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     if (i >= 100) assert.fail(`Server did not start: ${output}`)
     await new Promise(resolve => setTimeout(resolve, 50))
   }
-  for (const url of ['/', '/explore', '/style.css', '/player.js', '/lib/requests.js', '/lib/api.js', '/lib/api-types.js', '/lib/capabilities.js', '/lib/subtitles.js', '/lib/progress.js', '/vendor/hls.min.js']) {
+  for (const url of ['/', '/explore', '/style.css', '/search.js', '/torrent.js', '/player.js', '/explore.js', '/title.js']) {
     const res = await fetch(origin + url)
     assert.equal(res.status, 200, url)
     assert.equal(res.headers.get('cache-control'), 'no-cache')
@@ -67,7 +67,7 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     assert.equal(head.headers.get('content-length'), length)
     assert.equal(await head.text(), '')
   }
-  for (const [url, status] of [['/t/%ZZ', 400], ['/playlistXm3u', 404], ['/api/search', 400], ['/api/torrents/bad', 400], ['/api/explore', 404], ['/lib/api.test.js', 404], ['/lib/requests.test.js', 404], ['/lib/capabilities.test.js', 404], ['/lib/subtitles.test.js', 404], ['/lib/progress.test.js', 404]]) {
+  for (const [url, status] of [['/t/%ZZ', 400], ['/playlistXm3u', 404], ['/api/search', 400], ['/api/torrents/bad', 400], ['/api/explore', 404], ['/lib/api.js', 404], ['/lib/api-types.js', 404], ['/vendor/hls.min.js', 404], ['/lib/api.test.js', 404], ['/lib/requests.test.js', 404], ['/lib/capabilities.test.js', 404], ['/lib/subtitles.test.js', 404], ['/lib/progress.test.js', 404]]) {
     const res = await fetch(origin + url)
     assert.equal(res.status, status, url)
     assert.equal(res.headers.get('cache-control'), 'no-store')

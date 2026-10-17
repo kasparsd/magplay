@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [22, 24]
+        node: [24, 26]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,8 +23,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:peers
-      - name: Check JavaScript syntax
-        run: find src public tools/scripts tests -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+      - run: npm run typecheck
+      - run: npm run lint
 
   playback:
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npm ci

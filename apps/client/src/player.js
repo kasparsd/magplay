@@ -1,4 +1,4 @@
-/* global Hls */
+import Hls from 'hls.js'
 // The player page, /play/<infohash>/<file index>.
 import { api } from './lib/api.js'
 import { measureCaps } from './lib/capabilities.js'
@@ -206,7 +206,7 @@ async function start (at = 0) {
     }
     if (gen !== generation) return
     // Safari plays HLS (and HEVC) natively; other browsers use hls.js
-    if (!window.Hls?.isSupported() || (navigator.vendor.includes('Apple') && video.canPlayType('application/vnd.apple.mpegurl'))) {
+    if (!Hls.isSupported() || (navigator.vendor.includes('Apple') && video.canPlayType('application/vnd.apple.mpegurl'))) {
       video.src = cur.url
     } else {
       hls = new Hls({ startPosition: 0, maxBufferLength: 60 })
@@ -228,7 +228,7 @@ async function start (at = 0) {
 
 async function waitForPlaylist (url, gen, signal) {
   const until = Date.now() + 45_000
-  while (Date.now() < until && gen === generation) {
+  while (Date.now() < until && gen === generation) { // eslint-disable-line no-unmodified-loop-condition -- generation is bumped by a new playlist load between polls
     const res = await fetch(url, { cache: 'no-store', signal })
     if (res.status === 500) throw new Error(await res.text())
     if (res.ok && /\.m4s/.test(await res.text())) return
@@ -240,7 +240,10 @@ async function waitForPlaylist (url, gen, signal) {
 function seekTo (t) {
   if (!cur) return
   t = Math.max(0, Math.min(t, (cur.duration || Infinity) - 1))
-  if (cur.mode === 'direct') return void (video.currentTime = t)
+  if (cur.mode === 'direct') {
+    video.currentTime = t
+    return
+  }
   const rel = t - cur.offset
   if (rel >= 0 && rel < produced - 2) video.currentTime = rel
   else start(t) // outside what ffmpeg has made: restart it there

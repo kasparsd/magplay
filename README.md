@@ -1,6 +1,6 @@
 # magplay
 
-Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a video from it, either in the browser or in an external player such as VLC, IINA or Infuse. One small Node.js service with no build step, meant for a home NAS on a private network. It has no login.
+Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a video from it, either in the browser or in an external player such as VLC, IINA or Infuse. One small Node.js service, meant for a home NAS on a private network. It has no login.
 
 For sample media to try it with, Blender’s [Open Movies](https://studio.blender.org/films/) such as Big Buck Bunny and [Elephants Dream](https://orange.blender.org/download/) are shared under Creative Commons.
 
@@ -105,7 +105,7 @@ Start it:
 docker compose up -d
 ```
 
-Then open `http://example-host:3382/`. To build from a checkout instead of pulling the image, replace `image:` with `build: .`; the repository's own [compose.yml](compose.yml) does this and adds Jackett and Prowlarr (see [Trying it with Jackett and Prowlarr](#trying-it-with-jackett-and-prowlarr)). The image is `node:22-alpine` plus Alpine's `ffmpeg` (about 125 MB to download), builds for `linux/arm64` (and amd64), runs as `node`, and has a healthcheck on `GET /health`.
+Then open `http://example-host:3382/`. To build from a checkout instead of pulling the image, replace `image:` with `build: .`; the repository's own [compose.yml](compose.yml) does this and adds Jackett and Prowlarr (see [Trying it with Jackett and Prowlarr](#trying-it-with-jackett-and-prowlarr)). The image is `node:24-alpine` plus Alpine's `ffmpeg` (about 125 MB to download), builds for `linux/arm64` (and amd64), runs as `node`, and has a healthcheck on `GET /health`.
 
 Prebuilt images are published to `ghcr.io/kasparsd/magplay`. Publishing a GitHub release `vX.Y.Z` tags the image `X.Y.Z`, `X.Y` and `X`; a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to `main` moves the `edge` tag, and older edge builds are deleted. There is no `latest` tag, so pin a release or follow `edge` on purpose.
 
@@ -158,10 +158,10 @@ request headers, Range/If-Range, Accept-Ranges, Content-Range and Content-Dispos
 Nginx's default proxy header forwarding does this. Do not buffer media streams.
 This example intentionally does not enable shared caching of any API/media.
 
-For a same-origin static frontend, serve `public/` and the matching installed
-`hls.js/dist/hls.min.js` with `Cache-Control: no-cache`, ETag and Last-Modified;
-route page URLs to their corresponding HTML and proxy API/media to Node. Deploy
-frontend files, vendor library and backend together. Unversioned assets must
+For a same-origin static frontend, serve `public/` and the built `dist/client/`
+bundles with `Cache-Control: no-cache`, ETag and Last-Modified; route page URLs to
+their corresponding HTML and proxy API/media to Node. Deploy the frontend bundles
+and backend together. Unversioned assets must
 revalidate, not receive long fresh/immutable caching. Purge any pre-existing proxy
 cache/overridden TTLs when changing this policy; a browser holding an older long-lived
 response may need a hard reload/cache clear. No Node/proxy speedup has been benchmarked.
@@ -274,7 +274,16 @@ npm install
 ```
 
 ```bash
-npm start                 # cache lands in ./data; set TORZNAB_URL etc. to configure an indexer
+npm start                 # builds the client, then serves; cache lands in ./data; set TORZNAB_URL etc. to configure an indexer
+```
+
+```bash
+npm run dev               # rebuilds the client and restarts the server on change
+```
+
+```bash
+npm run typecheck         # tsc -b over every workspace
+npm run lint              # ESLint (neostandard + type-aware rules), no warnings allowed
 ```
 
 ```bash
@@ -287,25 +296,29 @@ npm run test:all             # Fast + peer + browser suites
 
 Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 encoders. They use an isolated temporary torrent cache and a local indexer fixture; no public swarm or running indexer is needed. See [tests/e2e/README.md](tests/e2e/README.md) for coverage, debugging and limitations.
 
-Node 22+, plain ES modules, no build step. Front-end files are in `public/` and served as-is: one HTML file and one script per page (`search.js`, `torrent.js`, `player.js`), plus `explore.js` and `title.js`, `lib/ui.js` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.js` (DOM-independent JSON transport), `lib/api-types.js` (JSDoc wire contracts), and `lib/urls.js` (every URL the pages link to, including the external-player links). Server routes are one table in `src/server.js`, matched by `src/router.js`.
+Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server will run `.ts` packages directly through Node type stripping, with no compile step.
+
+- `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by `router.js`.
+- `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/api-types.js` (JSDoc wire contracts), `lib/ui.js` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.js` (DOM-independent JSON transport) and `lib/urls.js` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
+- `public/`: HTML and CSS, served as-is.
 
 ### Test layout
 
-Keep fast tests next to their modules as `*.test.js`, for example `src/router.test.js` and `public/lib/api.test.js`. `npm test` explicitly discovers these files under `src/` and `public/`, excluding helpers and browser integration tests. Run one file with `node --test public/lib/api.test.js`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
+Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `apps/server/src/router.test.js` and `apps/client/src/lib/api.test.js`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.js`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
 
-Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `src/sources/test-fixtures/`, with shared helpers in `src/sources/test-helpers.js`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
+Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `apps/server/src/sources/test-fixtures/`, with shared helpers in `apps/server/src/sources/test-helpers.js`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
 
-Docker excludes tests, fixture data and helpers from its build context. Node serves frontend modules through an explicit allowlist; colocated browser-module tests are not exposed. If publishing `public/` through another static server, exclude `*.test.js` from that artifact too.
+Docker excludes tests, fixture data and helpers from its build context, and the runtime image carries only the server, the packages, `public/` and the built bundles. Node serves the page bundles and their source maps through an explicit allowlist; client sources and colocated tests are never exposed.
 
 ### JSON API client
 
-Import `api` from `public/lib/api.js`; `ui.js` retains a compatibility re-export. The client keeps same-origin relative URLs, forwards fetch options/AbortSignal/cache settings, preserves caller headers when posting JSON, and never retries implicitly. HTTP errors expose `error.status` and the server's string error message (or `HTTP <status>` for a non-JSON proxy error). Invalid or empty JSON on a successful response now produces an explicit `Invalid JSON response` error instead of silently returning `{}`. Network, body-stream and abort failures retain their original error/reason. Use ordinary `fetch` for HEAD requests, text subtitles, playlists and media bytes.
+Import `api` from `apps/client/src/lib/api.js`; `ui.js` retains a compatibility re-export. The client keeps same-origin relative URLs, forwards fetch options/AbortSignal/cache settings, preserves caller headers when posting JSON, and never retries implicitly. HTTP errors expose `error.status` and the server's string error message (or `HTTP <status>` for a non-JSON proxy error). Invalid or empty JSON on a successful response now produces an explicit `Invalid JSON response` error instead of silently returning `{}`. Network, body-stream and abort failures retain their original error/reason. Use ordinary `fetch` for HEAD requests, text subtitles, playlists and media bytes.
 
-`api-types.js` documents probe results, browser capability keys, play requests, direct/HLS decisions and torrent/session status. These are JSDoc contracts, not runtime response validation or a repository-wide TypeScript migration.
+`api-types.js` documents probe results, browser capability keys, play requests, direct/HLS decisions and torrent/session status. These are JSDoc contracts, not runtime response validation.
 
 ### Player helpers
 
-`public/lib/capabilities.js` measures codec support from explicitly supplied media/browser APIs, without user-agent assumptions or browser globals at import time. `public/lib/subtitles.js` parses ffmpeg WebVTT snapshots, preserving cue text/timing and rejecting invalid timestamps. It is not a complete WebVTT renderer: the page still owns progressive-file handling, subtitle timeline offsets, polling and `VTTCue` creation. These helpers and `public/lib/progress.js` have colocated `*.test.js` coverage. Targeted page/request/timer ownership is implemented without a controller rewrite; further extraction is conditional on an actual maintenance need.
+`apps/client/src/lib/capabilities.js` measures codec support from explicitly supplied media/browser APIs, without user-agent assumptions or browser globals at import time. `apps/client/src/lib/subtitles.js` parses ffmpeg WebVTT snapshots, preserving cue text/timing and rejecting invalid timestamps. It is not a complete WebVTT renderer: the page still owns progressive-file handling, subtitle timeline offsets, polling and `VTTCue` creation. These helpers and `lib/progress.js` have colocated `*.test.js` coverage. Targeted page/request/timer ownership is implemented without a controller rewrite; further extraction is conditional on an actual maintenance need.
 
 ## License
 

@@ -23,7 +23,7 @@ test('resolved delay removes its abort listener and pre-aborted delays reject', 
 
 const deferred = () => {
   let resolve
-  const promise = new Promise(r => { resolve = r })
+  const promise = new Promise(_resolve => { resolve = _resolve })
   return { promise, resolve }
 }
 

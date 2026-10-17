@@ -29,11 +29,12 @@ try {
     await sleep(200)
   }
   assert.equal(await docker('inspect', name, '--format', '{{.Config.User}}'), 'node')
-  assert.equal((await get('/lib/progress.js')).status, 200)
-  assert.equal((await get('/lib/progress.test.js')).status, 404)
-  const tests = await docker('exec', name, 'find', '/app/src', '/app/public', '-name', '*.test.js')
+  assert.equal((await get('/player.js')).status, 200)
+  assert.equal((await get('/lib/progress.js')).status, 404)
+  assert.equal((await get('/vendor/hls.min.js')).status, 404)
+  const tests = await docker('exec', name, 'find', '/app/apps', '/app/public', '/app/dist', '(', '-name', '*.test.js', '-o', '-name', '*.test.ts', ')')
   assert.equal(tests, '', 'production image must exclude colocated tests')
-  report.checks.push('health, non-root runtime, frontend modules and test-free image')
+  report.checks.push('health, non-root runtime, built client bundles and test-free image')
   await docker('cp', path.join(cache, 'torrents'), `${name}:/data/`)
   await docker('exec', '-u', 'root', name, 'chown', '-R', 'node:node', '/data/torrents')
   const directIdx = files['Playback.S01E01.mp4']

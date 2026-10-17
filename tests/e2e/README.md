@@ -2,7 +2,7 @@
 
 ## Run
 
-Requirements: Node >=22, ffmpeg and ffprobe on `PATH`, ffmpeg with `libx264`, AAC and AC3 encoders.
+Requirements: Node >=24, ffmpeg and ffprobe on `PATH`, ffmpeg with `libx264`, AAC and AC3 encoders.
 
 ```sh
 npm ci
@@ -12,7 +12,7 @@ npm run test:e2e
 npm run test:all
 ```
 
-Linux CI installs ffmpeg and uses `npx playwright install --with-deps chromium` for browser system dependencies. `npm test` selects colocated `src/**/*.test.js` and `public/**/*.test.js` files; it does not require a browser or generate media. This cross-application suite lives separately in `tests/e2e/*.test.js` and is selected only by Playwright.
+Linux CI installs ffmpeg and uses `npx playwright install --with-deps chromium` for browser system dependencies. `npm test` selects colocated `*.test.js`/`*.test.ts` files under `apps/` and `packages/`; it does not require a browser or generate media. This cross-application suite lives separately in `tests/e2e/*.test.js` and is selected only by Playwright.
 
 For interactive debugging:
 
