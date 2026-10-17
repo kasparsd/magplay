@@ -1,6 +1,6 @@
 // The search page, /?q=…&cat=…: results from every source, each linking to its torrent page.
 import { api } from './lib/api.ts'
-import { $, el, fill, formatBytes, recall, setStatus, timeAgo } from './lib/ui.ts'
+import { $, el, fill, formatBytes, recall, releaseRow, remember, rememberSearch, setError, setStatus, timeAgo } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
 
 import { latestRequest } from './lib/requests.ts'
@@ -10,101 +10,121 @@ const form = $('#search')
 const status = $('#status')
 const results = $('#results')
 
-function renderResult (item) {
+/** One result. Where it came from is only worth a line when more than one source is configured. */
+function renderResult (item, sourceCount) {
   const href = item.infoHash ? urls.torrent(item.infoHash, { title: item.title }) : urls.torrent(null, { link: item.linkId, title: item.title })
-  // The title is the link (keyboard, middle-click, Back); a click anywhere else on the row follows it too
-  return el('tr', { onclick: e => { if (!e.target.closest('a')) location.href = href } },
-    el('td', {},
-      el('a', { className: 'title', href, textContent: item.title }),
-      el('div', { className: 'badges' },
-        item.warning && el('span', { className: 'badge note', textContent: item.warning }),
-        ...item.badges.map(b => el('span', { className: 'badge', textContent: b })),
-        item.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser', title: 'H.264 with AAC or unknown audio: likely plays in any browser' })),
-      el('div', { className: 'meta' }, el('span', {
-        className: 'via',
-        title: item.sources.join('\n'),
-        textContent: item.sources.length > 1 ? `${item.sources.length} sources` : item.sources[0]
-      }))),
-    el('td', { textContent: formatBytes(item.size) }),
-    el('td', { textContent: item.seeders ?? '' }))
+  return releaseRow({ ...item, name: item.title }, href, { note: sourceCount > 1 && item.sources.join(', ') })
 }
 
-/** One chip per source: how many results it gave, or why it failed. */
-const renderSource = s => s.ok
-  ? el('span', { className: 'chip', textContent: `${s.name} ${s.count}`, title: `${s.count} results in ${(s.ms / 1000).toFixed(1)} s` })
-  : el('span', { className: 'chip error', textContent: `${s.name} ✕`, title: s.error })
+/** One chip per answering source with its count, and a readable line for each one that failed. */
+function renderSources (sources, retry) {
+  const failed = sources.filter(s => !s.ok)
+  fill($('#sources'), ...(sources.length > 1 ? sources.filter(s => s.ok).map(s => el('span', { className: 'chip', textContent: `${s.name} ${s.count}`, title: `${s.count} results in ${(s.ms / 1000).toFixed(1)} s` })) : []))
+  fill($('#source-errors'), ...failed.map(s => el('li', {}, el('strong', { textContent: s.name }), `: ${s.error}`)),
+    failed.length > 0 && el('li', {}, el('button', { type: 'button', className: 'retry', textContent: 'Search again', onclick: retry })))
+}
 
-function show ({ results: items, sources }) {
+function show ({ results: items, sources }, retry) {
   setStatus(status, items.length ? `${items.length} results` : 'Nothing found.')
-  fill($('#sources'), ...(sources.length > 1 || sources.some(s => !s.ok) ? sources.map(renderSource) : []))
-  fill(results.tBodies[0], ...items.map(renderResult))
+  renderSources(sources, retry)
+  fill(results, ...items.map(item => renderResult(item, sources.length)))
   results.hidden = !items.length
 }
 
 // The last results, so Back from a torrent page shows them at once and at the same scroll position
-const remember = (key, data) => { try { sessionStorage.setItem('lastSearch', JSON.stringify({ key, data })) } catch {} }
-const remembered = key => { try { const last = JSON.parse(sessionStorage.getItem('lastSearch')); return last?.key === key ? last.data : null } catch { return null } }
+const keepResults = (key, data) => { try { sessionStorage.setItem('lastSearch', JSON.stringify({ key, data })) } catch {} }
+const keptResults = key => { try { const last = JSON.parse(sessionStorage.getItem('lastSearch')); return last?.key === key ? last.data : null } catch { return null } }
 addEventListener('pagehide', () => { try { sessionStorage.setItem('lastScroll', String(scrollY)) } catch {} })
 
 async function runSearch (q, cat) {
   const current = beginSearch()
+  const retry = () => runSearch(q, cat)
   $('#toolbar').hidden = false
   $('#recent').hidden = true
   setStatus(status, 'Searching…', 'busy')
   fill($('#sources'))
+  fill($('#source-errors'))
   results.hidden = true
   try {
     const data = await api(`/api/search?${new URLSearchParams({ q, cat })}`)
     if (!current()) return
-    remember(`${q}|${cat}`, data)
-    show(data)
+    keepResults(`${q}|${cat}`, data)
+    show(data, retry)
   } catch (err) {
-    if (current()) setStatus(status, err.message, 'error')
+    if (current()) setError(status, err.message, retry)
   }
 }
 
-function submit () {
+/** A new query is a new history entry, so Back returns to the previous search; a category switch replaces it. */
+function submit ({ push }) {
   const q = form.q.value.trim()
   const cat = form.elements.cat.value
   if (!q) return
-  history.replaceState(null, '', urls.search(q, cat))
+  rememberSearch(q)
+  const url = urls.search(q, cat)
+  if (push && new URLSearchParams(location.search).get('q') !== q) history.pushState(null, '', url)
+  else history.replaceState(null, '', url)
   runSearch(q, cat)
 }
-form.addEventListener('submit', e => { e.preventDefault(); submit() })
+form.addEventListener('submit', e => { e.preventDefault(); submit({ push: true }) })
 // Switching category searches again straight away
-for (const radio of form.elements.cat) radio.addEventListener('change', submit)
+for (const radio of form.elements.cat) radio.addEventListener('change', () => submit({ push: false }))
 
 /** The home page: torrents already in the cache, with where this browser left off. */
 async function showRecent () {
-  const list = await api('/api/recent').catch(() => [])
-  if (!list.length) return
-  fill($('#recent'), el('h2', { textContent: 'Recently opened' }), el('ul', {}, ...list.map(t => {
-    const last = recall(`last:${t.infoHash}`)
-    const onNas = t.length ? Math.round((t.onDisk / t.length) * 100) : 0
-    return el('li', {},
-      el('a', { className: 'title', href: urls.torrent(t.infoHash, { title: t.name }), textContent: t.name }),
-      el('div', { className: 'meta' }, [
-        last && `last played ${last.label}, ${timeAgo(last.at)}`,
-        !last && `opened ${timeAgo(t.lastUsed)}`,
-        `${formatBytes(t.length)}, ${onNas}% on the NAS`,
-      ].filter(Boolean).join(' · ')))
-  })))
+  $('#toolbar').hidden = true
+  fill($('#sources'))
+  fill($('#source-errors'))
+  results.hidden = true
+  const list = await api('/api/recent').catch(() => null)
+  if (new URLSearchParams(location.search).get('q')) return // a search started meanwhile
+  // Removing hides an item in this browser until it's opened again; nothing leaves the cache
+  const hidden = new Map(Object.entries(recall('hiddenRecent') ?? {}))
+  const shown = (list ?? []).filter(t => !(hidden.get(t.infoHash) >= t.lastUsed))
+  const remove = (t, row) => {
+    hidden.set(t.infoHash, Date.now())
+    remember('hiddenRecent', Object.fromEntries([...hidden].filter(([ih]) => list.some(t => t.infoHash === ih))))
+    row.remove()
+    if (!$('#recent li')) showRecent()
+  }
+  fill($('#recent'), ...(shown.length
+    ? [el('h2', { textContent: 'Recently opened' }), el('ul', {}, ...shown.map(t => {
+        const last = recall(`last:${t.infoHash}`)
+        const onNas = t.length ? Math.round((t.onDisk / t.length) * 100) : 0
+        const row = el('li', {},
+          el('div', { className: 'main' },
+            el('a', { className: 'title', href: urls.torrent(t.infoHash, { title: t.name }), textContent: t.name }),
+            el('div', { className: 'meta' }, [
+              last && `last played ${last.label}, ${timeAgo(last.at)}`,
+              !last && `opened ${timeAgo(t.lastUsed)}`,
+              `${formatBytes(t.length)}, ${onNas}% on the NAS`,
+            ].filter(Boolean).join(' · '))))
+        row.append(el('button', { type: 'button', className: 'remove', textContent: '✕', title: 'Remove from this list (the files stay on the NAS)', ariaLabel: `Remove ${t.name} from this list`, onclick: () => remove(t, row) }))
+        return row
+      }))]
+    : [el('p', { className: 'help' }, 'Search every configured source for a film, show or anything else with a torrent, or ', el('a', { href: urls.explore(), textContent: 'explore what BitMagnet has found' }), '. Torrents you open are listed here.')]))
   $('#recent').hidden = false
 }
 
-// The search lives in the URL, so reload, Back and links from other pages all work
-const initial = new URLSearchParams(location.search)
-if (!initial.get('q')) showRecent()
-if (initial.get('q')) {
-  form.q.value = initial.get('q')
-  form.elements.cat.value = initial.get('cat') || ''
-  const backForward = performance.getEntriesByType('navigation')[0]?.type === 'back_forward'
-  const last = backForward && remembered(`${form.q.value}|${form.elements.cat.value}`)
+/** Shows what the URL says: a search, or the home page. */
+function fromUrl ({ restore = false } = {}) {
+  const query = new URLSearchParams(location.search)
+  const q = query.get('q')
+  form.q.value = q ?? ''
+  form.elements.cat.value = query.get('cat') || ''
+  if (!q) return showRecent()
+  rememberSearch(q)
+  const last = restore && keptResults(`${q}|${form.elements.cat.value}`)
   if (last) {
     $('#toolbar').hidden = false
-    show(last)
+    $('#recent').hidden = true
+    show(last, () => runSearch(q, form.elements.cat.value))
     try { scrollTo(0, Number(sessionStorage.getItem('lastScroll')) || 0) } catch {}
   } else {
-    runSearch(form.q.value, form.elements.cat.value)
+    runSearch(q, form.elements.cat.value)
   }
 }
+
+// The search lives in the URL, so reload, Back and links from other pages all work
+fromUrl({ restore: performance.getEntriesByType('navigation')[0]?.type === 'back_forward' })
+addEventListener('popstate', () => fromUrl({ restore: true }))
