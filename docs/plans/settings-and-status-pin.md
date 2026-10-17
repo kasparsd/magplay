@@ -9,7 +9,7 @@ Screenshots of the mockup (light theme unless noted):
 - Status menu: [all good](settings-and-status-pin/settings-status-menu-ok.png), [needs attention](settings-and-status-pin/settings-status-menu-warn.png) ([dark](settings-and-status-pin/settings-status-menu-warn-dark.png)), [problem](settings-and-status-pin/settings-status-menu-error.png).
 - Settings page: [Sources with a failing key](settings-and-status-pin/settings-page-sources.png), [Playback](settings-and-status-pin/settings-page-playback.png), [Connection](settings-and-status-pin/settings-page-connection.png), [Server](settings-and-status-pin/settings-page-server.png), [Server with unsaved changes](settings-and-status-pin/settings-page-server-unsaved.png), [Debug](settings-and-status-pin/settings-page-debug.png), [375 px](settings-and-status-pin/settings-page-mobile.png).
 
-Status: proposed 2026-10-17, not started. This replaces the earlier link-only "status pin" draft of this plan; the bandwidth test design below is kept from it.
+Status: built 2026-10-17 on branch `claude/settings-status-b42d44` (roadmap wave 1a), from scratch on `main`. Everything in the checklist is done except the Player reading its defaults, which belongs to the Player chrome session (see [Player integration](#player-integration)). This replaces the earlier link-only "status pin" draft of this plan; the bandwidth test design below is kept from it.
 
 ## Why
 
@@ -142,18 +142,41 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 
 ## Implementation checklist
 
-- [ ] `SettingDef` schema and the initial entries in `packages/api-contract`, with a `validate(def, value)` used by both sides.
-- [ ] `config.js` → `resolve(schema, env, file)`, `data/settings.json` read/atomic write, and a `settings:changed` event. Sources, limits and timeouts rebuild on change. Unit tests for precedence and locking.
-- [ ] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with secret masking and the same-origin write guard in `http-kit`.
-- [ ] `status.js` check registry with TTL cache, the initial checks, the event ring buffer, and `GET /api/status`. Unit tests with fake checks and clocks.
-- [ ] `GET /api/debug` with a log ring buffer (wrap the server's logger) and redacted diagnostics.
-- [ ] `GET /api/speedtest` faucet and `lib/speedtest.ts`, with unit tests (as in the earlier draft).
-- [ ] `lib/controls.ts` renderers for every type, with keyboard and accessible names.
-- [ ] Status button and panel in `lib/ui.ts`, added to the top bar of all `public/*.html` pages, with client-check merging and unread tracking. Check at 375 px.
-- [ ] `/settings` page with sections, hash navigation, the save bar, inline field errors and env-locked rows.
-- [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings.
-- [ ] e2e: a broken source turns the dot red and its action deep-links to the field. Saving a live setting applies without a restart. An env-set value is read-only. A cross-origin `PATCH` is refused. The speed test result produces a warning on another page.
-- [ ] On ship: update [user-interface.md](../user-interface.md) (six pages, the top bar's right side, the "nothing to configure" wording), the README configuration table (UI first, env as override), and [architecture.md](../architecture.md) (settings resolution and the status registry).
+- [x] `SettingDef` schema and the initial entries in `packages/api-contract/src/settings.ts`, with a `validate(def, value)` used by both sides. Status types and `overallLevel()` are in `status.ts` next to it.
+- [x] `config.js` on top of `apps/server/src/settings-store.ts` (`resolve(env, file, readers)`), `<CACHE_DIR>/settings.json` read/atomic write, and a `changed` event. Sources, Explore, limits and timeouts rebuild on change. Unit tests for precedence, locking, masking, atomic saves and restart tracking (`settings-store.test.ts`, `settings-schema.test.ts`, `config.test.js`).
+- [x] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with secret masking and the same-origin write guard (`isSameOrigin` in `http-kit`).
+- [x] `status.ts` check registry with TTL cache, the initial checks (`status-checks.js`), the event ring buffer, and `GET /api/status`. Unit tests with fake checks and clocks (`status.test.ts`).
+- [x] `GET /api/debug` with a log ring buffer (`logs.ts` copies console output) and redacted diagnostics (Copy diagnostics).
+- [x] `GET /api/speedtest` faucet (`speedtest.ts`) and `lib/speedtest.ts`, with unit tests.
+- [x] `lib/controls.ts` renderers for every type, with keyboard and accessible names.
+- [x] Status button and panel in `lib/status-menu.ts` (built on the shared `menu()`, whose label may now be a node), mounted by `lib/topbar.ts`, which every page script imports. Client-check merging and unread tracking. Checked at 375 px. The Player page gets it once `player.js` imports `lib/topbar.ts`.
+- [x] `/settings` page (`public/settings.html`, `apps/client/src/settings.ts`) with sections, hash navigation, the save bar, inline field errors and env-locked rows.
+- [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings. Left to the Player chrome session, which owns `player.js`; see [Player integration](#player-integration).
+- [x] e2e (`tests/e2e/settings.test.js`): a broken source turns the dot red and its action deep-links to Sources. Saving a live setting applies without a restart. An env-set value is read-only. Cross-origin writes are refused. The speed test runs, and a slow result produces a warning on another page. Browser preferences save at once.
+- [x] On ship: updated [user-interface.md](../user-interface.md) (six pages, the top bar's right side, the configuration wording), the README configuration section and API table (UI first, env as override), and [architecture.md](../architecture.md) (settings resolution and the status registry).
+
+## As built
+
+Decisions made while building, where they differ from or add to the design above:
+
+- **Where the file lives.** `settings.json` is in the folder `CACHE_DIR` names at startup (`./data` by default). The Cache folder setting moves torrent and HLS data, not the settings file, so startup never depends on a saved value to find its settings.
+- **Restart-only settings** are the web port, torrent port, cache folder, DHT and LSD (WebTorrent's client is created once at startup). `config` keeps their startup values until a restart, and the "Restart needed" check names them. There is no Restart button: exiting only restarts under Docker's restart policy, and would just stop a plain `npm start`.
+- **Live settings** apply on next use: limits are functions read per job (`createLimiter(() => config.maxProbes)`), and search and Explore are rebuilt when sources, the search timeout or BitMagnet's address change.
+- **List settings** (sources, extra trackers): env items are locked and listed first; items saved in the browser follow. With neither, the schema default is editable (the five default trackers). An empty `EXTRA_TRACKERS` means no env trackers, which differs from unset.
+- **Sources** are items `{ id, type, name, url, apiKey, indexer }`; `indexer` is Jackett's indexer or filter, or Prowlarr's comma-separated ids. Every adapter has a cheap `check()` (Torznab `t=caps`, Prowlarr `/api/v1/health`, BitMagnet GraphQL `{ __typename }`). Secrets go out as `{ set }`; the browser sends `{ set: true }` back to keep one, matched by item id.
+- **Volume and mute** are browser settings marked `hidden`: stored and validated, not shown on the page.
+- **Units.** GB settings are binary gigabytes (1024³), as before, and the page's readouts use the same unit.
+- **Problem count** on the button counts warnings and errors. Explore without BitMagnet is a warning, as designed, so a setup without BitMagnet shows amber until the address is set.
+
+## Player integration
+
+The Player chrome session owns `apps/client/src/player.js` and `public/player.html`. To finish this feature there:
+
+1. Add `import './lib/topbar.ts'` to `player.js`, which puts the status menu in the Player's top bar.
+2. Read defaults from `lib/preferences.ts`: `getPreference(PREFERENCE.subtitleLanguage)` and `PREFERENCE.audioLanguage` (ISO 639-1 codes, empty for off or original), `PREFERENCE.speed` (0.75, 1, 1.25, 1.5), `PREFERENCE.autoplayNext`, and `PREFERENCE.volume` (0–1) and `PREFERENCE.muted`. Write volume and mute back with `setPreference()`, which validates against the schema and returns false for a bad value.
+3. Show the playback stats overlay when `getPreference(PREFERENCE.statsOverlay)` is true. "Log requests to the browser console" already works on every page through `lib/topbar.ts`.
+
+All preferences are in one `localStorage` entry, `magplay:settings` (`STORAGE_KEYS.preferences`); the connection test result is `magplay:connection` and the menu's last-seen time is `magplay:status-seen`.
 
 ## Open questions
 

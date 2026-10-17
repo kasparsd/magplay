@@ -6,7 +6,7 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
 
 ## Wave 1 (parallel)
 
-- [ ] **1a. Settings page and status menu**, built from scratch from [the settings plan](settings-and-status-pin.md). The earlier `fix/settings-reliability` branch is not used or referenced.
+- [x] **1a. Settings page and status menu**, built from scratch from [the settings plan](settings-and-status-pin.md) on branch `claude/settings-status-b42d44`. The earlier `fix/settings-reliability` branch is not used or referenced. The Player reading its defaults is left to the Player session ([integration notes](settings-and-status-pin.md#player-integration)).
 - [ ] **1b. Dependency advisory triage** (roadmap item 2): reachability of the `ip` → `bittorrent-tracker` → `torrent-discovery` → `webtorrent` findings, then a compatible patch or a recorded mitigation.
 - [ ] **1c. UI cleanup P2–P4 outside the Player** (roadmap item 7): the open items in [the cleanup todo](../user-interface.md#cleanup-todo), except the ones fixed by the Player roadmap.
 
