@@ -6,7 +6,7 @@ A single-user media app for a trusted local network/NAS, with no accounts. Keep 
 
 **Not for public/untrusted exposure:** there is no authentication or request-origin protection. Resource safeguards are now present, but they are not an authorization boundary. Require an authenticated gateway or application-level protection before changing that deployment assumption.
 
-[architecture.md](architecture.md) describes package boundaries, build tooling and invariants. This document owns priorities; [the build report](checkpoints/2026-10-17-build-report.md) is historical evidence, not the current acceptance checklist.
+[architecture.md](architecture.md) describes package boundaries, build tooling and invariants. [user-interface.md](user-interface.md) holds UI expectations and the UI cleanup todo. This document owns priorities; [the build report](checkpoints/2026-10-17-build-report.md) is historical evidence, not the current acceptance checklist.
 
 ## Current functionality
 
@@ -51,7 +51,7 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 | **P1** | **Package boundaries, TypeScript and linting** | All first-party code lives in `packages/*` and `apps/*` as strict TypeScript under ESLint; core packages throw typed errors instead of HTTP statuses; no work at import time and every resource owner has `close()`; server and client share `api-contract`; typecheck, lint, unit, peer, e2e and Docker checks pass. Tracked in [the plan](plans/package-boundaries-and-typescript.md). Runs in parallel with NAS validation, which is mostly manual measurement. |
 | **P1** | Triage the dependency advisory | Record relevant vulnerable call paths and exposure, then adopt a compatible patch/upgrade or explicitly document the accepted mitigation. Preserve peer/media regressions. |
 | **P2** | Check the browsers/devices actually used | Exercise mobile controls/fullscreen, audio/subtitle switching and unsupported-format/external-player handoff. Add automated cases for observed failures, not a speculative matrix of every device. |
-| **P2** | Improve discovery/navigation where use shows friction | Intentional filter history/Back behavior, visible local retries, selected genres outside the top chips, useful source errors without hover-only explanations, honest title-list truncation. Avoid unrelated page migrations. |
+| **P2** | Improve discovery/navigation where use shows friction | Intentional filter history/Back behavior, visible local retries, selected genres outside the top chips, useful source errors without hover-only explanations, honest title-list truncation. Avoid unrelated page migrations. Work through the [UI cleanup todo](user-interface.md#cleanup-todo) in its priority order. |
 | **P2** | Finish boundary/error hardening incrementally | Validate remaining ports/timeouts/cache settings and upstream shapes/URL schemes; bound indexer bodies/redirect policy; keep secrets out of logs. New resource settings already reject invalid values. |
 | **P2** | Observe long-session cache/shutdown behavior | Add TTL/size limits for probe/subtitle memory if warranted, readiness/diagnostics useful for troubleshooting, and targeted graceful-shutdown tests built on the package factories. |
 | **P3 / conditional** | Fingerprinted client assets | The esbuild client build arrives with TypeScript; add content hashes and immutable caching only if revalidating unversioned assets becomes a measured problem. Preserve multi-page URLs, Node-only deployment and media cache/range semantics; test the production artifact. |
