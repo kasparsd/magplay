@@ -81,7 +81,7 @@ Metadata (`description`, `origin`, `maxLength`) is strictly preserved in version
 - A lightweight client translator module (< 2KB gzip) in `apps/client/src/lib/i18n.js`:
   - Uses `Intl.PluralRules` and `Intl.NumberFormat` natively.
   - Dynamically loads only the active locale JSON or falls back gracefully to embedded English.
-  - Modern formatting helpers (`timeAgo`, `formatBytes`, `formatSpeed`, `formatClock`) in `apps/client/src/lib/ui.js` transition to `Intl.RelativeTimeFormat` and `Intl.NumberFormat`.
+  - Modern formatting helpers (`timeAgo`, `formatBytes`, `formatSpeed`, `formatClock`) in `apps/client/src/lib/ui.ts` transition to `Intl.RelativeTimeFormat` and `Intl.NumberFormat`.
 
 ### 6. Static HTML vs Dynamic JS
 - Elements in `public/*.html` use declarative attributes:

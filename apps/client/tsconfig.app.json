@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2023",
+      "dom",
+      "dom.iterable"
+    ]
+  },
+  "exclude": [
+    "${configDir}/src/**/*.test.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/api-contract"
+    }
+  ]
+}

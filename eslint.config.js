@@ -29,7 +29,7 @@ export default defineConfig(
   // Tests run under node:test, so they may import Node built-ins
   { files: ['packages/api-contract/**', 'packages/release-info/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins) },
   { files: ['apps/client/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins, serverOnly) },
-  { files: ['apps/client/**/*.test.*'], rules: restrictImports(deepImports, serverOnly) },
+  { files: ['apps/client/**/*.test.{js,ts}'], rules: restrictImports(deepImports, serverOnly) },
   {
     files: ['**/*.ts'],
     extends: [tseslint.configs.recommendedTypeChecked],

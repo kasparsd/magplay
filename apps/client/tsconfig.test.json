@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2023",
+      "dom",
+      "dom.iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "outDir": "${configDir}/.tsbuild/test",
+    "tsBuildInfoFile": "${configDir}/.tsbuild/test.tsbuildinfo"
+  },
+  "include": [
+    "${configDir}/src/**/*.test.ts"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}

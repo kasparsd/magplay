@@ -1,13 +1,13 @@
 import Hls from 'hls.js'
 // The player page, /play/<infohash>/<file index>.
-import { api } from './lib/api.js'
+import { api } from './lib/api.ts'
 import { measureCaps } from './lib/capabilities.js'
-import { parseVtt } from './lib/subtitles.js'
-import { progressKey, progressEntry, resumePosition } from './lib/progress.js'
-import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, recall, remember } from './lib/ui.js'
-import { baseName, playerApps, streamUrl, urls } from './lib/urls.js'
+import { parseVtt } from './lib/subtitles.ts'
+import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
+import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, recall, remember } from './lib/ui.ts'
+import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 
-import { serialLatest, delay as sleep } from './lib/requests.js'
+import { serialLatest, delay as sleep } from './lib/requests.ts'
 
 const requestPlayback = serialLatest()
 const video = $('#video')

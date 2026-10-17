@@ -1,9 +1,9 @@
 // The torrent page, /t/<infohash>: file list, downloads, external players and live activity.
 // /t?link=<id> opens a search result that only had a download link, then switches to /t/<infohash>.
-import { api } from './lib/api.js'
-import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setStatus, sleep, timeAgo } from './lib/ui.js'
-import { baseName, playerApps, streamUrl, urls } from './lib/urls.js'
-import { progressKey, resumePosition } from './lib/progress.js'
+import { api } from './lib/api.ts'
+import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setStatus, sleep, timeAgo } from './lib/ui.ts'
+import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
+import { progressKey, resumePosition } from './lib/progress.ts'
 
 const params = new URLSearchParams(location.search)
 const status = $('#status')

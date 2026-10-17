@@ -1,7 +1,7 @@
 // A film or show from Explore, /title/<type>/<source>/<id>?title=&year=: what it is, and its releases in BitMagnet.
-import { api } from './lib/api.js'
-import { $, el, fill, posterTile, releaseRow, setStatus } from './lib/ui.js'
-import { urls } from './lib/urls.js'
+import { api } from './lib/api.ts'
+import { $, el, fill, posterTile, releaseRow, setStatus } from './lib/ui.ts'
+import { urls } from './lib/urls.ts'
 
 const [, , type, source, id] = location.pathname.split('/')
 const params = new URLSearchParams(location.search)

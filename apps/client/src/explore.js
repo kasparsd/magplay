@@ -1,9 +1,9 @@
 // The explore page, /explore?type=&genre=&year=&res=&sort=: films and shows from BitMagnet, one tile per title.
-import { api } from './lib/api.js'
-import { $, el, fill, posterTile, releaseRow, setStatus, timeAgo } from './lib/ui.js'
-import { urls } from './lib/urls.js'
+import { api } from './lib/api.ts'
+import { $, el, fill, posterTile, releaseRow, setStatus, timeAgo } from './lib/ui.ts'
+import { urls } from './lib/urls.ts'
 
-import { latestRequest } from './lib/requests.js'
+import { latestRequest } from './lib/requests.ts'
 
 const beginBrowse = latestRequest()
 const beginLatest = latestRequest()

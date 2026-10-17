@@ -1,15 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "lib": [
-      "es2023",
-      "dom",
-      "dom.iterable"
-    ]
-  },
+  "files": [],
   "references": [
     {
-      "path": "../../packages/api-contract"
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.test.json"
     }
   ]
 }

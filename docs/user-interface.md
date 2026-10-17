@@ -36,7 +36,7 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 
 ### Shared building blocks
 
-- One release row component (`releaseRow` in `apps/client/src/lib/ui.js`) for every release list: Search, Explore "Just added" and Title releases. Name, badges, size and seeders always appear in the same places.
+- One release row component (`releaseRow` in `apps/client/src/lib/ui.ts`) for every release list: Search, Explore "Just added" and Title releases. Name, badges, size and seeders always appear in the same places.
 - One menu component, positioned so it never leaves the viewport, whichever side of the page its button is on.
 - Shared formatting helpers for sizes, speeds, times and counts, including singular/plural ("1 seeder").
 - Text from indexers is decoded once on the server (HTML entities) and treated as plain text in the client.
@@ -74,7 +74,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 - **Visibility.** The chrome is visible while paused, while a menu is open, while focus is inside it, and for 2.5 s after the last pointer move, touch or key press. While playing it fades out and the cursor hides over the video. In fullscreen the same rules apply.
 - **Left to right:** play/pause, back 10 s, forward 10 s, mute with a volume slider, `0:22 / 26:06`, a flexible gap, **Next: S01E02** (only when there is a next file), Subtitles, Audio, Speed, ⋯ More, Fullscreen. More holds the Open in items, Download file, Copy stream link and Picture in picture, so the Player offers the same file actions as the torrent page's ⋯ menu.
-- **Menus** open upward inside the video, use the shared `menu()` from `lib/ui.js` (extended to open upward and stay inside the stage), and close with Escape. Subtitles and Audio list the same choices as today's selects. Choosing an audio track still restarts the session at the current position, as `start(position())` does today.
+- **Menus** open upward inside the video, use the shared `menu()` from `lib/ui.ts` (extended to open upward and stay inside the stage), and close with Escape. Subtitles and Audio list the same choices as today's selects. Choosing an audio track still restarts the session at the current position, as `start(position())` does today.
 - **Seek bar.** The full duration, with four layers drawn on one track from bottom to top:
   1. *On the NAS*: `status.file.ranges` (fractions of the file's bytes, used as an approximation of time).
   2. *Converted by ffmpeg* (remux and transcode only): from `cur.offset` to `cur.offset + produced`.
@@ -194,7 +194,7 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 ### P2: misleading information
 
 - [ ] **HTML entities appear in titles** (`Beltesassar&#39;s Short Animation Festival`). Decode them in the source adapters (`src/sources/`), once, before normalizing.
-- [ ] **"1 seeders".** The plural is hard-coded in `apps/client/src/lib/ui.js` (`releaseRow`) and `apps/client/src/explore.js` (`renderTile`). Add a shared count formatter.
+- [ ] **"1 seeders".** The plural is hard-coded in `apps/client/src/lib/ui.ts` (`releaseRow`) and `apps/client/src/explore.js` (`renderTile`). Add a shared count formatter.
 - [ ] **The Explore tile and the Title page disagree about seeders.** The Gladiator tile says 446 seeders, but the Title page sorts browser-playable releases first, so the top rows have 1–5 seeders and the 446-seeder release (the one **Best release** picks) is far down a 73-row list. Show the release count in the Releases heading, and say what Best release chose (or show it at the top).
 - [ ] **Explore tiles report `releaseCount: 1`** for titles with many releases (Gladiator has 73). Nothing displays it yet; fix or drop the field before something does.
 - [ ] **Film genre counts don't add up.** Drama shows 670 while the year menu shows 13,371 films for 2026 alone, and TV genres are in the tens of thousands. Find out whether film genre counts come from a capped sample or a different query, and make them comparable or label them.

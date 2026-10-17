@@ -1,8 +1,18 @@
 // JSON API transport only: no DOM, storage, URL rewriting or implicit retries.
 
-/** @typedef {{error: string}} ApiErrorBody HTTP error response from the server. */
-/** @typedef {Error & {status: number}} ApiError HTTP or invalid-JSON failure; native fetch/abort errors pass through unchanged. */
-/** @typedef {RequestInit & {json?: unknown}} ApiOptions `json` supplies a JSON body and defaults the method to POST. */
+/** HTTP or invalid-JSON failure; native fetch/abort errors pass through unchanged. */
+export class ApiError extends Error {
+  override name = 'ApiError'
+  readonly status: number
+
+  constructor (message: string, status: number, options?: ErrorOptions) {
+    super(message, options)
+    this.status = status
+  }
+}
+
+/** `json` supplies a JSON body and defaults the method to POST. */
+export type ApiOptions = RequestInit & { json?: unknown }
 
 /**
  * Fetch parsed JSON. Relative URLs stay on the page's origin; fetch options,
@@ -14,31 +24,26 @@
  * use a string `error` from the server, or HTTP <status> for non-JSON/error pages.
  * Network, body-stream and abort failures retain their original error/reason.
  * Response shapes are documented in @magplay/api-contract, not validated by this helper.
- *
- * @template T
- * @param {RequestInfo | URL} url
- * @param {ApiOptions} [options]
- * @returns {Promise<T>}
  */
-export async function api (url, { json, ...opts } = {}) {
+export async function api<T = unknown> (url: RequestInfo | URL, { json, ...opts }: ApiOptions = {}): Promise<T> {
   if (json !== undefined) {
     const headers = new Headers(opts.headers)
     headers.set('Content-Type', 'application/json')
     Object.assign(opts, { method: opts.method ?? 'POST', headers, body: JSON.stringify(json) })
   }
   const res = await fetch(url, opts)
-  let body
+  let body: unknown
   try {
     body = await res.json()
   } catch (err) {
     // A body read may be cancelled after headers arrive. Never turn that into
     // an HTTP/parse error (including custom abort reasons such as SyntaxError).
     if (opts.signal?.aborted || !(err instanceof SyntaxError)) throw err
-    if (res.ok) throw Object.assign(new Error('Invalid JSON response', { cause: err }), { status: res.status })
+    if (res.ok) throw new ApiError('Invalid JSON response', res.status, { cause: err })
   }
   if (!res.ok) {
-    const message = typeof body?.error === 'string' && body.error ? body.error : `HTTP ${res.status}`
-    throw Object.assign(new Error(message), { status: res.status })
+    const error = body && typeof body === 'object' && 'error' in body ? body.error : undefined
+    throw new ApiError(typeof error === 'string' && error ? error : `HTTP ${res.status}`, res.status)
   }
-  return body
+  return body as T
 }

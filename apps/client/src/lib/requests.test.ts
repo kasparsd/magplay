@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { latestRequest, serialLatest, delay } from './requests.js'
+import { latestRequest, serialLatest, delay } from './requests.ts'
 
 test('request-owned delay clears its timer and preserves the abort reason', async t => {
   const clear = t.mock.method(globalThis, 'clearTimeout')
@@ -21,9 +21,9 @@ test('resolved delay removes its abort listener and pre-aborted delays reject', 
   await assert.rejects(delay(50, controller.signal), err => err === controller.signal.reason)
 })
 
-const deferred = () => {
-  let resolve
-  const promise = new Promise(_resolve => { resolve = _resolve })
+const deferred = (): { promise: Promise<void>, resolve: () => void } => {
+  let resolve = (): void => {}
+  const promise = new Promise<void>(_resolve => { resolve = _resolve })
   return { promise, resolve }
 }
 
@@ -39,7 +39,7 @@ test('only the newest request may update the UI', () => {
 test('playback mutations are serialized and superseded queued work is skipped', async () => {
   const run = serialLatest()
   const gate = deferred()
-  const calls = []
+  const calls: string[] = []
   const first = run(async current => {
     calls.push('first')
     await gate.promise

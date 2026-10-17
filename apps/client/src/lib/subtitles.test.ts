@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseVtt } from './subtitles.js'
+import { parseVtt } from './subtitles.ts'
 
 test('subtitle parsing imports without browser globals and accepts empty/header-only snapshots', () => {
   assert.equal(typeof window, 'undefined')

@@ -1,6 +1,14 @@
+/* eslint-disable @typescript-eslint/require-await -- fetch mocks are async functions to match fetch's signature */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { api } from './api.js'
+import { api, ApiError } from './api.ts'
+import type { ApiOptions } from './api.ts'
+
+/** The init a mocked fetch was called with. */
+const initOf = (call: { arguments: unknown[] } | undefined): RequestInit & { headers: Headers } => {
+  assert.ok(call)
+  return call.arguments[1] as RequestInit & { headers: Headers }
+}
 
 // Importing the transport above must not require a browser or load ui.js.
 test('API client imports without a DOM', () => {
@@ -11,12 +19,12 @@ test('API client imports without a DOM', () => {
 test('GET forwards the URL/options without adding retry, cache or origin defaults', async t => {
   const signal = new AbortController().signal
   const headers = { Accept: 'application/json' }
-  const options = { signal, headers, cache: 'reload', credentials: 'same-origin', redirect: 'error' }
-  const fetch = t.mock.method(globalThis, 'fetch', async (url, init) => {
+  const options: RequestInit = { signal, headers, cache: 'reload', credentials: 'same-origin', redirect: 'error' }
+  const fetch = t.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
     assert.equal(url, '/api/torrents/abc/status?idx=0')
     assert.deepEqual(init, options)
-    assert.equal(init.signal, signal)
-    assert.equal(init.headers, headers)
+    assert.equal(init?.signal, signal)
+    assert.equal(init?.headers, headers)
     return Response.json({ loaded: false, session: null })
   })
   assert.deepEqual(await api('/api/torrents/abc/status?idx=0', options), { loaded: false, session: null })
@@ -27,28 +35,29 @@ test('GET forwards the URL/options without adding retry, cache or origin default
 test('plain GET and default JSON POST retain the existing calling convention', async t => {
   const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json({ ok: true }))
   await api('/health')
-  assert.deepEqual(fetch.mock.calls[0].arguments, ['/health', {}])
+  assert.deepEqual(fetch.mock.calls[0]?.arguments, ['/health', {}])
   const payload = { ih: 'abc', idx: 0, audio: 1, start: 30, caps: { h264: true } }
   await api('/api/play', { json: payload })
-  const [url, options] = fetch.mock.calls[1].arguments
-  assert.equal(url, '/api/play')
+  const options = initOf(fetch.mock.calls[1])
+  assert.equal(fetch.mock.calls[1]?.arguments[0], '/api/play')
   assert.equal(options.method, 'POST')
   assert.equal(options.headers.get('Content-Type'), 'application/json')
-  assert.deepEqual(JSON.parse(options.body), payload)
+  assert.deepEqual(JSON.parse(options.body as string), payload)
 })
 
 test('JSON requests merge all supported header forms without mutating options', async t => {
-  for (const headers of [
+  const forms: HeadersInit[] = [
     { Accept: 'application/json', 'content-type': 'text/plain' },
     [['Accept', 'application/json'], ['content-type', 'text/plain']],
     new Headers({ Accept: 'application/json', 'content-type': 'text/plain' }),
-  ]) {
+  ]
+  for (const headers of forms) {
     const original = [...new Headers(headers)]
     const signal = new AbortController().signal
-    const options = { json: null, method: 'PUT', headers, body: 'overridden', signal, cache: 'no-store' }
+    const options: ApiOptions = { json: null, method: 'PUT', headers, body: 'overridden', signal, cache: 'no-store' }
     const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json({ ok: true }))
     await api('/api/example', options)
-    const sent = fetch.mock.calls[0].arguments[1]
+    const sent = initOf(fetch.mock.calls[0])
     assert.equal(sent.method, 'PUT')
     assert.equal(sent.body, 'null')
     assert.equal(sent.signal, signal)
@@ -64,11 +73,11 @@ test('JSON requests merge all supported header forms without mutating options', 
 
 test('non-JSON request bodies and explicit methods are passed through untouched', async t => {
   const headers = new Headers({ 'Content-Type': 'text/plain' })
-  const options = { method: 'DELETE', body: 'raw body', headers }
+  const options: RequestInit = { method: 'DELETE', body: 'raw body', headers }
   const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json({ ok: true }))
   await api('/api/play/session', options)
-  assert.deepEqual(fetch.mock.calls[0].arguments[1], options)
-  assert.equal(fetch.mock.calls[0].arguments[1].headers, headers)
+  assert.deepEqual(initOf(fetch.mock.calls[0]), options)
+  assert.equal(initOf(fetch.mock.calls[0]).headers, headers)
 })
 
 test('successful arrays, primitives and null are returned without shape coercion', async t => {
@@ -96,6 +105,7 @@ test('malformed/empty successful JSON is reported instead of masquerading as an 
   for (const body of ['<html>Proxy login</html>', '{', '']) {
     const fetch = t.mock.method(globalThis, 'fetch', async () => new Response(body, { status: 200 }))
     await assert.rejects(api('/api/example'), err => {
+      assert.ok(err instanceof ApiError)
       assert.equal(err.message, 'Invalid JSON response')
       assert.equal(err.status, 200)
       assert.ok(err.cause instanceof SyntaxError)
@@ -109,16 +119,17 @@ test('network errors pass through unchanged and requests are never implicitly re
   const error = new TypeError('Failed to fetch')
   const fetch = t.mock.method(globalThis, 'fetch', async () => { throw error })
   await assert.rejects(api('/api/play', { json: { idx: 0 } }), err => err === error)
-  assert.equal(error.status, undefined)
+  assert.equal('status' in error, false)
   assert.equal(fetch.mock.callCount(), 1)
 })
 
 test('an already-aborted signal preserves its native reason', async t => {
   const controller = new AbortController()
   controller.abort()
-  t.mock.method(globalThis, 'fetch', async (url, { signal }) => {
-    assert.equal(signal, controller.signal)
-    signal.throwIfAborted()
+  t.mock.method(globalThis, 'fetch', async (_url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    assert.equal(init?.signal, controller.signal)
+    controller.signal.throwIfAborted()
+    return Response.json(null)
   })
   await assert.rejects(api('/api/example', { signal: controller.signal }), err => err === controller.signal.reason)
 })

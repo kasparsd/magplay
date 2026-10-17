@@ -12,4 +12,4 @@ Progress is saved at most every five seconds during playback, and immediately on
 - Missing, malformed or blocked browser storage is non-fatal: playback still works without persistence.
 - The UI does not infer where the actual credits start, sync devices, retain audio/subtitle preferences or manage a server watch-history database.
 
-Pure rules live in `apps/client/src/lib/progress.js` with colocated tests. Chromium regressions exercise direct resume/restart, HLS absolute timestamps, completed-file behavior, the torrent action label and blocked storage.
+Pure rules live in `apps/client/src/lib/progress.ts` with colocated tests. Chromium regressions exercise direct resume/restart, HLS absolute timestamps, completed-file behavior, the torrent action label and blocked storage.

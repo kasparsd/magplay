@@ -1,9 +1,9 @@
 // The search page, /?q=…&cat=…: results from every source, each linking to its torrent page.
-import { api } from './lib/api.js'
-import { $, el, fill, formatBytes, recall, setStatus, timeAgo } from './lib/ui.js'
-import { urls } from './lib/urls.js'
+import { api } from './lib/api.ts'
+import { $, el, fill, formatBytes, recall, setStatus, timeAgo } from './lib/ui.ts'
+import { urls } from './lib/urls.ts'
 
-import { latestRequest } from './lib/requests.js'
+import { latestRequest } from './lib/requests.ts'
 
 const beginSearch = latestRequest()
 const form = $('#search')
