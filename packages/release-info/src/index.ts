@@ -117,8 +117,9 @@ export function badges (title: string): TitleBadges {
     ? `Not a media file (.${program.toLowerCase()})`
     : archive ? `Archive (.${archive.toLowerCase()}), can't stream` : null
   const found: { res?: string, video?: string, hdr?: string, tenBit?: string, audio?: string[], source?: string } = {}
+  const words = title.replaceAll('_', ' ') // `\b` treats underscores as letters: big_buck_bunny_h264
   for (const [kind, re, label] of RULES) {
-    if (!re.test(title)) continue
+    if (!re.test(words)) continue
     if (kind === 'audio') (found.audio ??= []).push(label)
     else found[kind] ??= label
   }

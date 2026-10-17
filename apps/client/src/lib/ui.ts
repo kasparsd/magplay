@@ -128,6 +128,9 @@ export function tint (text: string): string {
 /** A plain title tile in place of a poster. */
 export const posterTile = (title: string, extra = ''): HTMLDivElement => el('div', { className: `poster ${tint(title)} ${extra}`.trim(), textContent: title, ariaHidden: 'true' })
 
+/** `1 seeder`, `2 seeders`. */
+export const count = (n: number, word: string): string => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`
+
 /** One row in a list of releases: name (linking to its torrent page), badges, size and seeders. */
 export interface ReleaseRowItem {
   name: string
@@ -146,5 +149,5 @@ export function releaseRow (r: ReleaseRowItem, href: string): HTMLLIElement {
         r.episode && el('span', { className: 'badge note', textContent: r.episode }),
         ...(r.badges ?? []).map(b => el('span', { className: 'badge', textContent: b })),
         r.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser' }))),
-    el('span', { className: 'size' }, [formatBytes(r.size), r.seeders != null && `${r.seeders} seeders`].filter(Boolean).join(' · ')))
+    el('span', { className: 'size' }, [formatBytes(r.size), r.seeders != null && count(r.seeders, 'seeder')].filter(Boolean).join(' · ')))
 }

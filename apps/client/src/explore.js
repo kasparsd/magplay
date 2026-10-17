@@ -1,6 +1,6 @@
 // The explore page, /explore?type=&genre=&year=&res=&sort=: films and shows from BitMagnet, one tile per title.
 import { api } from './lib/api.ts'
-import { $, el, fill, posterTile, releaseRow, setStatus, timeAgo } from './lib/ui.ts'
+import { $, count, el, fill, posterTile, releaseRow, setStatus, timeAgo } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
 
 import { latestRequest } from './lib/requests.ts'
@@ -31,7 +31,7 @@ function renderTile (t) {
       t.genres.length > 0 && el('div', { className: 'meta', textContent: t.genres.slice(0, 2).join(', ') }),
       el('div', { className: 'badges' },
         t.playable && el('span', { className: 'badge good', textContent: 'plays in browser' }),
-        t.seeders != null && el('span', { className: 'badge', textContent: `${t.seeders} seeders` }))))
+        t.seeders != null && el('span', { className: 'badge', textContent: count(t.seeders, 'seeder') }))))
 }
 
 /** Genre chips, year and quality options, from BitMagnet's counts for the current filters. */

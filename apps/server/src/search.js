@@ -9,6 +9,14 @@ const MAX_LINKS = 5000
  * @param {Array<{name: string, search: (q: string, opts: {cat?: string, signal: AbortSignal}) => Promise<import('./sources/release.js').Release[]>}>} sources
  * @param {{timeoutMs?: number}} [opts]
  */
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+/** Indexers sometimes send titles still HTML-escaped (`Beltesassar&#39;s`). */
+export function decodeEntities (s) {
+  return s.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (m, e) => e[0] !== '#'
+    ? ENTITIES[e.toLowerCase()] ?? m
+    : String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1))))
+}
+
 export function createSearch (sources, { timeoutMs = 30_000 } = {}) {
   // Download links can carry an indexer's API key, so they stay here and the browser gets an opaque id
   const links = new Map()
@@ -40,6 +48,7 @@ export function createSearch (sources, { timeoutMs = 30_000 } = {}) {
     const merged = new Map()
     for (const { items } of settled) {
       for (const r of items) {
+        r.title = decodeEntities(r.title)
         // Without an infohash, each indexer's proxy link differs; the same title and size is the same torrent
         const key = r.infoHash || (r.size ? `${r.title.toLowerCase()}|${r.size}` : r.link)
         const prev = merged.get(key)
