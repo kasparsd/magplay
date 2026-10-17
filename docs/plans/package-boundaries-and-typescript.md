@@ -32,14 +32,14 @@ Reorganize the code into isolated internal packages with one-way dependencies, c
 - JSDoc typing in about a dozen files; nothing type-checks it.
 - `fast-xml-parser` ships types. `webtorrent`, `parse-torrent`, `bittorrent-tracker`, `create-torrent` and `hls.js` need checking; WebTorrent 3 types are likely incomplete.
 - No linter or formatter. The code follows `standard` style by convention (no semicolons, space before function parentheses), unchecked.
-- CI: Node 22/24 matrix, unit and peer tests, `node --check`, separate Chromium playback job. Docker: single-stage `node:22-bookworm-slim`.
+- CI: Node 22/24 matrix, unit and peer tests, `node --check`, separate Chromium playback job. Docker: `node:22-alpine` with a separate production-install stage (`deps`) and a runtime stage that adds ffmpeg (`54cd9df`).
 
 ## Technical decisions
 
 Build and runtime choices are summarized in the architecture doc; details live here. Update in place if revisited.
 
 1. **Server runs `.ts` via Node type stripping.** No `tsc` emit, `tsx` or `ts-node`. Use `erasableSyntaxOnly`, `allowImportingTsExtensions` with `noEmit`, and `verbatimModuleSyntax` (`import type`). Relative imports use `.ts` extensions.
-2. **Node 24 baseline:** `engines: ">=24"`, Docker `node:24-bookworm-slim`, CI matrix `[24, 26]`. Check type-stripping warnings on the chosen minor in Phase 0.
+2. **Node 24 baseline:** `engines: ">=24"`, Docker `node:24-alpine`, CI matrix `[24, 26]`. Check type-stripping warnings on the chosen minor in Phase 0.
 3. **Workspace packages run from source.** Each package's `exports` points at its `src/index.ts`. Type stripping doesn't apply under `node_modules`, so Phase 0 must confirm that workspace symlinks resolve to their real paths (Node's default) and get stripped. Fallback if they don't: TypeScript `paths` plus relative imports, keeping the same boundaries.
 4. **Type checking with project references:** `tsconfig.base.json` holds compiler options. Each package and app has a `tsconfig.json` with `composite` and references to its dependencies. Packages use Node types without DOM; `apps/client` uses DOM without Node types; `api-contract` and `release-info` use neither. `npm run typecheck` runs `tsc -b`. Project references need declaration output, so emit goes to a gitignored `.tsbuild/` used only by the type checker.
 5. **Strict options:** `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `isolatedModules`, `module`/`moduleResolution: nodenext`, `target: es2023` (raise if Node 24 allows). Unconverted files are covered by `allowJs` with `checkJs: false` until their phase.
@@ -93,7 +93,8 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 - [ ] `git mv src/* apps/server/src/` and `public/*.js` and `public/lib/*` into `apps/client/src/`, leaving HTML and CSS in `public/`. Update imports, scripts, test globs and Dockerfile `COPY`s. No content changes.
 - [ ] esbuild entry per page; update `public/*.html` script tags; the server serves `dist/client/`.
 - [ ] Import `hls.js` in the player; remove the `/vendor/hls.min.js` route and script tag.
-- [ ] Multi-stage Dockerfile: a build stage with dev dependencies runs `npm run build`; the runtime stage copies production `node_modules`, workspaces, `public/` and `dist/client/`.
+- [x] Multi-stage Dockerfile: a `deps` stage installs production `node_modules` and the runtime stage copies them (`54cd9df`).
+- [ ] Add a build stage with dev dependencies that runs `npm run build`; the runtime stage also copies workspaces, `public/` and `dist/client/`.
 - [ ] Update `tools/scripts/check-docker.mjs` and the e2e fixture server for the new paths; run the Docker check.
 
 ### Phase 2: Contract and pure packages
@@ -148,7 +149,7 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 | Phase | Scope | Status | PR / commit | Notes |
 | --- | --- | --- | --- | --- |
 | 0 | Tooling foundation | ⬜ Not started | | |
-| 1 | Apps skeleton and client build | ⬜ Not started | | |
+| 1 | Apps skeleton and client build | ⬜ Not started | `54cd9df` | Production-install Docker stage landed early; the build stage waits for the client build |
 | 2 | Contract and pure packages | ⬜ Not started | | |
 | 3 | Indexers | ⬜ Not started | | |
 | 4 | Torrent engine, playback, server split | ⬜ Not started | | |
@@ -197,3 +198,4 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - 2026-10-17: TypeScript plan drafted.
 - 2026-10-17: Direction change recorded in the architecture doc and roadmap; plan renamed and expanded to include package extraction.
 - 2026-10-17: Added ESLint (typescript-eslint, neostandard, package-boundary rules) to the plan.
+- 2026-10-17: Checked against the codebase. Nothing from Phases 0–7 exists yet (no workspaces, `tsconfig`, ESLint or `.ts` files; Node 22 baseline). The image moved to Alpine with a separate install stage, so the baseline, Decision 2 and Phase 1's Docker item were updated.
