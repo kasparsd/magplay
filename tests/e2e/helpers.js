@@ -50,11 +50,21 @@ export async function showChrome (page) {
   await expect(page.locator('#stage')).not.toHaveClass(/idle/)
 }
 
-/** Picks a choice in one of the chrome's menus (audio-slot, subs-slot…) by its data-value, as a viewer would. */
+/**
+ * Picks a choice in one of the chrome's menus (audio-slot, subs-slot…) by its data-value, with the keyboard.
+ * Focus inside the chrome keeps it showing, so a busy machine can't fade it out between two pointer clicks.
+ */
 export async function choose (page, slot, value) {
-  await showChrome(page)
-  await page.locator(`#${slot} summary`).click()
-  await page.locator(`#${slot} .menu-items [data-value="${value}"]`).click()
+  const summary = page.locator(`#${slot} summary`)
+  await summary.focus()
+  if (await summary.getAttribute('aria-expanded') !== 'true') await page.keyboard.press('Enter')
+  await expect(summary).toHaveAttribute('aria-expanded', 'true')
+  const item = page.locator(`#${slot} .menu-items [data-value="${value}"]`)
+  await item.focus()
+  await page.keyboard.press('Enter')
+  // The menu is redrawn with the new choice checked; wait for it so the next step sees the new state
+  await expect(page.locator(`#${slot} .menu-items [data-value="${value}"][aria-checked="true"]`)).toHaveCount(1)
+  await expect(summary).toHaveAttribute('aria-expanded', 'false') // choosing closes the menu
 }
 export const chooseAudio = (page, track) => choose(page, 'audio-slot', String(track))
 export const chooseSubtitles = (page, value) => choose(page, 'subs-slot', value)

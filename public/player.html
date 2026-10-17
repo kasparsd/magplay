@@ -6,15 +6,14 @@
   <title>magplay</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="player-page">
   <header class="topbar">
     <a class="brand" href="/">magplay</a>
     <a class="navlink" href="/explore">Explore</a>
     <form class="topsearch" action="/" role="search"><input name="q" type="search" placeholder="Search" aria-label="Search"></form>
   </header>
-  <main class="wide">
-    <p class="back"><a id="back" href="/">← Files</a></p>
-    <h1 id="title"></h1>
+  <!-- Theater layout: the stage is sized by the viewport and the video's aspect ratio, in a black band -->
+  <div class="band">
     <div id="stage">
       <video id="video" playsinline></video>
       <div id="screen-title" class="screen-title"><b id="screen-name"></b><span id="screen-sub"></span></div>
@@ -64,11 +63,19 @@
         </dl>
       </div>
     </div>
-    <div class="options"><span id="openin"></span></div>
-    <details id="details" class="details">
-      <summary>ⓘ Details</summary>
-      <dl id="facts"></dl>
-    </details>
+  </div>
+  <main class="wide player-main">
+    <div id="titlerow" class="titlerow">
+      <div class="titles">
+        <p class="back"><a id="back" href="/">← Files</a></p>
+        <h1 id="title"></h1>
+      </div>
+      <div id="title-actions" class="title-actions">
+        <span id="openin"></span>
+        <button id="details-toggle" class="disclosure" type="button" aria-expanded="false" aria-controls="details">ⓘ Details</button>
+      </div>
+    </div>
+    <section id="details" class="panel" aria-label="Details" hidden><dl id="facts"></dl></section>
   </main>
   <script type="module" src="/player.js"></script>
 </body>
