@@ -68,9 +68,9 @@ export function copyButton (label: string, text: string, title = text): HTMLButt
  * A dropdown menu built on <details>: menu('More', [menuHeading('Whole torrent'), el('a', …), menuSeparator(), copyButton(…)]).
  * Closes on an outside click, Escape, or after an item is chosen; only one is open at a time.
  */
-export function menu (label: string, items: Child[], { title = '', className = '' } = {}): HTMLDetailsElement {
+export function menu (label: Child, items: Child[], { title = '', className = '' } = {}): HTMLDetailsElement {
   const box = el('details', { className: `menu ${className}`.trim() },
-    el('summary', { textContent: label, title }),
+    el('summary', { title }, label),
     el('div', { className: 'menu-items' }, ...items))
   box.addEventListener('toggle', () => {
     if (!box.open) return

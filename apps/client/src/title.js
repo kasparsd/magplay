@@ -1,4 +1,5 @@
 // A film or show from Explore, /title/<type>/<source>/<id>?title=&year=: what it is, and its releases in BitMagnet.
+import './lib/topbar.ts'
 import { api } from './lib/api.ts'
 import { $, el, fill, posterTile, releaseRow, setStatus } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'

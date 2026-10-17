@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · magplay</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">magplay</a>
+    <a class="navlink" href="/explore">Explore</a>
+    <form class="topsearch" action="/" role="search"><input name="q" type="search" placeholder="Search" aria-label="Search"></form>
+  </header>
+  <main class="settings">
+    <nav id="settings-nav" class="settings-nav" aria-label="Settings sections"></nav>
+    <div id="settings-body" class="settings-body"></div>
+  </main>
+  <div id="savebar" class="savebar" role="region" aria-label="Unsaved changes" hidden>
+    <span id="savebar-count"></span>
+    <span id="savebar-status" class="status"></span>
+    <button id="savebar-discard" type="button" class="button">Discard</button>
+    <button id="savebar-save" type="button" class="button primary">Save</button>
+  </div>
+  <script type="module" src="/settings.js"></script>
+</body>
+</html>

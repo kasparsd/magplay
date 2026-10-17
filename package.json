@@ -25,7 +25,7 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "build": "esbuild 'apps/client/src/*.js' --bundle --minify --format=esm --sourcemap --outdir=dist/client",
+    "build": "esbuild 'apps/client/src/*.js' 'apps/client/src/*.ts' --bundle --minify --format=esm --sourcemap --outdir=dist/client",
     "dev": "npm run build -- --watch & node --watch apps/server/src/server.js"
   },
   "engines": {

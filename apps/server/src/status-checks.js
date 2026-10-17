@@ -34,7 +34,7 @@ export async function checkSource (cfg, signal = AbortSignal.timeout(10_000)) {
     await adapter.check({ signal })
   } catch (err) {
     const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError'
-    const message = timedOut ? `${cfg.name} didn’t answer in time` : `${cfg.name}: ${err.message}`
+    const message = timedOut ? 'Didn’t answer in time.' : err.message
     return { level: 'error', value: timedOut ? 'No answer' : 'Failed', message, action: sourcesAction }
   }
   return { level: 'ok', value: `${Date.now() - started} ms` }

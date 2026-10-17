@@ -56,7 +56,8 @@ export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: ()
     const after = result?.level
     // A first result is news only when it's a problem; after that, every change is
     if (after && after !== before && (before || after === 'warn' || after === 'error') && after !== 'unknown') {
-      const message = after === 'ok' ? `${entry.def.label} is working again` : `${entry.def.label}: ${result?.message ?? result?.value ?? after}`
+      const detail = result?.message ?? result?.value ?? after
+      const message = after === 'ok' ? `${entry.def.label} is working again` : detail.startsWith(entry.def.label) ? detail : `${entry.def.label}: ${detail}`
       pushEvent({ checkId: entry.def.id, level: after, message })
     }
     entry.result = result
