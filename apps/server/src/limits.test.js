@@ -26,3 +26,16 @@ test('sync throws and async failures release expensive-work slots', async () => 
   await assert.rejects(run(async () => { throw new Error('conversion failed') }), /conversion failed/)
   assert.equal(await run(() => 'recovered'), 'recovered')
 })
+
+test('a limit given as a function follows a changed setting, and stats report busy slots', async () => {
+  let limit = 1
+  const run = createLimiter(() => limit, 'Probing')
+  const gate = deferred()
+  const first = run(() => gate.promise)
+  assert.deepEqual(run.stats(), { used: 1, limit: 1 })
+  limit = 2
+  assert.equal(await run(() => 'second'), 'second')
+  gate.resolve()
+  await first
+  assert.deepEqual(run.stats(), { used: 0, limit: 2 })
+})

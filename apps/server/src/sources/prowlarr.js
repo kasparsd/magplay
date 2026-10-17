@@ -32,5 +32,10 @@ export function createProwlarrSource ({ name, url, apiKey, indexerIds = ['-2'] }
         }, r.indexer ? `${name}/${r.indexer}` : name))
         .filter(Boolean)
     },
+    /** A cheap request for the status menu: Prowlarr's health endpoint, which needs the API key. */
+    async check ({ signal } = {}) {
+      const u = new URL('api/v1/health', url.endsWith('/') ? url : url + '/')
+      await request(fetchImpl, u, { signal, headers: { 'X-Api-Key': apiKey, Accept: 'application/json' } })
+    },
   }
 }

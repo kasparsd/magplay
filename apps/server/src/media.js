@@ -3,8 +3,8 @@ import config from './config.js'
 import { HttpError } from './errors.ts'
 import { createLimiter } from './limits.js'
 
-const runProbeJob = createLimiter(config.maxProbes, 'Media probing')
-const runSubtitleJob = createLimiter(config.maxSubtitleJobs, 'Subtitle conversion')
+export const runProbeJob = createLimiter(() => config.maxProbes, 'Media probing')
+export const runSubtitleJob = createLimiter(() => config.maxSubtitleJobs, 'Subtitle conversion')
 
 export const rawUrl = (ih, idx) => `http://127.0.0.1:${config.port}/raw/${ih}/${idx}`
 

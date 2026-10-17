@@ -91,6 +91,15 @@ export function createBitmagnetBrowser ({ url }, { fetch: fetchImpl = globalThis
   }
 
   return {
+    /** A cheap request for the status menu: GraphQL answers at all. */
+    async check ({ signal } = {}) {
+      const res = await request(fetchImpl, endpoint, {
+        method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{ __typename }' }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!body?.data) throw new SourceError('BitMagnet: no GraphQL at this address')
+    },
+
     /** A page of titles. Filters: genre (e.g. tmdb:35), year, resolution (e.g. V1080p); sort 'seeders' or 'added'. */
     async browse ({ type = 'movie', genre, year, resolution, sort = 'seeders', page = 1 } = {}, { signal } = {}) {
       const r = await search({

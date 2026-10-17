@@ -1,6 +1,9 @@
 // Wire contracts for the server JSON API, shared by apps/server (handlers) and
-// apps/client (pages). These describe wire data, not runtime validation or UI state.
-// This package is type-only: nothing here executes.
+// apps/client (pages). Mostly types; the settings schema and its validate() and the
+// status level helpers also run, on both sides, so they stay free of Node and DOM APIs.
+
+export * from './settings.ts'
+export * from './status.ts'
 
 export type CodecKey = 'h264' | 'hevc' | 'vp9' | 'av1' | 'aac' | 'ac3' | 'eac3' | 'opus' | 'flac'
 
