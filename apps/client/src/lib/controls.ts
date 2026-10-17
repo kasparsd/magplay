@@ -120,7 +120,8 @@ function field (def: Field, value: unknown, ctx: ControlContext): HTMLElement {
 }
 
 function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
-  const own = Array.isArray(value) ? value as ListItem[] : []
+  // A copy: edits must never change the saved value they're compared with
+  const own = Array.isArray(value) ? [...value as ListItem[]] : []
   const box = el('div', { id: ctx.id, className: 'list' })
   const items = el('div', { className: 'list-items' })
   const title = (item: ListItem, i: number): string => (def.titleField && text(item[def.titleField])) || `${def.itemLabel[0]!.toUpperCase()}${def.itemLabel.slice(1)} ${i + 1}`

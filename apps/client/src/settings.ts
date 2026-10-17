@@ -219,7 +219,10 @@ function row (def: SettingDef): HTMLElement {
 
   const wide = def.type === 'list' || (def.type === 'readout' && (def.key.startsWith('debug.') || def.key === 'connection.result'))
   const head = el('div', { className: 'row-text' },
-    def.type !== 'list' && !(wide && def.type === 'readout') && el('label', { className: 'row-label', htmlFor: id, textContent: def.label }),
+    // Buttons keep their own text as their name ("Test now"), so only value controls get a <label for>
+    def.type !== 'list' && !(wide && def.type === 'readout') && (isValueDef(def)
+      ? el('label', { className: 'row-label', htmlFor: id, textContent: def.label })
+      : el('span', { className: 'row-label', textContent: def.label })),
     def.help && el('p', { className: 'help', textContent: def.help }),
     envNote(def, meta),
     meta?.pendingRestart && el('p', { className: 'env-note', textContent: 'Saved. Restart magplay to apply it.' }))
