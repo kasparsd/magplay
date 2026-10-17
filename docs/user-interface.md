@@ -186,11 +186,11 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 
 ### P1: broken behaviour
 
-- [ ] **The torrent page's More menu runs off the left edge of the screen.** `.menu-items { right: 0 }` in `public/style.css` opens every menu leftward from its button, which clips "Download all", "Copy magnet link" and the rest. Position the menu against the side of the button that has room.
-- [ ] **`hidden` is overridden by `button.button { display: inline-block }`**, so Explore's "Show more" shows while loading and on errors. Add a global `[hidden] { display: none !important }`.
-- [ ] **Explore keeps the previous type's genres while the new type loads.** Switching Movies → TV kept film genre chips and counts for 10+ s while the first, uncached TV query ran. Clear chips and the year/quality options on a type change.
-- [ ] **Invalid Explore `type`** (`/explore?type=tv`) shows the raw message "type must be movie or tv_show", keeps "Movies" selected and shows "Show more". Fall back to `movie`.
-- [ ] **Unknown file number on the Player** (`/play/<ih>/9`) shows "No such file in this torrent" with a **Try again** button that can't help, leaves the Audio/Subtitles/Details controls showing with nothing in them, and the back link reads "← Files" instead of the torrent name. Offer only the way back and hide the controls.
+- [x] **The torrent page's More menu runs off the left edge of the screen.** `.menu-items { right: 0 }` in `public/style.css` opens every menu leftward from its button, which clips "Download all", "Copy magnet link" and the rest. Position the menu against the side of the button that has room.
+- [x] **`hidden` is overridden by `button.button { display: inline-block }`**, so Explore's "Show more" shows while loading and on errors. Add a global `[hidden] { display: none !important }`.
+- [x] **Explore keeps the previous type's genres while the new type loads.** Switching Movies → TV kept film genre chips and counts for 10+ s while the first, uncached TV query ran. Clear chips and the year/quality options on a type change.
+- [x] **Invalid Explore `type`** (`/explore?type=tv`) shows the raw message "type must be movie or tv_show", keeps "Movies" selected and shows "Show more". Fall back to `movie`.
+- [x] **Unknown file number on the Player** (`/play/<ih>/9`) shows "No such file in this torrent" with a **Try again** button that can't help, leaves the Audio/Subtitles/Details controls showing with nothing in them, and the back link reads "← Files" instead of the torrent name. Offer only the way back and hide the controls.
 
 ### P2: misleading information
 

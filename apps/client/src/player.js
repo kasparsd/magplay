@@ -59,15 +59,21 @@ function refusalActions () {
   ].filter(Boolean)
 }
 
+/** A file number this torrent doesn't have: retrying can't help, so offer only the way back and hide the empty controls. */
+function missingFile (err) {
+  for (const sel of ['.options', '#details', '#pieces', '#next']) $(sel).hidden = true
+  return notify(err.message, 'error', [linkButton('Back to files', urls.torrent(ih), true)])
+}
+
 /** Names the page after the file, links back to its torrent, offers external players and finds the next episode. */
 async function loadTitle (signal = pageLife.signal) {
   $('#back').href = urls.torrent(ih)
   const t = await api(`/api/torrents/${ih}`, { signal }).catch(() => null)
   if (signal.aborted) return
   file = t?.files.find(x => x.idx === idx)
+  if (t) $('#back').textContent = `← ${t.name}`
   if (!file) return
   const label = episodeLabel(file)
-  $('#back').textContent = `← ${t.name}`
   $('#title').textContent = [label, baseName(file.name)].filter(Boolean).join(' · ')
   document.title = `${label || baseName(file.name)} · magplay`
   fill($('#openin'), menu('Open in ▾', [
@@ -186,6 +192,7 @@ async function start (at = 0) {
   } catch (err) {
     if (!current()) return
     cur = null
+    if (err.status === 404) return missingFile(err)
     return notify(err.message, 'error', err.status === 422 ? refusalActions() : [button('Try again', () => start(at), true), linkButton('Back to files', urls.torrent(ih))])
   }
   if (gen !== generation) return
@@ -305,6 +312,7 @@ async function loadInfo (signal = pageLife.signal) {
     info = result
   } catch (err) {
     if (signal.aborted) return
+    if (err.status === 404) return missingFile(err)
     return notify(err.message, 'error', [button('Try again', () => location.reload(), true), linkButton('Back to files', urls.torrent(ih))])
   }
   const name = t => [t.language, t.title].filter(Boolean).join(' · ')

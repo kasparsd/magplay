@@ -11,7 +11,7 @@ const form = $('#filters')
 const status = $('#status')
 const params = new URLSearchParams(location.search)
 const filters = {
-  type: params.get('type') || 'movie',
+  type: params.get('type') === 'tv_show' ? 'tv_show' : 'movie', // anything else falls back to films
   sort: params.get('sort') || 'seeders',
   genre: params.get('genre') || '',
   year: params.get('year') || '',
@@ -115,7 +115,12 @@ async function loadFacets (q) {
 function apply (changes) {
   const typeChanged = changes.type && changes.type !== filters.type
   Object.assign(filters, changes)
-  if (typeChanged) Object.assign(filters, { genre: '', year: '', res: '' }) // genres differ between films and shows
+  if (typeChanged) {
+    Object.assign(filters, { genre: '', year: '', res: '' }) // genres differ between films and shows
+    facetsRun++ // drop the previous type's counts if they arrive late
+    fill($('#genres'))
+    for (const select of [form.year, form.res]) fill(select, select.options[0])
+  }
   history.replaceState(null, '', urls.explore({ ...filters, type: filters.type === 'movie' ? '' : filters.type, sort: filters.sort === 'seeders' ? '' : filters.sort }))
   form.elements.type.value = filters.type
   form.year.value = filters.year

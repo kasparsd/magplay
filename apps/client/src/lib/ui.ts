@@ -73,7 +73,12 @@ export function menu (label: string, items: Child[], { title = '', className = '
     el('summary', { textContent: label, title }),
     el('div', { className: 'menu-items' }, ...items))
   box.addEventListener('toggle', () => {
-    if (box.open) for (const other of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) if (other !== box) other.open = false
+    if (!box.open) return
+    for (const other of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) if (other !== box) other.open = false
+    // Open toward the side of the button that has room, so the items aren't clipped by the viewport
+    const items = $('.menu-items', box)
+    const { left, right } = box.getBoundingClientRect()
+    items.classList.toggle('end', document.documentElement.clientWidth - left < items.offsetWidth && right > document.documentElement.clientWidth - left)
   })
   $('.menu-items', box).addEventListener('click', e => {
     const item = (e.target as Element).closest('a, button')
