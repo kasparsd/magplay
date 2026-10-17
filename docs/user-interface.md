@@ -102,18 +102,18 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 **Implementation checklist**
 
-- [ ] Replace `#controls` in `public/player.html` with the new chrome markup inside `#stage`, and move the Audio/Subtitles selects into chrome menus.
-- [ ] Turn native controls off in every mode, and route `direct` mode through the same seek, time and buffer code as HLS modes.
-- [ ] Add the SVG icon set and a `chromeVisible` timer with the visibility rules above. Hide the cursor while hidden.
-- [ ] Draw the four seek bar layers from `status.file.ranges`, `cur.offset`/`produced` and `video.buffered`. Delete `#pieces`.
-- [ ] Add the seek tooltip with the four outcomes, and the "Starting at…" message for restarts.
-- [ ] Add More (Open in, Download file, Copy stream link, Picture in picture) and Speed menus. Make `menu()` open upward and stay inside the stage.
-- [ ] Add Next to the chrome and remove the `#next` card. Keep the end-of-video countdown card.
-- [ ] Add the new keys and the ? key sheet. Update the keyboard expectation above if any key changes.
-- [ ] Add Media Session metadata and handlers.
-- [ ] Persist volume, mute, speed and audio/subtitle language. Pick tracks by language on the next file.
+- [x] Replace `#controls` in `public/player.html` with the new chrome markup inside `#stage`, and move the Audio/Subtitles selects into chrome menus.
+- [x] Turn native controls off in every mode, and route `direct` mode through the same seek, time and buffer code as HLS modes.
+- [x] Add the SVG icon set and a `chromeVisible` timer with the visibility rules above. Hide the cursor while hidden.
+- [x] Draw the four seek bar layers from `status.file.ranges`, `cur.offset`/`produced` and `video.buffered`. Delete `#pieces`.
+- [x] Add the seek tooltip with the four outcomes, and the "Starting at…" message for restarts.
+- [x] Add More (Open in, Download file, Copy stream link, Picture in picture) and Speed menus. Make `menu()` open upward and stay inside the stage.
+- [x] Add Next to the chrome and remove the `#next` card. Keep the end-of-video countdown card.
+- [x] Add the new keys and the ? key sheet. Update the keyboard expectation above if any key changes.
+- [x] Add Media Session metadata and handlers.
+- [x] Persist volume, mute, speed and audio/subtitle language. Pick tracks by language on the next file.
 - [ ] Narrow layout below 600 px, checked at 375 px in portrait and landscape.
-- [ ] e2e: the chrome appears in direct and HLS modes, Audio and Subtitles menus work in fullscreen, a seek outside the converted range restarts the session, and keys work.
+- [x] e2e: the chrome appears in direct and HLS modes, Audio and Subtitles menus work in fullscreen, a seek outside the converted range restarts the session, and keys work.
 
 ### 2. Theater layout by default
 
@@ -209,7 +209,7 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 - [ ] **The header search box empties on every page except Search,** so the query disappears after opening a torrent. Keep the last query (URL or `sessionStorage`).
 - [ ] **"← Results" appears on torrent pages not reached from a search** (direct links, Explore, recent list). Show it only when there is a search to go back to; otherwise link to where the user came from.
 - [ ] **The Player page has a different side gutter** from the other pages. Fixed by [Theater layout](#2-theater-layout-by-default).
-- [ ] **Open in on the Player has no Download file option,** while the torrent page's ⋯ menu does. Offer the same file actions in both. Fixed by the More menu in [One player chrome](#1-one-player-chrome-for-every-mode).
+- [x] **Open in on the Player has no Download file option,** while the torrent page's ⋯ menu does. Offer the same file actions in both. Fixed by the More menu in [One player chrome](#1-one-player-chrome-for-every-mode).
 - [ ] **More → Copy infohash does the same thing as the clickable ID** next to the torrent's metadata. Keep one.
 - [ ] **Screen readers hear "tv_show"** for the Explore Movies/TV switch. Give the radios proper labels.
 

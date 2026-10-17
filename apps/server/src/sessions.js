@@ -2,6 +2,7 @@ import { serveFile } from '@magplay/http-kit'
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import config from './config.js'
 import { HttpError } from './errors.ts'
@@ -13,6 +14,33 @@ const IDLE_MS = 45_000
 // Pause ffmpeg when it's this far ahead of the player, so the disk isn't filled with segments nobody watches yet
 const AHEAD_PAUSE_S = 240
 const AHEAD_RESUME_S = 120
+// /proc/<pid>/stat counts CPU time in clock ticks; Linux uses 100 per second on every common platform
+const CLOCK_TICKS = 100
+
+/**
+ * CPU seconds a process has used (user + system), from Linux's /proc/<pid>/stat, or null where there is no /proc (macOS).
+ * @param {number | undefined} pid
+ * @returns {number | null}
+ */
+export function readProcCpu (pid) {
+  if (!pid) return null
+  try {
+    return parseProcStat(fs.readFileSync(`/proc/${pid}/stat`, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * utime + stime from a /proc/<pid>/stat line, in seconds. The command name is in parentheses and may hold spaces,
+ * so fields are counted after the last ")": state is field 3, utime 14 and stime 15.
+ * @param {string} text
+ */
+export function parseProcStat (text) {
+  const fields = text.slice(text.lastIndexOf(')') + 2).split(' ')
+  const ticks = Number(fields[11]) + Number(fields[12])
+  return Number.isFinite(ticks) ? ticks / CLOCK_TICKS : null
+}
 
 /** @type {Map<string, any>} */
 const sessions = new Map()
@@ -27,7 +55,10 @@ try {
   process.exit(1)
 }
 
-export function startSession ({ ih, idx, info, audio, start, mode, tab }, { spawnProcess = spawn } = {}) {
+/**
+ * Starts ffmpeg for an HLS session. `spawnProcess` and `readCpu` (CPU seconds for a pid, or null) are replaceable for tests.
+ */
+export function startSession ({ ih, idx, info, audio, start, mode, tab }, { spawnProcess = spawn, readCpu = readProcCpu, cores = os.availableParallelism() } = {}) {
   if ((closedTabs.get(tab) || 0) > Date.now()) throw new HttpError(409, 'This player was closed. Open the file again.')
   const replacing = tab && byTab.get(tab)
   const admitted = [...sessions.values()].filter(s => !s.failure && s.id !== replacing)
@@ -44,7 +75,9 @@ export function startSession ({ ih, idx, info, audio, start, mode, tab }, { spaw
   fs.mkdirSync(dir)
   const args = ffmpegArgs({ ih, idx, info, audio, start, mode, dir })
   const proc = spawnProcess(config.ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
-  const s = { id, ih, idx, mode, start, dir, proc, tab, lastSeen: Date.now(), outTime: 0, speed: null, position: 0, paused: false, exitCode: null, stderr: [] }
+  // CPU use is the CPU-time delta between two status polls; the first poll measures from the spawn
+  const cpuState = { readCpu, cores, cpuSample: { at: Date.now(), seconds: 0 }, cpu: null }
+  const s = { id, ih, idx, mode, start, dir, proc, tab, lastSeen: Date.now(), outTime: 0, speed: null, fps: null, position: 0, paused: false, exitCode: null, stderr: [], ...cpuState }
   sessions.set(id, s)
   if (tab) byTab.set(tab, id)
 
@@ -57,6 +90,7 @@ export function startSession ({ ih, idx, info, audio, start, mode, tab }, { spaw
       const [key, value] = line.split('=')
       if ((key === 'out_time_us' || key === 'out_time_ms') && Number(value) >= 0) s.outTime = Number(value) / 1e6
       if (key === 'speed' && parseFloat(value)) s.speed = parseFloat(value)
+      if (key === 'fps' && Number.isFinite(parseFloat(value))) s.fps = parseFloat(value)
       if (key === 'progress') throttle(s)
     }
   })
@@ -96,11 +130,29 @@ function throttle (s) {
   if (s.paused && ahead < AHEAD_RESUME_S) { s.proc.kill('SIGCONT'); s.paused = false }
 }
 
-export function sessionStats (s) {
+/**
+ * ffmpeg's share of all CPU cores since the previous call (0–1, so 1 means the NAS is saturated), or null when unknown.
+ * Each status poll calls it once, so the window is the poll interval.
+ */
+function sampleCpu (s, now = Date.now()) {
+  if (s.exitCode !== null) return null
+  const seconds = s.readCpu(s.proc.pid)
+  if (seconds == null) return null
+  const prev = s.cpuSample
+  s.cpuSample = { at: now, seconds }
+  // Polls closer together than this say more about timer jitter than load, so repeat the last value
+  if (now - prev.at < 500) return s.cpu
+  s.cpu = Math.max(0, Math.min(1, (seconds - prev.seconds) / ((now - prev.at) / 1000) / s.cores))
+  return s.cpu
+}
+
+export function sessionStats (s, now = Date.now()) {
   return {
     id: s.id,
     mode: s.mode,
     speed: s.speed,
+    fps: s.fps,
+    cpu: sampleCpu(s, now),
     produced: s.outTime,
     paused: s.paused,
     running: s.exitCode === null,

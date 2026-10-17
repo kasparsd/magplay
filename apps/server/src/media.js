@@ -15,6 +15,12 @@ const VIDEO_NAMES = { h264: 'H.264', hevc: 'HEVC', vp9: 'VP9', av1: 'AV1' }
 
 const probes = new Map() // "ih/idx" -> Promise<summary>
 
+/** ffprobe's sample_aspect_ratio ("64:45") as a number; unset, "0:1" and malformed values mean square pixels. */
+export function sampleAspect (value) {
+  const [num, den] = String(value ?? '').split(':').map(Number)
+  return num > 0 && den > 0 ? num / den : 1
+}
+
 /** ffprobe summary of a torrent file, read through /raw. Cached per file. */
 export function probe (ih, idx, fileName) {
   const key = `${ih}/${idx}`
@@ -49,6 +55,7 @@ function runProbe (ih, idx, fileName) {
           profile: v.profile ?? null,
           width: v.width,
           height: v.height,
+          sampleAspect: sampleAspect(v.sample_aspect_ratio),
           bitDepth: Number(v.bits_per_raw_sample) || (/1[02]le|p010/.test(v.pix_fmt) ? 10 : 8),
         },
         audio: streams.filter(s => s.codec_type === 'audio').map((s, i) => ({

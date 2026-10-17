@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { connectionLevel, measureConnection, readConnection, saveConnection, CONNECTION_MAX_AGE_MS } from './speedtest.ts'
-import { getPreference, readPreferences, setPreference, STORAGE_KEYS } from './preferences.ts'
+import { getPreference, readPreferences, setPreference } from './preferences.ts'
 
 function memoryStorage (): Storage {
   const data = new Map<string, string>()
@@ -52,9 +52,17 @@ test('results and preferences round-trip through storage, and bad stored values 
   assert.equal(setPreference('player.speed', 1.25, store), true)
   assert.equal(setPreference('player.speed', 3, store), false)
   assert.equal(getPreference('player.speed', store), 1.25)
-  store.setItem(STORAGE_KEYS.preferences, JSON.stringify({ 'player.volume': 7, 'player.subtitleLanguage': 'en' }))
+  assert.equal(store.getItem('magplay:player:speed'), '1.25')
+  // Values the Player wrote with remember(): its keys, its codes, null for no audio preference
+  store.setItem('magplay:player:volume', '7')
+  store.setItem('magplay:player:subtitleLanguage', '"eng"')
+  store.setItem('magplay:player:audioLanguage', 'null')
   const prefs = readPreferences(store)
   assert.equal(prefs['player.volume'], 1)
-  assert.equal(prefs['player.subtitleLanguage'], 'en')
+  assert.equal(prefs['player.subtitleLanguage'], 'eng')
+  assert.equal(prefs['player.audioLanguage'], '')
+  assert.equal(setPreference('player.audioLanguage', '', store), true)
+  assert.equal(store.getItem('magplay:player:audioLanguage'), 'null')
+  assert.equal(setPreference('player.subtitleLanguage', 'not a language', store), false)
   assert.equal(getPreference('player.autoplayNext', null), true)
 })

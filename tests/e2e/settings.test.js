@@ -101,13 +101,16 @@ test('the connection test runs, and a slow result warns on every page', async ({
   await expect(check.getByRole('link', { name: /Test again/ })).toHaveAttribute('href', '/settings#connection')
 })
 
-test('browser preferences save at once under one localStorage key', async ({ page, app }) => {
+test('browser preferences save at once, under the keys the Player reads', async ({ page, app }) => {
+  await page.goto(app.origin)
+  // As the Player remembers them: the file's language code
+  await page.evaluate(() => localStorage.setItem('magplay:player:audioLanguage', '"lav"'))
   await page.goto(`${app.origin}/settings#playback`)
+  await expect(page.locator('#setting-player-audioLanguage')).toHaveValue('lav')
   await page.locator('#setting-player-speed').getByText('1.25×').click()
   await page.locator('#setting-player-subtitleLanguage').selectOption('en')
   await page.locator('#setting-player-autoplayNext').click()
   await expect(page.locator('#savebar')).toBeHidden()
-  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('magplay:settings')))).toEqual({
-    'player.speed': 1.25, 'player.subtitleLanguage': 'en', 'player.autoplayNext': false,
-  })
+  const stored = await page.evaluate(() => ['speed', 'subtitleLanguage', 'autoplayNext'].map(k => localStorage.getItem(`magplay:player:${k}`)))
+  expect(stored).toEqual(['1.25', '"en"', 'false'])
 })

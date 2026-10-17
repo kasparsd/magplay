@@ -1,11 +1,10 @@
-// This browser's settings (the "browser" scope of the settings schema), stored as one JSON object in localStorage.
-// The Player reads its defaults here: getPreference(PREFERENCE.speed), setPreference(PREFERENCE.volume, 0.8).
+// This browser's settings (the "browser" scope of the settings schema), in localStorage.
+// Each one has its own key, the same keys the Player reads and writes through recall()/remember():
+// the schema key 'player.speed' is stored as JSON under 'magplay:player:speed'.
 import { SETTINGS, isValueDef, validate } from '@magplay/api-contract'
 
 /** localStorage keys this client owns, in one place so every page and the Player agree on them. */
 export const STORAGE_KEYS = {
-  /** Browser-scope settings: { 'player.speed': 1.25, … }. */
-  preferences: 'magplay:settings',
   /** The last connection test: { at, downBytesPerSec, latencyMs }. */
   connection: 'magplay:connection',
   /** Status events up to this time (ms) have been seen in the status menu. */
@@ -24,15 +23,18 @@ export const PREFERENCE = {
   logRequests: 'debug.logRequests',
 } as const
 
+/** The localStorage key for one browser setting: 'player.speed' → 'magplay:player:speed'. */
+export const preferenceStorageKey = (key: string): string => `magplay:${key.replace(/\./g, ':')}`
+
 export interface Preferences {
   /** 0–1. */
   'player.volume': number
   'player.muted': boolean
   /** Playback rate: 0.75, 1, 1.25 or 1.5. */
   'player.speed': number
-  /** ISO 639-1 code, or '' for the file's original track. */
+  /** A language code ("en", or "eng" as a file names it), or '' for the first track. The Player stores null for that. */
   'player.audioLanguage': string
-  /** ISO 639-1 code, or '' for subtitles off. */
+  /** A language code, 'off', or 'any' for whichever track there is. */
   'player.subtitleLanguage': string
   'player.autoplayNext': boolean
   'debug.statsOverlay': boolean
@@ -52,21 +54,20 @@ function storage (): PreferenceStorage | null {
   }
 }
 
-function readRaw (store: PreferenceStorage | null): Record<string, unknown> {
+function readOne (store: PreferenceStorage | null, key: string): unknown {
   try {
-    const data: unknown = JSON.parse(store?.getItem(STORAGE_KEYS.preferences) ?? 'null')
-    return data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+    return JSON.parse(store?.getItem(preferenceStorageKey(key)) ?? 'null') as unknown
   } catch {
-    return {}
+    return null
   }
 }
 
 /** Every browser setting, each parsed against the schema; missing or invalid values fall back to the default. */
 export function readPreferences (store: PreferenceStorage | null = storage()): Preferences {
-  const raw = readRaw(store)
   const out: Record<string, unknown> = {}
   for (const def of browserDefs) {
-    const result = def.key in raw ? validate(def, raw[def.key]) : null
+    const raw = readOne(store, def.key)
+    const result = raw === null ? null : validate(def, raw)
     out[def.key] = result?.ok ? result.value : def.default
   }
   return out as unknown as Preferences
@@ -79,8 +80,10 @@ export function setPreference<K extends PreferenceKey> (key: K, value: Preferenc
   const def = browserDefs.find(d => d.key === key)
   const result = def && validate(def, value)
   if (!result?.ok) return false
+  // The Player keeps "no audio preference" as null
+  const stored = key === PREFERENCE.audioLanguage && result.value === '' ? null : result.value
   try {
-    store?.setItem(STORAGE_KEYS.preferences, JSON.stringify({ ...readRaw(store), [key]: result.value }))
+    store?.setItem(preferenceStorageKey(key), JSON.stringify(stored))
   } catch {}
   return true
 }

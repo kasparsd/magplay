@@ -2,6 +2,7 @@
 // (label, help, env note, error) and decides what a change means (a draft for the server, or saved at once here).
 import { isMaskedSecret } from '@magplay/api-contract'
 import type { ActionDef, ChoiceDef, ItemFieldDef, ListDef, ListItem, NumberDef, SecretDef, SettingDef, TextDef } from '@magplay/api-contract'
+import { languageName } from './naming.ts'
 import { el } from './ui.ts'
 import type { Child } from './ui.ts'
 
@@ -89,10 +90,14 @@ function toggle (value: unknown, ctx: ControlContext): HTMLButtonElement {
 }
 
 function select (def: Pick<ChoiceDef, 'options'>, value: unknown, ctx: ControlContext): HTMLSelectElement {
+  // A language the Player remembered from a file ("eng") that isn't in the list is shown as itself
+  const options = typeof value === 'string' && value && !def.options.some(o => o.value === value)
+    ? [{ value, label: languageName(value) }, ...def.options]
+    : def.options
   const box = el('select', { id: ctx.id, disabled: !!ctx.disabled },
-    ...def.options.map(o => el('option', { value: String(o.value), textContent: o.label, selected: o.value === value })))
+    ...options.map(o => el('option', { value: String(o.value), textContent: o.label, selected: o.value === value })))
   box.setAttribute('aria-label', ctx.label)
-  box.addEventListener('change', () => ctx.onChange?.(def.options[box.selectedIndex]?.value, true))
+  box.addEventListener('change', () => ctx.onChange?.(options[box.selectedIndex]?.value, true))
   return box
 }
 

@@ -21,7 +21,7 @@ export async function generateMedia (dir) {
   await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
     '-i', direct, '-i', srt, '-map', '0:v', '-map', '0:a', '-map', '0:a', '-map', '1:s',
     '-c:v', 'copy', '-c:a:0', 'ac3', '-c:a:1', 'aac', '-c:s', 'srt',
-    '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=lav',
+    '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=lav', '-metadata:s:s:0', 'language=eng',
     path.join(dir, 'Playback.S01E02.mkv')], { timeout: 60_000 })
   await fs.copyFile(direct, path.join(dir, 'Playback.S01E03.mp4'))
 }

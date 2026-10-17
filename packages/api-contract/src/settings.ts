@@ -76,6 +76,8 @@ export interface ChoiceDef extends Common {
   type: 'select' | 'segmented'
   default: string | number
   options: readonly SettingOption[]
+  /** Also accept a language code that isn't listed (the Player remembers track languages as files name them: "eng"). */
+  otherLanguages?: boolean
 }
 
 /** A field inside a list item. Its key is relative to the item: 'url'. */
@@ -189,8 +191,10 @@ export const SETTINGS: readonly SettingDef[] = [
     scope: 'browser',
     type: 'select',
     label: 'Preferred subtitles',
-    default: '',
-    options: [{ value: '', label: 'Off' }, ...LANGUAGES],
+    help: 'The Player also remembers the last subtitles you chose.',
+    default: 'off',
+    otherLanguages: true,
+    options: [{ value: 'off', label: 'Off' }, { value: 'any', label: 'Any available' }, ...LANGUAGES],
   },
   {
     key: 'player.audioLanguage',
@@ -198,8 +202,10 @@ export const SETTINGS: readonly SettingDef[] = [
     scope: 'browser',
     type: 'select',
     label: 'Preferred audio',
+    help: 'The Player also remembers the last audio language you chose.',
     default: '',
-    options: [{ value: '', label: 'Original' }, ...LANGUAGES],
+    otherLanguages: true,
+    options: [{ value: '', label: 'First track' }, ...LANGUAGES],
   },
   {
     key: 'player.speed',
@@ -208,7 +214,7 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'segmented',
     label: 'Default speed',
     default: 1,
-    options: [{ value: 0.75, label: '0.75×' }, { value: 1, label: '1×' }, { value: 1.25, label: '1.25×' }, { value: 1.5, label: '1.5×' }],
+    options: [0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value, label: `${value}×` })),
   },
   { key: 'player.autoplayNext', section: 'playback', scope: 'browser', type: 'toggle', label: 'Play the next episode automatically', default: true },
   { key: 'player.volume', section: 'playback', scope: 'browser', type: 'number', label: 'Volume', default: 1, min: 0, max: 1, step: 0.05, hidden: true },
@@ -310,6 +316,7 @@ function validateScalar (def: Exclude<FieldDef, ListDef>, value: unknown): Valid
     case 'segmented': {
       // Env values arrive as strings, so '720' matches the option 720
       const match = def.options.find(o => o.value === value || String(o.value) === String(value))
+      if (!match && 'otherLanguages' in def && def.otherLanguages && typeof value === 'string' && /^[a-z]{2,3}([-_][a-z0-9]+)?$/i.test(value)) return pass(value)
       return match ? pass(match.value) : fail(`must be one of ${def.options.map(o => o.label).join(', ')}`)
     }
   }

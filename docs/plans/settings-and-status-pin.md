@@ -86,7 +86,7 @@ type SettingDef = {
 
 **Resolution (server scope):** env var, then `data/settings.json`, then the default. A value set by env shows read-only with the variable's name, so compose setups keep working and the page explains why a field is locked. `config.js` becomes `resolve(schema, env, file)` and keeps its current shape for callers, plus a `settings:changed` event. The sources registry, limits and timeouts rebuild on that event. Restart-only keys (`PORT`, `TORRENT_PORT`, `CACHE_DIR`) are saved, and they raise the restart check.
 
-**Browser scope:** saved in `localStorage` under `magplay:settings`, through the existing `load`/`save` helpers in `lib/ui.ts`, and parsed from `unknown` against the same schema. Changes apply immediately, with no save bar.
+**Browser scope:** saved in `localStorage`, one key per setting (`magplay:player:speed`, shared with the Player's `recall()`/`remember()`), and parsed from `unknown` against the same schema. Changes apply immediately, with no save bar.
 
 **Sources** are a `list` setting whose items are `{ type, name, url, apiKey, indexer? }`, replacing the `TORZNAB_URL_2…_9` numbering. When any source env var is set, the env sources show locked, and sources added in the UI are listed after them.
 
@@ -151,7 +151,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 - [x] `lib/controls.ts` renderers for every type, with keyboard and accessible names.
 - [x] Status button and panel in `lib/status-menu.ts` (built on the shared `menu()`, whose label may now be a node), mounted by `lib/topbar.ts`, which every page script imports. Client-check merging and unread tracking. Checked at 375 px. The Player page gets it once `player.js` imports `lib/topbar.ts`.
 - [x] `/settings` page (`public/settings.html`, `apps/client/src/settings.ts`) with sections, hash navigation, the save bar, inline field errors and env-locked rows.
-- [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings. Left to the Player chrome session, which owns `player.js`; see [Player integration](#player-integration).
+- [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings. Volume, mute, speed and languages are shared already (same keys); autoplay next, the stats overlay and the status menu import are left to the Player chrome session, which owns `player.js`; see [Player integration](#player-integration).
 - [x] e2e (`tests/e2e/settings.test.js`): a broken source turns the dot red and its action deep-links to Sources. Saving a live setting applies without a restart. An env-set value is read-only. Cross-origin writes are refused. The speed test runs, and a slow result produces a warning on another page. Browser preferences save at once.
 - [x] On ship: updated [user-interface.md](../user-interface.md) (six pages, the top bar's right side, the configuration wording), the README configuration section and API table (UI first, env as override), and [architecture.md](../architecture.md) (settings resolution and the status registry).
 
@@ -170,13 +170,13 @@ Decisions made while building, where they differ from or add to the design above
 
 ## Player integration
 
-The Player chrome session owns `apps/client/src/player.js` and `public/player.html`. To finish this feature there:
+The Player chrome session owns `apps/client/src/player.js` and `public/player.html`. Its step 1 (merged as `66b29cf`) already remembers volume, mute, speed, and audio and subtitle language with `recall()`/`remember()` under `magplay:player:volume`, `magplay:player:muted`, `magplay:player:speed`, `magplay:player:audioLanguage` and `magplay:player:subtitleLanguage`. Browser settings use those same keys (`preferenceStorageKey('player.speed')` is `magplay:player:speed`), so Settings and the Player read and change the same values: Settings shows a language code the Player remembered from a file ("lav") as that language, accepts `'off'` and `'any'` for subtitles, stores `null` for "first track" audio, and offers the Player's speeds (0.5× to 2×). To finish this feature in the Player:
 
 1. Add `import './lib/topbar.ts'` to `player.js`, which puts the status menu in the Player's top bar.
-2. Read defaults from `lib/preferences.ts`: `getPreference(PREFERENCE.subtitleLanguage)` and `PREFERENCE.audioLanguage` (ISO 639-1 codes, empty for off or original), `PREFERENCE.speed` (0.75, 1, 1.25, 1.5), `PREFERENCE.autoplayNext`, and `PREFERENCE.volume` (0–1) and `PREFERENCE.muted`. Write volume and mute back with `setPreference()`, which validates against the schema and returns false for a bad value.
-3. Show the playback stats overlay when `getPreference(PREFERENCE.statsOverlay)` is true. "Log requests to the browser console" already works on every page through `lib/topbar.ts`.
+2. Honour `getPreference(PREFERENCE.autoplayNext)` from `lib/preferences.ts` before counting down to the next episode (stored as `magplay:player:autoplayNext`, default on).
+3. Show the playback stats overlay when `getPreference(PREFERENCE.statsOverlay)` is true (`magplay:debug:statsOverlay`). "Log requests to the browser console" already works on every page through `lib/topbar.ts`.
 
-All preferences are in one `localStorage` entry, `magplay:settings` (`STORAGE_KEYS.preferences`); the connection test result is `magplay:connection` and the menu's last-seen time is `magplay:status-seen`.
+The connection test result is `magplay:connection` and the menu's last-seen time is `magplay:status-seen` (`STORAGE_KEYS` in `lib/preferences.ts`).
 
 ## Open questions
 
