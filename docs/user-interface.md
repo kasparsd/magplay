@@ -140,11 +140,11 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 **Implementation checklist**
 
-- [ ] Move `#stage` out of `main.wide` in `public/player.html` into a full-width band, and keep `main.wide` for the title row and Details.
-- [ ] Set `--ar` from the probe (with sample-aspect correction) and apply the sizing rule. Measure `--topbar-h` and `--title-row-h` on load and resize.
-- [ ] Build the title row with the parsed title, back link, Open in and Details. Move the file name into Details.
+- [x] Move `#stage` out of `main.wide` in `public/player.html` into a full-width band, and keep `main.wide` for the title row and Details.
+- [x] Set `--ar` from the probe (with sample-aspect correction) and apply the sizing rule. Measure `--topbar-h` and `--title-row-h` on load and resize.
+- [x] Build the title row with the parsed title, back link, Open in and Details. Move the file name into Details.
 - [ ] Check the layout at 1440 × 900, 1280 × 800, 800 × 600, and 375 × 812 in both orientations, with a 2.39:1 and a 16:9 file. Nothing scrolls sideways, and the title row is above the fold on laptops.
-- [ ] e2e: the video box keeps its aspect ratio and fits the viewport at desktop and phone sizes.
+- [x] e2e: the video box keeps its aspect ratio and fits the viewport at desktop and phone sizes.
 - [ ] Close the related cleanup items below (Player fit, Player gutter, Open in without Download).
 
 ### 3. Playback performance graph
@@ -208,14 +208,14 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 - [ ] **Release lists look different on each page.** Search uses a table with Size/Seeders columns (`renderResult` in `public/search.js`); Explore "Just added" and Title use `releaseRow`. Use `releaseRow` everywhere and delete `renderResult`.
 - [ ] **The header search box empties on every page except Search,** so the query disappears after opening a torrent. Keep the last query (URL or `sessionStorage`).
 - [ ] **"← Results" appears on torrent pages not reached from a search** (direct links, Explore, recent list). Show it only when there is a search to go back to; otherwise link to where the user came from.
-- [ ] **The Player page has a different side gutter** from the other pages. Fixed by [Theater layout](#2-theater-layout-by-default).
+- [x] **The Player page has a different side gutter** from the other pages. Fixed by [Theater layout](#2-theater-layout-by-default).
 - [x] **Open in on the Player has no Download file option,** while the torrent page's ⋯ menu does. Offer the same file actions in both. Fixed by the More menu in [One player chrome](#1-one-player-chrome-for-every-mode).
 - [ ] **More → Copy infohash does the same thing as the clickable ID** next to the torrent's metadata. Keep one.
 - [ ] **Screen readers hear "tv_show"** for the Explore Movies/TV switch. Give the radios proper labels.
 
 ### P4: polish
 
-- [ ] **The Player doesn't fit the viewport.** At 800×600 the full-width video pushes Audio/Subtitles/Open in below the fold. Fixed by the sizing rule in [Theater layout](#2-theater-layout-by-default).
+- [x] **The Player doesn't fit the viewport.** At 800×600 the full-width video pushes Audio/Subtitles/Open in below the fold. Fixed by the sizing rule in [Theater layout](#2-theater-layout-by-default).
 - [ ] **ⓘ Details shows raw ffprobe values.** Container reads `mov,mp4,m4a,3gp,3g2,mj2` and unnamed audio tracks read "1. Track (mp3 2ch)". Map them to "MP4" and "MP3 stereo".
 - [ ] **The source label repeats on every search row** ("BitMagnet") with a single source configured. Show it only with more than one source.
 - [ ] **Odd spacing on the Torrent and Title pages.** The torrent page has an empty band between the title and "3 files · 276 MB", and the Title page has a large gap above "Releases".
