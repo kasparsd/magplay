@@ -1,0 +1,36 @@
+{
+  "name": "magplay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Search a Torznab indexer, stream a torrent's video in the browser",
+  "license": "MIT",
+  "author": "Kaspars Dambis",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kasparsd/magplay.git"
+  },
+  "homepage": "https://github.com/kasparsd/magplay",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test 'src/**/*.test.js' 'public/**/*.test.js'",
+    "test:e2e": "playwright test",
+    "test:peers": "node --test tests/integration/*.test.js",
+    "test:all": "npm test && npm run test:peers && npm run test:e2e"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.2",
+    "hls.js": "1.7.3",
+    "parse-torrent": "11.0.24",
+    "webtorrent": "3.0.21"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "bittorrent-tracker": "11.2.3",
+    "create-torrent": "6.1.3"
+  }
+}

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>bitmagnet</title>
+    <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+    <lastBuildDate>Mon, 01 Jan 0001 00:00:00 +0000</lastBuildDate>
+    <response xmlns="http://www.newznab.com/DTD/2010/feeds/attributes/"></response>
+    <item>
+      <title>Big Buck Bunny.S01.1080p.BluRay.x264-OpenContent</title>
+      <guid>e08d8f8a649d95f25094eb5794bfbfd3af9f3fb4</guid>
+      <pubDate>Wed, 30 Sep 2026 13:51:09 +0000</pubDate>
+      <category>tv_show</category>
+      <size>14049677498</size>
+      <enclosure url="magnet:?xt=urn:btih:e08d8f8a649d95f25094eb5794bfbfd3af9f3fb4&amp;dn=Big Buck Bunny.S01.1080p.BluRay.x264-OpenContent&amp;xl=14049677498" length="14049677498" type="application/x-bittorrent;x-scheme-handler/magnet"></enclosure>
+      <torznab:attr name="infohash" value="e08d8f8a649d95f25094eb5794bfbfd3af9f3fb4"></torznab:attr>
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:e08d8f8a649d95f25094eb5794bfbfd3af9f3fb4&amp;dn=Big Buck Bunny.S01.1080p.BluRay.x264-OpenContent&amp;xl=14049677498"></torznab:attr>
+      <torznab:attr name="category" value="5000"></torznab:attr>
+      <torznab:attr name="size" value="14049677498"></torznab:attr>
+      <torznab:attr name="publishdate" value="Wed, 30 Sep 2026 13:51:09 +0000"></torznab:attr>
+      <torznab:attr name="seeders" value="153"></torznab:attr>
+      <torznab:attr name="leechers" value="59"></torznab:attr>
+      <torznab:attr name="peers" value="212"></torznab:attr>
+      <torznab:attr name="year" value="2016"></torznab:attr>
+      <torznab:attr name="season" value="1"></torznab:attr>
+      <torznab:attr name="video" value="x264"></torznab:attr>
+      <torznab:attr name="resolution" value="1080p"></torznab:attr>
+      <torznab:attr name="team" value="OpenContent"></torznab:attr>
+      <torznab:attr name="tmdb" value="67070"></torznab:attr>
+      <torznab:attr name="imdb" value="5687612"></torznab:attr>
+    </item>
+<item>
+      <title>Big Buck Bunny.S01.COMPLETE.720p.BluRay.x264-OpenContent</title>
+      <guid>d797d14fb859b0f4f70e6081080ff28135830522</guid>
+      <pubDate>Sat, 26 Sep 2026 12:03:17 +0000</pubDate>
+      <category>tv_show</category>
+      <size>828725915</size>
+      <enclosure url="magnet:?xt=urn:btih:d797d14fb859b0f4f70e6081080ff28135830522&amp;dn=Big Buck Bunny.S01.COMPLETE.720p.BluRay.x264-OpenContent&amp;xl=828725915" length="828725915" type="application/x-bittorrent;x-scheme-handler/magnet"></enclosure>
+      <torznab:attr name="infohash" value="d797d14fb859b0f4f70e6081080ff28135830522"></torznab:attr>
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:d797d14fb859b0f4f70e6081080ff28135830522&amp;dn=Big Buck Bunny.S01.COMPLETE.720p.BluRay.x264-OpenContent&amp;xl=828725915"></torznab:attr>
+      <torznab:attr name="category" value="5000"></torznab:attr>
+      <torznab:attr name="size" value="828725915"></torznab:attr>
+      <torznab:attr name="publishdate" value="Sat, 26 Sep 2026 12:03:17 +0000"></torznab:attr>
+      <torznab:attr name="seeders" value="1"></torznab:attr>
+      <torznab:attr name="leechers" value="0"></torznab:attr>
+      <torznab:attr name="peers" value="1"></torznab:attr>
+      <torznab:attr name="year" value="2016"></torznab:attr>
+      <torznab:attr name="season" value="1"></torznab:attr>
+      <torznab:attr name="video" value="x264"></torznab:attr>
+      <torznab:attr name="resolution" value="720p"></torznab:attr>
+      <torznab:attr name="team" value="OpenContent"></torznab:attr>
+      <torznab:attr name="tmdb" value="67070"></torznab:attr>
+      <torznab:attr name="imdb" value="5687612"></torznab:attr>
+    </item>
+<item>
+      <title>Big Buck Bunny.S01.2160p.OpenContent.WEBRip.x265.10bit.HDR.DDP5.1-OpenContent</title>
+      <guid>c36021d65e0e9c86cd25349b3147ce1feaa11f7d</guid>
+      <pubDate>Mon, 28 Sep 2026 01:05:19 +0000</pubDate>
+      <category>tv_show</category>
+      <size>18532756478</size>
+      <enclosure url="magnet:?xt=urn:btih:c36021d65e0e9c86cd25349b3147ce1feaa11f7d&amp;dn=Big Buck Bunny.S01.2160p.OpenContent.WEBRip.x265.10bit.HDR.DDP5.1-OpenContent&amp;xl=18532756478" length="18532756478" type="application/x-bittorrent;x-scheme-handler/magnet"></enclosure>
+      <torznab:attr name="infohash" value="c36021d65e0e9c86cd25349b3147ce1feaa11f7d"></torznab:attr>
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:c36021d65e0e9c86cd25349b3147ce1feaa11f7d&amp;dn=Big Buck Bunny.S01.2160p.OpenContent.WEBRip.x265.10bit.HDR.DDP5.1-OpenContent&amp;xl=18532756478"></torznab:attr>
+      <torznab:attr name="category" value="5000"></torznab:attr>
+      <torznab:attr name="size" value="18532756478"></torznab:attr>
+      <torznab:attr name="publishdate" value="Mon, 28 Sep 2026 01:05:19 +0000"></torznab:attr>
+      <torznab:attr name="year" value="2016"></torznab:attr>
+      <torznab:attr name="season" value="1"></torznab:attr>
+      <torznab:attr name="video" value="x265"></torznab:attr>
+      <torznab:attr name="resolution" value="2160p"></torznab:attr>
+      <torznab:attr name="tmdb" value="67070"></torznab:attr>
+      <torznab:attr name="imdb" value="5687612"></torznab:attr>
+    </item>
+  </channel>
+</rss>

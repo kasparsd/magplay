@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magplay</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">magplay</a>
+    <a class="navlink" href="/explore">Explore</a>
+    <form class="topsearch" action="/" role="search"><input name="q" type="search" placeholder="Search" aria-label="Search"></form>
+  </header>
+  <main>
+    <p class="back"><a id="back" href="/">← Results</a></p>
+    <h1 id="name"></h1>
+    <p id="status" class="status"></p>
+    <div id="torrent"></div>
+  </main>
+  <script type="module" src="/torrent.js"></script>
+</body>
+</html>

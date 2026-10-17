@@ -1,0 +1,286 @@
+{
+  "data": {
+    "torrentContent": {
+      "search": {
+        "totalCount": 0,
+        "totalCountIsEstimate": false,
+        "hasNextPage": false,
+        "items": [
+          {
+            "infoHash": "370561bf6a6db85ce124dd79889e058fd6e0f6d6",
+            "title": "Open Content Sample (2026) S01E26",
+            "contentType": "tv_show",
+            "contentSource": "tmdb",
+            "contentId": "900001",
+            "videoResolution": "V720p",
+            "videoCodec": "H264",
+            "videoSource": "WEBRip",
+            "seeders": 0,
+            "publishedAt": "2026-10-17T09:53:11.265098Z",
+            "episodes": {
+              "label": "S01E26"
+            },
+            "torrent": {
+              "name": "Open.Content.Sample.2026.S01E26.720p.WEBRip-Group.mkv",
+              "size": 749092052
+            },
+            "content": {
+              "type": "tv_show",
+              "source": "tmdb",
+              "id": "900001",
+              "title": "Open Content Sample",
+              "releaseYear": 2026,
+              "voteAverage": 7.063,
+              "runtime": null,
+              "overview": "Synthetic summary for Open Content Sample.",
+              "adult": null,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Animation"
+                },
+                {
+                  "type": "genre",
+                  "name": "Drama"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/tv/900001"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000001"
+                },
+                {
+                  "metadataSource": {
+                    "key": "tvdb"
+                  },
+                  "url": "https://www.thetvdb.com/dereferrer/series/467209"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "200dc888fba03d16fc09b5bf546215e82cb2e6ae",
+            "title": "Big Buck Bunny (2000) S26E20",
+            "contentType": "tv_show",
+            "contentSource": "tmdb",
+            "contentId": "900002",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": "WEBRip",
+            "seeders": 6,
+            "publishedAt": "2026-10-17T09:53:11.265098Z",
+            "episodes": {
+              "label": "S26E20"
+            },
+            "torrent": {
+              "name": "Big.Buck.Bunny.2000.S26E20.1080p.WEBRip-Sample.mkv",
+              "size": 6303570635
+            },
+            "content": {
+              "type": "tv_show",
+              "source": "tmdb",
+              "id": "900002",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2000,
+              "voteAverage": 4.8,
+              "runtime": null,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": null,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Reality"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/tv/900002"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000002"
+                },
+                {
+                  "metadataSource": {
+                    "key": "tvdb"
+                  },
+                  "url": "https://www.thetvdb.com/dereferrer/series/76706"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "90375c5f45980efd9ec8676b9a2b9f74141b3ced",
+            "title": "Sample Title A (2022) S02E03",
+            "contentType": "tv_show",
+            "contentSource": "tmdb",
+            "contentId": "900003",
+            "videoResolution": "V1080p",
+            "videoCodec": "H264",
+            "videoSource": "WEBRip",
+            "seeders": 2,
+            "publishedAt": "2026-10-17T09:53:11.265098Z",
+            "episodes": {
+              "label": "S02E03"
+            },
+            "torrent": {
+              "name": "Sample.Title.A.2022.S02E03.1080p.WEBRip-Demo.mkv",
+              "size": 2602687379
+            },
+            "content": {
+              "type": "tv_show",
+              "source": "tmdb",
+              "id": "900003",
+              "title": "Sample Title A",
+              "releaseYear": 2022,
+              "voteAverage": 8.333,
+              "runtime": null,
+              "overview": "Synthetic summary for Sample Title A.",
+              "adult": null,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Reality"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/tv/900003"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000003"
+                },
+                {
+                  "metadataSource": {
+                    "key": "tvdb"
+                  },
+                  "url": "https://www.thetvdb.com/dereferrer/series/423858"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "a2b6ab736e43d11c2fb7310d1b764b383f3b2e7d",
+            "title": "Big Buck Bunny (2022) S01E01",
+            "contentType": "tv_show",
+            "contentSource": "tmdb",
+            "contentId": "900004",
+            "videoResolution": "V2160p",
+            "videoCodec": null,
+            "videoSource": "WEBRip",
+            "seeders": 3,
+            "publishedAt": "2026-10-17T09:53:11.265098Z",
+            "episodes": {
+              "label": "S01E01"
+            },
+            "torrent": {
+              "name": "Big.Buck.Bunny.2022.S01E01.2160p.WEBRip-Group",
+              "size": 5512527359
+            },
+            "content": {
+              "type": "tv_show",
+              "source": "tmdb",
+              "id": "900004",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2022,
+              "voteAverage": 7.9,
+              "runtime": null,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": null,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Sci-Fi & Fantasy"
+                },
+                {
+                  "type": "genre",
+                  "name": "Drama"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/tv/900004"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000004"
+                },
+                {
+                  "metadataSource": {
+                    "key": "tvdb"
+                  },
+                  "url": "https://www.thetvdb.com/dereferrer/series/382389"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "e96ff7ccd069a1b53df2f369bfd407cc53fd634e",
+            "title": "Unmatched Sample 5",
+            "contentType": "tv_show",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 3,
+            "publishedAt": "2026-10-17T09:53:11.265098Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.5.1080p.WEB-DL-Sample.mp4",
+              "size": 2047777061
+            },
+            "content": null
+          },
+          {
+            "infoHash": "3819f66ed7dc44701374cc14e713fd4c11c4d478",
+            "title": "Unmatched Sample 6",
+            "contentType": "tv_show",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 4,
+            "publishedAt": "2026-10-17T09:53:11.265098Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.6.1080p.WEB-DL-Demo.mp4",
+              "size": 1096423962
+            },
+            "content": null
+          }
+        ],
+        "aggregations": {
+          "genre": null,
+          "releaseYear": null,
+          "videoResolution": null
+        }
+      }
+    }
+  }
+}

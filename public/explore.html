@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Explore · magplay</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">magplay</a>
+    <a class="navlink" href="/explore" aria-current="page">Explore</a>
+    <form class="topsearch" action="/" role="search"><input name="q" type="search" placeholder="Search" aria-label="Search"></form>
+  </header>
+  <main>
+    <form id="filters" class="toolbar">
+      <div class="seg" role="radiogroup" aria-label="Type">
+        <label><input type="radio" name="type" value="movie" checked><span>Movies</span></label>
+        <label><input type="radio" name="type" value="tv_show"><span>TV</span></label>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Sort">
+        <label><input type="radio" name="sort" value="seeders" checked><span>Most seeded</span></label>
+        <label><input type="radio" name="sort" value="added"><span>Newest</span></label>
+      </div>
+      <select name="year" aria-label="Year"><option value="">Any year</option></select>
+      <select name="res" aria-label="Quality"><option value="">Any quality</option></select>
+    </form>
+    <div id="genres" class="chips" role="group" aria-label="Genre"></div>
+    <p id="status" class="status"></p>
+    <div id="tiles" class="tiles"></div>
+    <p class="actions"><button id="more" type="button" class="button" hidden>Show more</button></p>
+    <section id="latest" hidden>
+      <h2>Just added</h2>
+      <ul class="releases"></ul>
+    </section>
+  </main>
+  <script type="module" src="/explore.js"></script>
+</body>
+</html>

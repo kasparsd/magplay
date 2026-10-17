@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="1.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <atom:link href="http://jackett:9117/" rel="self" type="application/rss+xml" />
+    <title>AggregateSearch</title>
+    <item>
+      <title>Big Buck Bunny.S01.COMPLETE.720p.BluRay.x264-OpenContent</title>
+      <guid>https://publictracker.example/torrent/12345/open-video-sample</guid>
+      <jackettindexer id="publictracker">Public Tracker</jackettindexer>
+      <type>public</type>
+      <comments>https://publictracker.example/torrent/12345/open-video-sample</comments>
+      <pubDate>Mon, 12 Oct 2026 10:00:00 +0000</pubDate>
+      <size>828725915</size>
+      <link>http://jackett:9117/dl/publictracker/?jackett_apikey=SECRETKEY&amp;path=Q2ZESjhB&amp;file=Big Buck Bunny</link>
+      <category>5000</category>
+      <enclosure url="http://jackett:9117/dl/publictracker/?jackett_apikey=SECRETKEY&amp;path=Q2ZESjhB&amp;file=Big Buck Bunny" length="828725915" type="application/x-bittorrent" />
+      <torznab:attr name="category" value="5000" />
+      <torznab:attr name="seeders" value="50" />
+      <torznab:attr name="peers" value="60" />
+      <torznab:attr name="infohash" value="D797D14FB859B0F4F70E6081080FF28135830522" />
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:D797D14FB859B0F4F70E6081080FF28135830522&amp;dn=Big Buck Bunny" />
+    </item>
+    <item>
+      <title>Big Buck Bunny S01 1080p OpenContent WEB-DL DDP5.1 H.264-OpenContent</title>
+      <guid>https://private.example/details.php?id=999</guid>
+      <jackettindexer id="privatetracker">Private Tracker</jackettindexer>
+      <type>private</type>
+      <size>9000000000</size>
+      <link>http://jackett:9117/dl/privatetracker/?jackett_apikey=SECRETKEY&amp;path=ZZZZ&amp;file=Big Buck Bunny</link>
+      <enclosure url="http://jackett:9117/dl/privatetracker/?jackett_apikey=SECRETKEY&amp;path=ZZZZ&amp;file=Big Buck Bunny" length="9000000000" type="application/x-bittorrent" />
+      <torznab:attr name="seeders" value="12" />
+      <torznab:attr name="peers" value="13" />
+    </item>
+    <item>
+      <title>Big Buck Bunny Season 1 Complete 480p</title>
+      <guid>magnet:?xt=urn:btih:2222222222222222222222222222222222222222&amp;dn=Big Buck Bunny</guid>
+      <jackettindexer id="magnetsite">Magnet Site</jackettindexer>
+      <link>magnet:?xt=urn:btih:2222222222222222222222222222222222222222&amp;dn=Big Buck Bunny</link>
+      <enclosure url="magnet:?xt=urn:btih:2222222222222222222222222222222222222222&amp;dn=Big Buck Bunny" type="application/x-bittorrent" />
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:2222222222222222222222222222222222222222&amp;dn=Big Buck Bunny" />
+    </item>
+  </channel>
+</rss>

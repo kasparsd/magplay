@@ -1,0 +1,10 @@
+node_modules
+data
+.git
+**/*.test.js
+**/test-fixtures
+**/test-helpers.js
+tests
+.dev
+tools
+.env

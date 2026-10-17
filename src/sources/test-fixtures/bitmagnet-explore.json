@@ -1,0 +1,1007 @@
+{
+  "data": {
+    "torrentContent": {
+      "search": {
+        "totalCount": 343981,
+        "totalCountIsEstimate": true,
+        "hasNextPage": false,
+        "items": [
+          {
+            "infoHash": "7d37f0c55907addb30fef04ade0c66dad5c970d6",
+            "title": "Open Content Sample (2025)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900001",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": "WEBRip",
+            "seeders": 891,
+            "publishedAt": "2026-09-27T22:27:20.441487Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Open.Content.Sample.2025.1080p.WEBRip-Group",
+              "size": 2045168194
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900001",
+              "title": "Open Content Sample",
+              "releaseYear": 2025,
+              "voteAverage": 7.1,
+              "runtime": 103,
+              "overview": "Synthetic summary for Open Content Sample.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Drama"
+                },
+                {
+                  "type": "genre",
+                  "name": "Thriller"
+                },
+                {
+                  "type": "genre",
+                  "name": "Crime"
+                },
+                {
+                  "type": "genre",
+                  "name": "Mystery"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900001"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000001"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "307b5e9fba206283b36f3410ea361e3a6524d2de",
+            "title": "Big Buck Bunny (2021)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900002",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": "BluRay",
+            "seeders": 456,
+            "publishedAt": "2026-09-27T09:23:19.968952Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2021.1080p.BluRay-Sample",
+              "size": 2933119842
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900002",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2021,
+              "voteAverage": 7.947,
+              "runtime": 148,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Action"
+                },
+                {
+                  "type": "genre",
+                  "name": "Science Fiction"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900002"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000002"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "ac9ae5213faf99a155f28dcc6300d53947efc36e",
+            "title": "Open Content Mystery (2026)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900003",
+            "videoResolution": "V1080p",
+            "videoCodec": "x265",
+            "videoSource": "WEBRip",
+            "seeders": 454,
+            "publishedAt": "2026-10-01T02:18:09.313814Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Open.Content.Mystery.2026.1080p.WEBRip-Demo.mkv",
+              "size": 1823851450
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900003",
+              "title": "Open Content Mystery",
+              "releaseYear": 2026,
+              "voteAverage": 7.935,
+              "runtime": 109,
+              "overview": "Synthetic summary for Open Content Mystery.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Family"
+                },
+                {
+                  "type": "genre",
+                  "name": "Comedy"
+                },
+                {
+                  "type": "genre",
+                  "name": "Mystery"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900003"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000003"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "de36d059df084017e675f66cd67998d3d006de6d",
+            "title": "Unmatched Sample 4",
+            "contentType": "movie",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": "V1080p",
+            "videoCodec": "x264",
+            "videoSource": "WEBRip",
+            "seeders": 452,
+            "publishedAt": "2026-10-08T21:38:50.696874Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.4.1080p.WEBRip-Group",
+              "size": 3116729684
+            },
+            "content": null
+          },
+          {
+            "infoHash": "8702b7390b94ea4ed9ec772ee51c2fbdd274494b",
+            "title": "Big Buck Bunny (2000)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900004",
+            "videoResolution": null,
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 446,
+            "publishedAt": "2026-09-26T21:39:18.241716Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2000.1080p.WEB-DL-Sample",
+              "size": 1722109388
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900004",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2000,
+              "voteAverage": 8.231,
+              "runtime": 155,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Drama"
+                },
+                {
+                  "type": "genre",
+                  "name": "Action"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900004"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000004"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "ce5142a2cb7075cf5ea808dd2104b3cfa8901350",
+            "title": "Unmatched Sample 6",
+            "contentType": "movie",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": null,
+            "videoCodec": "x264",
+            "videoSource": null,
+            "seeders": 444,
+            "publishedAt": "2026-10-12T22:51:31.855482Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.6.1080p.WEB-DL-Demo.mkv",
+              "size": 711683008
+            },
+            "content": null
+          },
+          {
+            "infoHash": "b4da861461837382e097e44c4368270d1fa25ca5",
+            "title": "Big Buck Bunny (1995)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900005",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 439,
+            "publishedAt": "2026-09-26T17:23:18.089483Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.1995.1080p.WEB-DL-Group",
+              "size": 1180154175
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900005",
+              "title": "Big Buck Bunny",
+              "releaseYear": 1995,
+              "voteAverage": 7.989,
+              "runtime": 81,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Family"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Animation"
+                },
+                {
+                  "type": "genre",
+                  "name": "Comedy"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900005"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000005"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "642813e6512e4db6d1d8063edea5ff1770fdfe40",
+            "title": "Unmatched Sample 8",
+            "contentType": "movie",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": null,
+            "videoCodec": "x264",
+            "videoSource": null,
+            "seeders": 439,
+            "publishedAt": "2026-10-07T10:45:48.153236Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.8.1080p.WEB-DL-Sample.mkv",
+              "size": 543207364
+            },
+            "content": null
+          },
+          {
+            "infoHash": "585f548ccaab8ff21472bccf7dd402eda5340d26",
+            "title": "Unmatched Sample 9",
+            "contentType": "movie",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": "V1080p",
+            "videoCodec": "H264",
+            "videoSource": "WEBRip",
+            "seeders": 438,
+            "publishedAt": "2026-10-01T15:16:12.002858Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.9.1080p.WEBRip-Demo.mkv",
+              "size": 3076295603
+            },
+            "content": null
+          },
+          {
+            "infoHash": "829f52d96a797fe71aff259ee226654e13ed9a8d",
+            "title": "Big Buck Bunny & Monsters (2026)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900006",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": "WEBRip",
+            "seeders": 436,
+            "publishedAt": "2026-09-28T08:15:22.109554Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.&.Monsters.2026.1080p.WEBRip-Group",
+              "size": 1834670263
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900006",
+              "title": "Big Buck Bunny & Monsters",
+              "releaseYear": 2026,
+              "voteAverage": 7.564,
+              "runtime": 90,
+              "overview": "Synthetic summary for Big Buck Bunny & Monsters.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny & Monsters Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Family"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Fantasy"
+                },
+                {
+                  "type": "genre",
+                  "name": "Animation"
+                },
+                {
+                  "type": "genre",
+                  "name": "Comedy"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900006"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000006"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "f6fab65ffc7bfe06d1e58f09771348353f838ab8",
+            "title": "Unmatched Sample 11",
+            "contentType": "movie",
+            "contentSource": null,
+            "contentId": null,
+            "videoResolution": "V1080p",
+            "videoCodec": "x265",
+            "videoSource": null,
+            "seeders": 434,
+            "publishedAt": "2026-10-12T17:11:31.656042Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Unmatched.Sample.11.1080p.WEB-DL-Sample.mkv",
+              "size": 1968592550
+            },
+            "content": null
+          },
+          {
+            "infoHash": "fe79386753152d6c08bcee83e3c525cbb6344692",
+            "title": "Big Buck Bunny (2026)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900007",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 433,
+            "publishedAt": "2026-09-27T10:47:20.020214Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2026.1080p.WEB-DL-Demo.mkv",
+              "size": 5006225955
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900007",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2026,
+              "voteAverage": 8.42,
+              "runtime": 145,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Action"
+                },
+                {
+                  "type": "genre",
+                  "name": "Science Fiction"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900007"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000007"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "798db7f0dd99ba244e24218d33a3c9fcce1c15ef",
+            "title": "Big Buck Bunny (2024)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900008",
+            "videoResolution": "V1080p",
+            "videoCodec": "x265",
+            "videoSource": "WEBRip",
+            "seeders": 430,
+            "publishedAt": "2026-09-25T18:10:15.926338Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2024.1080p.WEBRip-Group",
+              "size": 2704908651
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900008",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2024,
+              "voteAverage": 6.902,
+              "runtime": 162,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Romance"
+                },
+                {
+                  "type": "genre",
+                  "name": "Fantasy"
+                },
+                {
+                  "type": "genre",
+                  "name": "Drama"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900008"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000008"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "f4ee399bbe3cb3c675e9c7dd1fe99d823894a0a1",
+            "title": "Big Buck Bunny (2010)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900009",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 428,
+            "publishedAt": "2026-09-26T22:25:18.269167Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2010.1080p.WEB-DL-Sample",
+              "size": 1501162538
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900009",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2010,
+              "voteAverage": 7.868,
+              "runtime": 98,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Family"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Fantasy"
+                },
+                {
+                  "type": "genre",
+                  "name": "Animation"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900009"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000009"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "71a7f000487b824d34c080877114caa597bfa4bf",
+            "title": "Big Buck Bunny (2026)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900007",
+            "videoResolution": "V1080p",
+            "videoCodec": "x265",
+            "videoSource": null,
+            "seeders": 421,
+            "publishedAt": "2026-09-26T19:32:18.171621Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2026.1080p.WEB-DL-Demo.mkv",
+              "size": 3484188591
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900007",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2026,
+              "voteAverage": 8.42,
+              "runtime": 145,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Action"
+                },
+                {
+                  "type": "genre",
+                  "name": "Science Fiction"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900007"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000007"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "4b7f4a2b43329c3e0a341a0b38575b65fa261576",
+            "title": "Big Buck Bunny (2026)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900007",
+            "videoResolution": null,
+            "videoCodec": null,
+            "videoSource": "WEBRip",
+            "seeders": 364,
+            "publishedAt": "2026-10-09T15:19:15.228117Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2026.1080p.WEBRip-Group.mp4",
+              "size": 1725073810
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900007",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2026,
+              "voteAverage": 8.42,
+              "runtime": 145,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Action"
+                },
+                {
+                  "type": "genre",
+                  "name": "Science Fiction"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900007"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000007"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "f406b8819f2f3c0e81bfacb240b1613dd3c50c38",
+            "title": "Big Buck Bunny (2026)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900007",
+            "videoResolution": "V2160p",
+            "videoCodec": null,
+            "videoSource": null,
+            "seeders": 350,
+            "publishedAt": "2026-10-07T00:54:46.499122Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Big.Buck.Bunny.2026.2160p.WEB-DL-Sample.mkv",
+              "size": 29110748946
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900007",
+              "title": "Big Buck Bunny",
+              "releaseYear": 2026,
+              "voteAverage": 8.42,
+              "runtime": 145,
+              "overview": "Synthetic summary for Big Buck Bunny.",
+              "adult": false,
+              "collections": [
+                {
+                  "type": "franchise",
+                  "name": "Big Buck Bunny Collection"
+                },
+                {
+                  "type": "genre",
+                  "name": "Adventure"
+                },
+                {
+                  "type": "genre",
+                  "name": "Action"
+                },
+                {
+                  "type": "genre",
+                  "name": "Science Fiction"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900007"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000007"
+                }
+              ]
+            }
+          },
+          {
+            "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "title": "Adult Title (2025)",
+            "contentType": "movie",
+            "contentSource": "tmdb",
+            "contentId": "900010",
+            "videoResolution": "V1080p",
+            "videoCodec": null,
+            "videoSource": "WEBRip",
+            "seeders": 5,
+            "publishedAt": "2026-09-27T22:27:20.441487Z",
+            "episodes": null,
+            "torrent": {
+              "name": "Adult.Title.2025.1080p.WEBRip-Demo",
+              "size": 2045168194
+            },
+            "content": {
+              "type": "movie",
+              "source": "tmdb",
+              "id": "900010",
+              "title": "Adult Title",
+              "releaseYear": 2025,
+              "voteAverage": 7.1,
+              "runtime": 103,
+              "overview": "Synthetic summary for Adult Title.",
+              "adult": true,
+              "collections": [
+                {
+                  "type": "genre",
+                  "name": "Drama"
+                },
+                {
+                  "type": "genre",
+                  "name": "Thriller"
+                },
+                {
+                  "type": "genre",
+                  "name": "Crime"
+                },
+                {
+                  "type": "genre",
+                  "name": "Mystery"
+                }
+              ],
+              "externalLinks": [
+                {
+                  "metadataSource": {
+                    "key": "tmdb"
+                  },
+                  "url": "https://www.themoviedb.org/movie/900010"
+                },
+                {
+                  "metadataSource": {
+                    "key": "imdb"
+                  },
+                  "url": "https://www.imdb.com/title/tt90000001"
+                }
+              ]
+            }
+          }
+        ],
+        "aggregations": {
+          "genre": [
+            {
+              "value": "tmdb:28",
+              "label": "Action",
+              "count": 175
+            },
+            {
+              "value": "tmdb:10759",
+              "label": "Action & Adventure",
+              "count": 42
+            },
+            {
+              "value": "tmdb:12",
+              "label": "Adventure",
+              "count": 110
+            },
+            {
+              "value": "tmdb:16",
+              "label": "Animation",
+              "count": 122
+            },
+            {
+              "value": "tmdb:35",
+              "label": "Comedy",
+              "count": 436
+            },
+            {
+              "value": "tmdb:80",
+              "label": "Crime",
+              "count": 192
+            },
+            {
+              "value": "tmdb:99",
+              "label": "Documentary",
+              "count": 172
+            },
+            {
+              "value": "tmdb:18",
+              "label": "Drama",
+              "count": 664
+            }
+          ],
+          "releaseYear": [
+            {
+              "value": 1899,
+              "count": 46
+            },
+            {
+              "value": 1902,
+              "count": 46
+            },
+            {
+              "value": 1903,
+              "count": 46
+            },
+            {
+              "value": 1904,
+              "count": 46
+            },
+            {
+              "value": 1910,
+              "count": 46
+            },
+            {
+              "value": 1911,
+              "count": 46
+            },
+            {
+              "value": 1912,
+              "count": 46
+            },
+            {
+              "value": 1913,
+              "count": 46
+            }
+          ],
+          "videoResolution": [
+            {
+              "value": "V360p",
+              "count": 71
+            },
+            {
+              "value": "V480p",
+              "count": 4976
+            },
+            {
+              "value": "V540p",
+              "count": 130
+            },
+            {
+              "value": "V576p",
+              "count": 643
+            },
+            {
+              "value": "V720p",
+              "count": 23482
+            },
+            {
+              "value": "V1080p",
+              "count": 69576
+            },
+            {
+              "value": "V1440p",
+              "count": 68
+            },
+            {
+              "value": "V2160p",
+              "count": 8554
+            }
+          ]
+        }
+      }
+    }
+  }
+}

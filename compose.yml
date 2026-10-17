@@ -1,0 +1,59 @@
+# Local stack for trying magplay with Jackett and Prowlarr next to it.
+#   docker compose up -d --build
+#   node tools/scripts/setup-indexers.mjs     # adds public indexers, writes their API keys to .env, restarts magplay
+# BitMagnet isn't included: point BITMAGNET_URL at yours (an IP address; .local names don't resolve in containers).
+
+services:
+  magplay:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${MAGPLAY_PORT:-3382}:8080"
+      - "${TORRENT_PORT:-6881}:6881/tcp"
+      - "${TORRENT_PORT:-6881}:6881/udp"
+    environment:
+      TORZNAB_URL: "${BITMAGNET_URL:-http://bitmagnet:3333/torznab/api}"
+      TORZNAB_NAME: "BitMagnet"
+      JACKETT_URL: "http://jackett:9117"
+      JACKETT_APIKEY: "${JACKETT_APIKEY:-}"
+      PROWLARR_URL: "http://prowlarr:9696"
+      PROWLARR_APIKEY: "${PROWLARR_APIKEY:-}"
+      CACHE_MAX_GB: "${CACHE_MAX_GB:-20}"
+    volumes:
+      - magplay_data:/data
+    depends_on: [jackett, prowlarr]
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:v0.24.2663-ls38
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Etc/UTC"
+      AUTO_UPDATE: "false"
+    ports:
+      - "9117:9117"
+    volumes:
+      - ./tools/docker/jackett/config:/config
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls162
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Etc/UTC"
+    ports:
+      - "9696:9696"
+    volumes:
+      - ./tools/docker/prowlarr/config:/config
+
+volumes:
+  magplay_data:
+
+networks:
+  default:
+    ipam:
+      # Docker fell back to 172.30.0.0/24 on a host with many networks, which hid the LAN (and BitMagnet); pin a rarely used range
+      config:
+        - subnet: "${DOCKER_SUBNET:-10.89.82.0/24}"

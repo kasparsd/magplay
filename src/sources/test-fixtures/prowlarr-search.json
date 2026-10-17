@@ -1,0 +1,26 @@
+[
+  {
+    "guid": "https://publictracker.example/torrent/12345",
+    "age": 5, "size": 828725915, "indexerId": 3, "indexer": "ExampleIndexer",
+    "title": "Big Buck Bunny.S01.COMPLETE.720p.BluRay.x264-OpenContent",
+    "downloadUrl": "http://prowlarr:9696/3/download?apikey=SECRETKEY&link=YWJj&file=Big Buck Bunny",
+    "magnetUrl": "http://prowlarr:9696/3/download?apikey=SECRETKEY&link=bWFn&file=Big Buck Bunny",
+    "infoHash": "d797d14fb859b0f4f70e6081080ff28135830522",
+    "seeders": 61, "leechers": 4, "protocol": "torrent",
+    "categories": [{ "id": 5000, "name": "TV" }]
+  },
+  {
+    "guid": "https://private.example/details.php?id=999",
+    "size": 9000000000, "indexerId": 7, "indexer": "PrivateTracker",
+    "title": "Big Buck Bunny S01 1080p OpenContent WEB-DL DDP5.1 H.264-OpenContent",
+    "downloadUrl": "http://prowlarr:9696/7/download?apikey=SECRETKEY&link=cHJp&file=Big Buck Bunny",
+    "magnetUrl": null, "infoHash": null,
+    "seeders": 15, "leechers": 0, "protocol": "torrent"
+  },
+  {
+    "guid": "nzb-1", "size": 5000000000, "indexerId": 9, "indexer": "UsenetIndexer",
+    "title": "Big Buck Bunny.S01.1080p.WEB-DL", "downloadUrl": "http://prowlarr:9696/9/download?apikey=SECRETKEY&link=bnpi",
+    "protocol": "usenet"
+  },
+  { "indexer": "Broken", "title": "", "protocol": "torrent" }
+]

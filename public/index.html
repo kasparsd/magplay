@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magplay</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">magplay</a>
+    <a class="navlink" href="/explore">Explore</a>
+    <form id="search" class="topsearch" action="/" role="search">
+      <input name="q" type="search" placeholder="Big Buck Bunny, open movie…" aria-label="Search" autofocus required>
+      <button>Search</button>
+    </form>
+  </header>
+  <main>
+    <div class="toolbar">
+      <div class="seg" role="radiogroup" aria-label="Category">
+        <label><input type="radio" name="cat" value="" form="search" checked><span>All</span></label>
+        <label><input type="radio" name="cat" value="2000" form="search"><span>Movies</span></label>
+        <label><input type="radio" name="cat" value="5000" form="search"><span>TV</span></label>
+      </div>
+      <p id="status" class="status"></p>
+    </div>
+    <div id="sources" class="chips"></div>
+    <section id="recent" hidden></section>
+    <table id="results" hidden>
+      <thead><tr><th>Title</th><th>Size</th><th>Seeders</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </main>
+  <script type="module" src="/search.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+node_modules/
+data/
+.dev/
+tools/docker/*/config/
+.env
+playwright-report/
+test-results/
