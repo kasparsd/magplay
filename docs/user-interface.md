@@ -6,14 +6,26 @@ How the browser client should look and behave, the Player roadmap, and the open 
 
 ### Who it is for
 
-One person (or a household) on a trusted local network, on a laptop, phone or TV-adjacent device. There is no login, no account state and nothing to configure in the browser. The interface should feel like a quiet utility: find something, see whether it will play here, play it.
+One person (or a household) on a trusted local network, on a laptop, phone or TV-adjacent device. There is no login or account state. Search and playback work without browser configuration; Settings is for the person running the NAS to inspect health, adjust server defaults and choose local playback preferences. The interface should feel like a quiet utility: find something, see whether it will play here, play it.
 
 ### Pages and URLs
 
-- Five pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`) and Player (`/play/<infohash>/<file>`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters, selected file) lives in the URL, not only in memory.
-- Every page shares the same top bar: the `magplay` home link, Explore, and a search box. The search box keeps the current query where there is one.
+- Six pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`), Player (`/play/<infohash>/<file>`) and Settings (`/settings#section`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters, selected file and selected settings section) lives in the URL, not only in memory.
+- Every page shares the same top bar: the `magplay` home link, Explore, a search box and the status pin. The search box keeps the current query where there is one. The status pin names the overall state, opens the status menu, and links to Settings and Debug.
 - Back links name where they go ("← Big Buck Bunny", "← Results") and only appear when that destination is the real previous step.
 - Malformed URLs fall back to defaults (for example an unknown Explore `type` becomes `movie`) instead of showing a validation error.
+
+### Settings and status
+
+The status pin sits at the right edge of every top bar. It combines a state dot, an optional problem count and a settings affordance into one accessible control. Its label states the current result, for example “Status: 2 problems. Settings”. At 375 px the count disappears but the dot and control remain.
+
+- The four states are `ok`, `warn`, `error` and `unknown`. Green means every required check passed; amber and red mean attention or failure; a hollow ring means checks have not completed yet. The pin must never claim health before it has a result.
+- Opening the pin shows a concise heading, checks ordered from worst to best, a plain-language explanation and a direct Settings link for every fixable problem. It also shows recent state changes and links to Settings and Debug. Escape closes the shared menu. The pin refreshes while the tab is visible and on focus, not continuously in a hidden tab.
+- Settings lives at `/settings`; hashes select and deep-link to `#sources`, `#playback`, `#connection`, `#server` and `#debug`. Desktop navigation is a side list. At 375 px it becomes a horizontal scroller and problem sections carry a dot.
+- Server settings apply to everyone. They use a sticky save bar with a change count, Discard and Save, and validation errors appear by the relevant control. An environment-provided value is read-only and names its variable; Settings never edits `.env`. Saved server values are written by the server, not trusted from browser storage.
+- Browser settings apply immediately and stay only in that browser. Preferred audio/subtitle language, default speed and autoplay-next are used by the Player. Browser debug toggles and the last connection-test result also stay local.
+- Sources show their type, address and API-key state, allow a connection test and can be added after any environment-defined sources. API-key text is never returned to the browser; an existing key is presented as saved and can be replaced.
+- Connection offers an on-demand local speed test and keeps the last download-rate and latency result for seven days. Debug shows the redacted runtime snapshot and offers a copyable diagnostics payload.
 
 ### Honest states
 
@@ -41,20 +53,21 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 - Shared formatting helpers for sizes, speeds, times and counts, including singular/plural ("1 seeder").
 - Text from indexers is decoded once on the server (HTML entities) and treated as plain text in the client.
 - The `hidden` attribute always hides an element, regardless of component styles.
+- Settings renders the shared schema for server and browser preferences. Environment values are visibly locked, server edits use an explicit save bar and browser preferences apply immediately. Secrets are represented by their saved state, never their value.
 
 ### Visual and layout
 
 - Dark, low-contrast chrome so video and titles stand out. One accent colour for actions and links; green only for "plays in browser".
 - Same side gutter on every page, including the Player. The Player's video band is the one exception: it runs edge to edge, and everything under it keeps the gutter.
 - Nothing is loaded from outside the NAS: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
-- Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized.
+- Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized. Settings navigation may scroll horizontally within its own control; the document never does.
 - Search filters (All, Movies, TV) appear only once there is a query; the home page shows just the search bar and recent items.
 - Labels hide only what the source can't add to: show the source name on search results only when more than one source is configured.
 
 ### Accessibility and keyboard
 
 - Controls have accessible names that match what is shown ("TV", not `tv_show`).
-- Menus open and close with the keyboard, and Escape closes them.
+- Menus open and close with the keyboard, and Escape closes them. The status pin's accessible name includes the health result and problem count; each settings control names the same thing visible on screen.
 - The player keeps its keys: space play/pause, ←/→ seek 10 s, M mute. The keys added by the new chrome are listed under [One player chrome](#1-one-player-chrome-for-every-mode), and **?** shows them all.
 
 ## Player roadmap
@@ -208,7 +221,7 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 - [ ] **"← Results" appears on torrent pages not reached from a search** (direct links, Explore, recent list). Show it only when there is a search to go back to; otherwise link to where the user came from.
 - [ ] **The Player page has a different side gutter** from the other pages. Fixed by [Theater layout](#2-theater-layout-by-default).
 - [ ] **Open in on the Player has no Download file option,** while the torrent page's ⋯ menu does. Offer the same file actions in both. Fixed by the More menu in [One player chrome](#1-one-player-chrome-for-every-mode).
-- [ ] **More → Copy infohash does the same thing as the clickable ID** next to the torrent's metadata. Keep one.
+- [x] **More → Copy infohash does the same thing as the clickable ID** next to the torrent's metadata. Keep one.
 - [ ] **Screen readers hear "tv_show"** for the Explore Movies/TV switch. Give the radios proper labels.
 
 ### P4: polish

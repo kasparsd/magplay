@@ -131,6 +131,69 @@ export const posterTile = (title: string, extra = ''): HTMLDivElement => el('div
 /** `1 seeder`, `2 seeders`. */
 export const count = (n: number, word: string): string => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`
 
+type HealthLevel = 'ok' | 'warn' | 'error' | 'unknown'
+type StatusCheck = { id: string, label: string, level: HealthLevel, value?: string, message?: string, action?: string }
+type StatusEvent = { at: number, checkId: string, level: HealthLevel, message: string }
+type StatusResponse = { level: HealthLevel, checks: StatusCheck[], events: StatusEvent[] }
+
+/** Add the shared status pin to a page's top bar and keep it fresh while visible. */
+export function installStatusPin (): void {
+  const bar = document.querySelector('.topbar')
+  if (!bar || bar.querySelector('.status-menu')) return
+  const panel = el('div', { className: 'status-panel' })
+  const box = menu('Status', [panel], { className: 'button status-menu' })
+  const summary = $('summary', box)
+  const lastSeen = Number(recall('status-last-seen')) || 0
+  let seen = lastSeen
+  let latest: StatusResponse | null = null
+
+  const render = () => {
+    if (!latest) return
+    const { level, checks, events } = latest
+    const problems = checks.filter(check => check.level === 'warn' || check.level === 'error')
+    const label = level === 'ok' ? 'All good' : level === 'unknown' ? 'Checking status' : level === 'warn' ? 'Needs attention' : "Something isn't working"
+    const countText = problems.length ? ` ${problems.length}` : ''
+    summary.className = `status-pin ${level}`
+    summary.textContent = ''
+    summary.setAttribute('aria-label', problems.length ? `Status: ${problems.length} problem${problems.length === 1 ? '' : 's'}. Settings` : `Status: ${label}. Settings`)
+    summary.append(el('span', { className: 'status-dot', ariaHidden: 'true' }), el('span', { className: 'status-count', textContent: countText }), el('span', { className: 'status-gear', textContent: '⚙', ariaHidden: 'true' }))
+    const unread = events.filter(event => event.at > seen)
+    fill(panel,
+      el('p', { className: 'status-headline', textContent: label }),
+      el('p', { className: 'status-summary', textContent: level === 'ok' ? 'Required services are connected.' : level === 'unknown' ? 'Status checks are still running.' : `${problems.length} item${problems.length === 1 ? '' : 's'} need attention.` }),
+      el('h2', { textContent: 'Status' }),
+      el('ul', { className: 'status-checks' }, ...checks.map(check => el('li', { className: `status-check ${check.level}` },
+        el('span', { className: 'check-dot', ariaHidden: 'true' }),
+        el('span', { className: 'check-label', textContent: check.label }),
+        el('span', { className: 'check-value', textContent: check.value ?? '' }),
+        check.message && el('span', { className: 'check-message', textContent: check.message }),
+        check.action && el('a', { href: check.action, textContent: 'Fix' })))),
+      events.length ? el('section', { className: 'status-recent' }, el('h2', { textContent: unread.length ? `Recent (${unread.length} new)` : 'Recent' }), el('ul', {}, ...events.slice(0, 5).map(event => el('li', { textContent: event.message })))) : null,
+      el('p', { className: 'status-footer' }, el('a', { href: '/settings', textContent: 'Settings' }), ' · ', el('a', { href: '/settings#debug', textContent: 'Debug' })))
+  }
+  const load = async () => {
+    if (document.visibilityState !== 'visible') return
+    try {
+      latest = await (await fetch('/api/status', { cache: 'no-store' })).json() as StatusResponse
+      render()
+    } catch { /* The ring stays unknown until the NAS is reachable again. */ }
+  }
+  box.addEventListener('toggle', () => {
+    if (box.open && latest) {
+      seen = Date.now()
+      remember('status-last-seen', seen)
+      render()
+    }
+  })
+  bar.append(box)
+  load().catch(() => {})
+  setInterval(() => { load().catch(() => {}) }, 30_000)
+  addEventListener('focus', () => { load().catch(() => {}) })
+}
+
+// Every client entry imports this module after its static top bar has been parsed.
+installStatusPin()
+
 /** One row in a list of releases: name (linking to its torrent page), badges, size and seeders. */
 export interface ReleaseRowItem {
   name: string

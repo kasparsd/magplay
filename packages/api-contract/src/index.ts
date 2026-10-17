@@ -1,6 +1,9 @@
 // Wire contracts for the server JSON API, shared by apps/server (handlers) and
 // apps/client (pages). These describe wire data, not runtime validation or UI state.
-// This package is type-only: nothing here executes.
+// Runtime UI/settings schema is exported alongside the wire types.
+
+export { browserSettings, serverSettings, settingByKey, settingsSchema, validateSetting } from './settings.ts'
+export type { FieldError, SelectOption, SettingDef, SettingScope, SettingSection, SettingType } from './settings.ts'
 
 export type CodecKey = 'h264' | 'hevc' | 'vp9' | 'av1' | 'aac' | 'ac3' | 'eac3' | 'opus' | 'flac'
 

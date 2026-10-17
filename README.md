@@ -174,6 +174,8 @@ response may need a hard reload/cache clear. No Node/proxy speedup has been benc
 
 ## Configuration
 
+Open **Settings** in magplay to inspect service health and change supported server defaults. Those values are saved atomically in `CACHE_DIR/settings.json` and apply to everyone using the server. Browser playback preferences stay in that browser's `localStorage`. Environment variables remain useful for deployment and always win over Settings; an environment-set field is shown as read-only with its variable name.
+
 | Var | Default | Meaning |
 |---|---|---|
 | `PORT` | `8080` | HTTP port |
@@ -223,6 +225,11 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 | `POST /api/play/tab/:tab` | Closes a page activation, including a session whose POST result has not reached the browser yet; late requests for that activation are fenced briefly. |
 | `GET /subs/:ih/:idx/:track.vtt` | Embedded text subtitle `track` as WebVTT (direct mode; reads the whole file), or `file.vtt` to convert a `.srt`/`.vtt`/`.ass` file in the torrent |
 | `GET /health` | 200 |
+| `GET /api/status` | Current health level, cached source/binary/disk checks and recent state changes |
+| `GET` / `PATCH /api/settings` | Resolved editable server settings and metadata showing whether each comes from the environment, saved file or default; `PATCH` is same-origin only |
+| `POST /api/settings/test` | Test an unsaved indexer source; same-origin only |
+| `GET /api/debug` | Redacted runtime and settings diagnostics |
+| `GET /api/speedtest` | Capped random-byte stream used only by the on-demand browser connection test |
 
 ## Dependencies
 
@@ -305,7 +312,7 @@ Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 
 Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
 
 - `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by the `http-kit` router.
-- `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/ui.ts` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.ts` (DOM-independent JSON transport) and `lib/urls.ts` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
+- `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`, `settings.js`), plus `lib/ui.ts` (DOM, formatting, `menu()`, status pin, copy buttons, tiles, release rows and per-browser memory), `lib/api.ts` (DOM-independent JSON transport) and `lib/urls.ts` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
 - `public/`: HTML and CSS, served as-is.
 - `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
 

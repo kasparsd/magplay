@@ -4,10 +4,12 @@
 export class ApiError extends Error {
   override name = 'ApiError'
   readonly status: number
+  readonly body: unknown
 
-  constructor (message: string, status: number, options?: ErrorOptions) {
+  constructor (message: string, status: number, options?: ErrorOptions, body: unknown = null) {
     super(message, options)
     this.status = status
+    this.body = body
   }
 }
 
@@ -43,7 +45,7 @@ export async function api<T = unknown> (url: RequestInfo | URL, { json, ...opts 
   }
   if (!res.ok) {
     const error = body && typeof body === 'object' && 'error' in body ? body.error : undefined
-    throw new ApiError(typeof error === 'string' && error ? error : `HTTP ${res.status}`, res.status)
+    throw new ApiError(typeof error === 'string' && error ? error : `HTTP ${res.status}`, res.status, undefined, body)
   }
   return body as T
 }

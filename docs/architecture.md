@@ -86,6 +86,12 @@ Requirements for the client build, kept from the earlier Vite criteria:
 
 Vite remains an option if a dev server, fingerprinted assets or bundled browser-media/WASM dependencies become a need; the requirements above apply to it too. No build system makes decoding or server remuxing faster by itself.
 
+## Settings and status
+
+`packages/api-contract/src/settings.ts` is the shared declarative settings schema and validator. `apps/server/src/config.js` resolves each server value in precedence order: environment, `CACHE_DIR/settings.json`, then schema default. The JSON file is written through a temporary file and rename; environment values remain locked rather than being copied into it. A settings change rebuilds the live search and Explore services and records whether a server restart is needed.
+
+`apps/server/src/status.js` owns the TTL-cached health-check registry and in-memory recent-event ring. The server exposes its snapshot through `/api/status`; `lib/ui.ts` renders it as the one shared status pin and polls only while the document is visible. Browser preferences and the on-demand connection measurement never leave that browser.
+
 ## Static delivery
 
 A frontend proxy is not a cross-origin client. Nginx can serve the static pages and built client and proxy `/api`, `/raw`, `/tar`, `/hls`, `/subs` and playlists under the same origin. This needs neither CORS nor authentication. Node-only serving stays supported.

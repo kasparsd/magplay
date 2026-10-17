@@ -2,7 +2,7 @@ import http from 'node:http'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import config from './config.js'
+import config, { onSettingsChanged, settingsSnapshot, updateSettings } from './config.js'
 import { HttpError, toHttpError } from './errors.ts'
 import { createRouter, route, sendCached, serveFile } from '@magplay/http-kit'
 import { SourceError } from './sources/release.js'
@@ -12,6 +12,7 @@ import { createBitmagnetBrowser, TYPES } from './sources/bitmagnet.js'
 import { addTorrent, describe, getFile, getTorrent, knownWarning, recent, serveRaw, serveTar, status } from './torrents.js'
 import { probe, decide, subtitleToVtt } from './media.js'
 import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls } from './sessions.js'
+import { createStatus } from './status.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(root, '../../..')
@@ -30,6 +31,15 @@ const json = (res, status, body) => {
   res.end(JSON.stringify(body))
 }
 
+function requireSameOrigin (req) {
+  const site = req.headers['sec-fetch-site']
+  if (site === 'same-origin') return
+  const origin = req.headers.origin
+  const host = req.headers.host
+  if (origin && host && new URL(origin).host === host) return
+  throw new HttpError(403, 'This action must come from magplay itself.')
+}
+
 async function readJson (req) {
   let body = ''
   for await (const chunk of req) {
@@ -42,7 +52,16 @@ async function readJson (req) {
   return parsed
 }
 
-const searcher = createSearch(createSources(config.sources), { timeoutMs: config.searchTimeoutMs })
+let searcher = createSearch(createSources(config.sources), { timeoutMs: config.searchTimeoutMs })
+let browser = config.bitmagnetUrl ? createBitmagnetBrowser({ url: config.bitmagnetUrl }) : null
+const systemStatus = createStatus({ config })
+onSettingsChanged(keys => {
+  searcher = createSearch(createSources(config.sources), { timeoutMs: config.searchTimeoutMs })
+  browser = config.bitmagnetUrl ? createBitmagnetBrowser({ url: config.bitmagnetUrl }) : null
+  exploreCache.clear()
+  systemStatus.refreshSources()
+  systemStatus.settingsSaved(keys)
+})
 
 // Fail loudly at startup, not mid-playback: check the external binaries, and note missing indexers
 if (!config.sources.length) {
@@ -53,7 +72,6 @@ for (const [bin, varName] of [[config.ffprobePath, 'FFPROBE_PATH'], [config.ffmp
     if (err) console.warn(`"${bin}" not found: playback needs ffmpeg and ffprobe. Install them, or point ${varName} at the binary.`)
   })
 }
-const browser = config.bitmagnetUrl ? createBitmagnetBrowser({ url: config.bitmagnetUrl }) : null
 
 // Explore answers are cached briefly: browsing goes back and forth over the same filters
 const exploreCache = new Map()
@@ -199,20 +217,91 @@ function statusRoute ({ res, params, query }) {
   json(res, 200, { ...out, session: s ? sessionStats(s) : null })
 }
 
+const publicSettings = () => {
+  const { values, meta } = settingsSnapshot()
+  const sources = values.sources.map(source => ({ ...source, apiKey: '', apiKeySet: !!source.apiKey }))
+  return { values: { ...values, sources }, meta }
+}
+
+async function saveSettings ({ req, res }) {
+  requireSameOrigin(req)
+  const body = await readJson(req)
+  const patch = body.patch
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new HttpError(400, 'Expected a settings patch.')
+  const result = await updateSettings(patch)
+  if (result.errors?.length) {
+    res.writeHead(422, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify(result))
+    return
+  }
+  json(res, 200, { ...result, ...publicSettings() })
+}
+
+async function testSettings ({ req, res }) {
+  requireSameOrigin(req)
+  const body = await readJson(req)
+  const source = body.source
+  if (!source || typeof source !== 'object' || typeof source.url !== 'string') throw new HttpError(400, 'Choose a source to test.')
+  let response
+  try {
+    const url = source.type === 'prowlarr' ? new URL('/api/v1/health', source.url).href : source.url
+    response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+  } catch {
+    json(res, 200, { level: 'error', message: 'Could not reach this source.' })
+    return
+  }
+  json(res, 200, response.ok ? { level: 'ok', value: 'Connected' } : { level: 'error', message: response.status === 401 || response.status === 403 ? 'The source refused its API key.' : `Source returned HTTP ${response.status}.` })
+}
+
+function speedtest ({ req, res }) {
+  const chunk = Buffer.allocUnsafe(1024 * 1024)
+  for (let i = 0; i < chunk.length; i++) chunk[i] = Math.floor(Math.random() * 256)
+  let sent = 0
+  const max = 256 * 1024 * 1024
+  res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' })
+  const write = () => {
+    while (!res.destroyed && sent < max) {
+      sent += chunk.length
+      if (!res.write(chunk)) { res.once('drain', write); return }
+    }
+    if (!res.destroyed) res.end()
+  }
+  req.once('close', () => res.destroy())
+  write()
+}
+
+function debugSnapshot () {
+  return {
+    version: process.env.npm_package_version ?? 'development',
+    node: process.version,
+    platform: `${process.platform}/${process.arch}`,
+    uptimeSeconds: Math.round(process.uptime()),
+    memory: process.memoryUsage(),
+    settings: publicSettings(),
+  }
+}
+
 const match = createRouter([
   // Pages
   route('GET', '/', page('index.html')),
   route('GET', '/t/:ih?', page('torrent.html')),
   route('GET', '/play/:ih/:idx', page('player.html')),
   route('GET', '/explore', page('explore.html')),
+  route('GET', '/settings', page('settings.html')),
   route('GET', '/title/:type/:source/:id', page('title.html')),
   route('GET', '/player.html', ({ res, query }) => { // links from before /play existed
     res.writeHead(301, { Location: `/play/${query.get('ih')}/${query.get('idx')}` })
     res.end()
   }),
   route('GET', '/style.css', page('style.css')),
-  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js'].flatMap(name => [route('GET', `/${name}`, asset(name)), route('GET', `/${name}.map`, asset(`${name}.map`))]),
+  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js', 'settings.js'].flatMap(name => [route('GET', `/${name}`, asset(name)), route('GET', `/${name}.map`, asset(`${name}.map`))]),
   route('GET', '/health', ({ res }) => json(res, 200, { ok: true })),
+  route('GET', '/api/status', async ({ res }) => json(res, 200, await systemStatus.snapshot())),
+  route('GET', '/api/settings', ({ res }) => json(res, 200, publicSettings())),
+  route('PATCH', '/api/settings', saveSettings),
+  route('POST', '/api/settings/test', testSettings),
+  route('GET', '/api/debug', ({ res }) => json(res, 200, debugSnapshot())),
+  route('GET', '/api/speedtest', speedtest),
 
   // API
   route('GET', '/api/search', searchRoute),

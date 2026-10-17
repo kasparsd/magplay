@@ -9,7 +9,7 @@ Screenshots of the mockup (light theme unless noted):
 - Status menu: [all good](settings-and-status-pin/settings-status-menu-ok.png), [needs attention](settings-and-status-pin/settings-status-menu-warn.png) ([dark](settings-and-status-pin/settings-status-menu-warn-dark.png)), [problem](settings-and-status-pin/settings-status-menu-error.png).
 - Settings page: [Sources with a failing key](settings-and-status-pin/settings-page-sources.png), [Playback](settings-and-status-pin/settings-page-playback.png), [Connection](settings-and-status-pin/settings-page-connection.png), [Server](settings-and-status-pin/settings-page-server.png), [Server with unsaved changes](settings-and-status-pin/settings-page-server-unsaved.png), [Debug](settings-and-status-pin/settings-page-debug.png), [375 px](settings-and-status-pin/settings-page-mobile.png).
 
-Status: proposed 2026-10-17, not started. This replaces the earlier link-only "status pin" draft of this plan; the bandwidth test design below is kept from it.
+Status: initial Settings and Status implementation landed 2026-11-06. The shared schema, persisted server values, health registry, status pin, Settings page, browser preferences and connection test are implemented. The richer Debug log/resource views, cache-clear action, client-check merge and end-to-end coverage remain follow-up work. This replaces the earlier link-only "status pin" draft of this plan; the bandwidth test design below is kept from it.
 
 ## Why
 
@@ -142,18 +142,18 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 
 ## Implementation checklist
 
-- [ ] `SettingDef` schema and the initial entries in `packages/api-contract`, with a `validate(def, value)` used by both sides.
-- [ ] `config.js` → `resolve(schema, env, file)`, `data/settings.json` read/atomic write, and a `settings:changed` event. Sources, limits and timeouts rebuild on change. Unit tests for precedence and locking.
-- [ ] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with secret masking and the same-origin write guard in `http-kit`.
-- [ ] `status.js` check registry with TTL cache, the initial checks, the event ring buffer, and `GET /api/status`. Unit tests with fake checks and clocks.
-- [ ] `GET /api/debug` with a log ring buffer (wrap the server's logger) and redacted diagnostics.
-- [ ] `GET /api/speedtest` faucet and `lib/speedtest.ts`, with unit tests (as in the earlier draft).
-- [ ] `lib/controls.ts` renderers for every type, with keyboard and accessible names.
-- [ ] Status button and panel in `lib/ui.ts`, added to the top bar of all `public/*.html` pages, with client-check merging and unread tracking. Check at 375 px.
-- [ ] `/settings` page with sections, hash navigation, the save bar, inline field errors and env-locked rows.
-- [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings.
-- [ ] e2e: a broken source turns the dot red and its action deep-links to the field. Saving a live setting applies without a restart. An env-set value is read-only. A cross-origin `PATCH` is refused. The speed test result produces a warning on another page.
-- [ ] On ship: update [user-interface.md](../user-interface.md) (six pages, the top bar's right side, the "nothing to configure" wording), the README configuration table (UI first, env as override), and [architecture.md](../architecture.md) (settings resolution and the status registry).
+- [x] `SettingDef` schema and initial entries in `packages/api-contract`, with `validateSetting()` shared by server and client.
+- [x] `config.js` resolves environment, `settings.json` and defaults; it writes atomically, emits changes and rebuilds search/Explore services.
+- [x] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with masked API keys and a same-origin write guard.
+- [x] `status.js` TTL-cached registry, initial source/binary/disk/Explore/restart checks, event ring and `GET /api/status`, with fake-clock/cache coverage.
+- [ ] Extend `GET /api/debug` from its current redacted runtime snapshot with a log ring, live resource meters and the cache-clear action.
+- [x] `GET /api/speedtest` faucet and `lib/speedtest.ts` on-demand connection measurement.
+- [x] `lib/controls.ts` renderers for the simple input controls, with accessible labels; sources use the repeatable editor on the Settings page.
+- [x] Status pin and panel in `lib/ui.ts`, shared by every page, with unread event tracking and the 375 px layout.
+- [x] `/settings` page with hash navigation, source editor, sticky save bar, inline field errors and env-locked rows.
+- [x] Player reads audio/subtitle language, playback speed and autoplay-next defaults from browser settings.
+- [ ] e2e: broken-source pin/action, live save, env lock, cross-origin refusal and connection-warning coverage.
+- [x] Update [user-interface.md](../user-interface.md), the README configuration section and [architecture.md](../architecture.md).
 
 ## Open questions
 

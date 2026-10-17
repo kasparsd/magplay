@@ -34,6 +34,11 @@ let next = null // the next video in the torrent, if any
 /** @type {import('@magplay/api-contract').TorrentStatus | null} */
 let lastStatus = null // the latest /status poll, for the details panel
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
+const playerSettings = (() => {
+  const saved = recall('settings')
+  return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+})()
+if (typeof playerSettings.speed === 'number' && Number.isFinite(playerSettings.speed)) video.playbackRate = playerSettings.speed
 
 /**
  * Messages on the video itself: 'busy' (spinner chip), 'notice' and 'warn' (chips), or a card with actions for errors.
@@ -95,7 +100,7 @@ async function loadTitle (signal = pageLife.signal) {
 /** At the end of a video: play the next one after 10 s unless cancelled. */
 function countdownToNext () {
   cancelNext()
-  if (!next || pageLife.signal.aborted) return
+  if (!next || pageLife.signal.aborted || playerSettings.autoplayNext === false) return
   const target = urls.player(ih, next.idx)
   let left = 10
   const timer = setInterval(() => {
@@ -318,12 +323,20 @@ async function loadInfo (signal = pageLife.signal) {
   const name = t => [t.language, t.title].filter(Boolean).join(' · ')
   $('#audio').replaceChildren(...info.audio.map(a =>
     new Option(`${a.index + 1}. ${name(a) || 'Track'} (${a.codec} ${a.channels}ch)`, a.index)))
+  if (typeof playerSettings.audioLanguage === 'string' && playerSettings.audioLanguage) {
+    audio = info.audio.find(a => a.language?.toLowerCase() === playerSettings.audioLanguage.toLowerCase())?.index ?? audio
+    $('#audio').value = String(audio)
+  }
   for (const s of info.subtitles) {
     const opt = new Option(`${name(s) || `Track ${s.index + 1}`} (${s.codec})${s.text ? '' : ' — image subtitles, not supported'}`, `embedded:${s.index}`)
     opt.disabled = !s.text
     $('#subs').add(opt)
   }
   for (const f of info.externalSubtitles) $('#subs').add(new Option(f.name, `file:${f.idx}`))
+  if (typeof playerSettings.subtitleLanguage === 'string' && playerSettings.subtitleLanguage) {
+    const preferred = info.subtitles.find(s => s.text && s.language?.toLowerCase() === playerSettings.subtitleLanguage.toLowerCase())
+    if (preferred) $('#subs').value = `embedded:${preferred.index}`
+  }
   const saved = resumePosition(recall(progressKey(ih, idx)), info.duration)
   pendingPosition = saved
   if (saved) {

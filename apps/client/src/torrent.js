@@ -84,7 +84,6 @@ function renderActions (t, videos) {
       menuSeparator(),
       el('a', { href: magnet, textContent: 'Open in your torrent client' }),
       copyButton('Copy magnet link', magnet, 'Copy the magnet link'),
-      copyButton('Copy infohash', t.infoHash, 'Copy the infohash'),
     ].filter(Boolean), { className: 'button' }))
 }
 
