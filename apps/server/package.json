@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@magplay/api-contract": "*",
+    "@magplay/release-info": "*",
+    "@magplay/seekable-tar": "*",
     "fast-xml-parser": "5.11.2",
     "parse-torrent": "11.0.24",
     "webtorrent": "3.0.21"

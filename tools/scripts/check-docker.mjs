@@ -32,7 +32,7 @@ try {
   assert.equal((await get('/player.js')).status, 200)
   assert.equal((await get('/lib/progress.js')).status, 404)
   assert.equal((await get('/vendor/hls.min.js')).status, 404)
-  const tests = await docker('exec', name, 'find', '/app/apps', '/app/public', '/app/dist', '(', '-name', '*.test.js', '-o', '-name', '*.test.ts', ')')
+  const tests = await docker('exec', name, 'find', '/app/apps', '/app/packages', '/app/public', '/app/dist', '(', '-name', '*.test.js', '-o', '-name', '*.test.ts', ')')
   assert.equal(tests, '', 'production image must exclude colocated tests')
   report.checks.push('health, non-root runtime, built client bundles and test-free image')
   await docker('cp', path.join(cache, 'torrents'), `${name}:/data/`)

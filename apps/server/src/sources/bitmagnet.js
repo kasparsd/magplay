@@ -1,6 +1,7 @@
 // BitMagnet's GraphQL API, for browsing: it classifies torrents against TMDB, so it can filter by type, genre, year and
 // resolution and return titles with metadata. Search still goes through Torznab (torznab.js).
-import { badges, request, SourceError } from './release.js'
+import { badges } from '@magplay/release-info'
+import { request, SourceError } from './release.js'
 
 const ITEM_FIELDS = `infoHash contentType seeders publishedAt videoResolution episodes { label } torrent { name size }
   content { type source id title releaseYear voteAverage runtime overview adult collections { type name } externalLinks { metadataSource { key } url } }`

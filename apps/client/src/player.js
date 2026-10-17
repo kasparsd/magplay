@@ -20,9 +20,9 @@ let subtitleLife = null
 let cancelNext = () => {}
 let lastProgressSave = 0
 
-/** @type {import('./lib/api-types.js').ProbeResult | null} */
+/** @type {import('@magplay/api-contract').ProbeResult | null} */
 let info = null
-/** @type {(import('./lib/api-types.js').PlaybackDecision & {complete?: boolean}) | null} */
+/** @type {(import('@magplay/api-contract').PlaybackDecision & {complete?: boolean}) | null} */
 let cur = null
 let hls = null
 let audio = 0
@@ -31,7 +31,7 @@ let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
 let file = null // this file's entry from the torrent's file list
 let next = null // the next video in the torrent, if any
-/** @type {import('./lib/api-types.js').TorrentStatus | null} */
+/** @type {import('@magplay/api-contract').TorrentStatus | null} */
 let lastStatus = null // the latest /status poll, for the details panel
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
 

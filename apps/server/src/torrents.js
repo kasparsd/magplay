@@ -4,13 +4,13 @@ import { pipeline, Readable } from 'node:stream'
 import WebTorrent from 'webtorrent'
 import parseTorrent from 'parse-torrent'
 import config, { httpError } from './config.js'
-import { contentWarning, listFiles } from './episodes.js'
+import { contentWarning, listFiles } from '@magplay/release-info'
 import { resolveLink } from './sources/links.js'
 import { notModified } from './http-cache.js'
 import { createLimiter } from './limits.js'
 import { waitForTorrent } from './torrent-ready.js'
 import { attachment, rangeFor } from './range.js'
-import { tarLayout, tarBytes } from './tar.js'
+import { tarLayout, tarBytes } from '@magplay/seekable-tar'
 
 const runTorrentLoad = createLimiter(config.maxTorrentLoads, 'Torrent initialization')
 

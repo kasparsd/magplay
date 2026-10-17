@@ -13,7 +13,7 @@
  * empty success bodies throw an ApiError with the response status. HTTP failures
  * use a string `error` from the server, or HTTP <status> for non-JSON/error pages.
  * Network, body-stream and abort failures retain their original error/reason.
- * Response shapes are documented in api-types.js, not validated by this helper.
+ * Response shapes are documented in @magplay/api-contract, not validated by this helper.
  *
  * @template T
  * @param {RequestInfo | URL} url

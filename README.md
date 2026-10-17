@@ -296,15 +296,16 @@ npm run test:all             # Fast + peer + browser suites
 
 Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 encoders. They use an isolated temporary torrent cache and a local indexer fixture; no public swarm or running indexer is needed. See [tests/e2e/README.md](tests/e2e/README.md) for coverage, debugging and limitations.
 
-Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server will run `.ts` packages directly through Node type stripping, with no compile step.
+Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
 
 - `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by `router.js`.
-- `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/api-types.js` (JSDoc wire contracts), `lib/ui.js` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.js` (DOM-independent JSON transport) and `lib/urls.js` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
+- `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/ui.js` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.js` (DOM-independent JSON transport) and `lib/urls.js` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
 - `public/`: HTML and CSS, served as-is.
+- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges) and `seekable-tar` (range-addressable tar streams).
 
 ### Test layout
 
-Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `apps/server/src/router.test.js` and `apps/client/src/lib/api.test.js`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.js`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
+Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `apps/server/src/router.test.js` and `packages/seekable-tar/src/index.test.ts`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.js`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
 
 Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `apps/server/src/sources/test-fixtures/`, with shared helpers in `apps/server/src/sources/test-helpers.js`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
 
@@ -314,7 +315,7 @@ Docker excludes tests, fixture data and helpers from its build context, and the 
 
 Import `api` from `apps/client/src/lib/api.js`; `ui.js` retains a compatibility re-export. The client keeps same-origin relative URLs, forwards fetch options/AbortSignal/cache settings, preserves caller headers when posting JSON, and never retries implicitly. HTTP errors expose `error.status` and the server's string error message (or `HTTP <status>` for a non-JSON proxy error). Invalid or empty JSON on a successful response now produces an explicit `Invalid JSON response` error instead of silently returning `{}`. Network, body-stream and abort failures retain their original error/reason. Use ordinary `fetch` for HEAD requests, text subtitles, playlists and media bytes.
 
-`api-types.js` documents probe results, browser capability keys, play requests, direct/HLS decisions and torrent/session status. These are JSDoc contracts, not runtime response validation.
+`@magplay/api-contract` types probe results, browser capability keys, play requests, direct/HLS decisions and torrent/session status. They are compile-time contracts, not runtime response validation.
 
 ### Player helpers
 

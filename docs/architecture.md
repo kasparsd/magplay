@@ -20,8 +20,8 @@ Packages are internal npm workspaces. Publishing any of them is a later, optiona
 | Config is a global singleton with the dependency inverted | `config.js` imports `sources/index.js` for env parsing and also exports `httpError` | Every module depends on process env; configuration depends on an adapter |
 | Work at import time | WebTorrent client created and ports bound in `torrents.js`; facet loading and ffmpeg checks at the top of `server.js`; module-level maps in `sessions.js` | Nothing can be created twice, configured per test or shut down cleanly |
 | Modules with several jobs | `torrents.js` (engine, metadata store, eviction, content warnings, HTTP serving); `sessions.js` (ffmpeg processes, HLS disk budget, tab fencing, HTTP); `server.js` (startup, Explore cache, play orchestration, playlists, subtitle jobs, routes) | Changes in one job touch unrelated code |
-| Content classification split across layers | `episodes.js` imports `PROGRAM_EXT` from `sources/release.js` | File-kind detection depends on indexer adapters |
-| Implicit cross-runtime contracts | `api-types.js` JSDoc on the client only; codec keys in `public/lib/capabilities.js` must match `decide()` in `media.js` | Mismatches surface at runtime |
+| Content classification split across layers | Resolved: `release-info` owns file kinds, episodes and badges | — |
+| Implicit cross-runtime contracts | `api-contract` types the wire data, but only client JSDoc references it so far; codec keys in `apps/client/src/lib/capabilities.js` must match `decide()` in `media.js` | Mismatches surface at runtime |
 
 ## Package boundaries
 

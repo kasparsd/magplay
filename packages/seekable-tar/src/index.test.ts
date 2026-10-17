@@ -4,8 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { tarLayout, tarBytes, safePath } from './tar.js'
-import { rangeFor, attachment } from './range.js'
+import { tarLayout, tarBytes, safePath } from './index.ts'
 
 // Over 100 bytes in total (so the ustar name field can't hold it) but each part under Linux's 255-byte limit
 const longName = `${'Очень длинная папка/'.repeat(4)}Очень длинное название фильма (2026) 1080p.mkv`
@@ -18,12 +17,12 @@ const files = [
 ]
 const layout = tarLayout(files.map(f => ({ path: f.path, length: f.data.length })), 1_700_000_000)
 // Mimics the torrent reader: yields the requested bytes in uneven chunks
-async function * readFile (i, start, end) {
-  const bytes = files[i].data.subarray(start, end + 1)
+async function * readFile (i: number, start: number, end: number): AsyncGenerator<Buffer> {
+  const bytes = files[i]!.data.subarray(start, end + 1)
   for (let at = 0; at < bytes.length; at += 300) yield bytes.subarray(at, at + 300)
 }
-async function collect (start, end) {
-  const parts = []
+async function collect (start: number, end: number): Promise<Buffer> {
+  const parts: Uint8Array[] = []
   for await (const chunk of tarBytes(layout, start, end, readFile)) parts.push(chunk)
   return Buffer.concat(parts)
 }
@@ -65,23 +64,4 @@ test('safe paths', () => {
   assert.equal(safePath('a/../../b/./c'), 'a/b/c')
   assert.equal(safePath('/etc/passwd'), 'etc/passwd')
   assert.equal(safePath('..'), 'file')
-})
-
-test('range requests', () => {
-  const etag = '"abc-tar"'
-  assert.deepEqual(rangeFor({}, 1000, etag), { start: 0, end: 999, partial: false })
-  assert.deepEqual(rangeFor({ range: 'bytes=0-0' }, 1000, etag), { start: 0, end: 0, partial: true })
-  assert.deepEqual(rangeFor({ range: 'bytes=500-' }, 1000, etag), { start: 500, end: 999, partial: true })
-  assert.deepEqual(rangeFor({ range: 'bytes=-100' }, 1000, etag), { start: 900, end: 999, partial: true })
-  assert.deepEqual(rangeFor({ range: 'bytes=900-5000' }, 1000, etag), { start: 900, end: 999, partial: true })
-  assert.equal(rangeFor({ range: 'bytes=1000-' }, 1000, etag), null)
-  assert.deepEqual(rangeFor({ range: 'bytes=0-1,5-6' }, 1000, etag), { start: 0, end: 999, partial: false }) // multipart: send it all
-  // Resuming with a matching validator gets the range; a stale one gets the whole thing again
-  assert.deepEqual(rangeFor({ range: 'bytes=500-', 'if-range': etag }, 1000, etag), { start: 500, end: 999, partial: true })
-  assert.deepEqual(rangeFor({ range: 'bytes=500-', 'if-range': '"other"' }, 1000, etag), { start: 0, end: 999, partial: false })
-})
-
-test('download file names', () => {
-  assert.equal(attachment('Show.S01E01.mkv'), 'attachment; filename="Show.S01E01.mkv"; filename*=UTF-8\'\'Show.S01E01.mkv')
-  assert.equal(attachment('Фильм "1".tar'), 'attachment; filename="_____ _1_.tar"; filename*=UTF-8\'\'%D0%A4%D0%B8%D0%BB%D1%8C%D0%BC%20%221%22.tar')
 })

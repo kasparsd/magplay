@@ -3,7 +3,8 @@ FROM node:24-alpine AS manifests
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps ./apps
-RUN find apps -type f ! -name package.json -delete
+COPY packages ./packages
+RUN find apps packages -type f ! -name package.json -delete
 
 FROM node:24-alpine AS deps
 WORKDIR /app
@@ -20,14 +21,17 @@ WORKDIR /app
 COPY --from=manifests /app ./
 RUN npm ci
 COPY apps ./apps
+COPY packages ./packages
 RUN npm run build
 
 FROM node:24-alpine
 RUN apk add --no-cache ffmpeg
 WORKDIR /app
+# node_modules/@magplay/* are relative symlinks into packages/ and apps/server.
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+COPY packages ./packages
 COPY apps/server ./apps/server
 COPY public ./public
 

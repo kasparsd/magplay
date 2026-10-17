@@ -4,9 +4,9 @@
 
 const BLOCK = 512
 const MAX_USTAR_SIZE = 8 ** 11 - 1 // the ustar size field holds 11 octal digits
-const padding = n => (BLOCK - (n % BLOCK)) % BLOCK
+const padding = (n: number): number => (BLOCK - (n % BLOCK)) % BLOCK
 
-function header (name, size, mtime, type) {
+function header (name: string, size: number, mtime: number, type: 'x' | '0'): Buffer {
   const b = Buffer.alloc(BLOCK)
   // A fallback name for readers without PAX support; the real one is in the PAX record
   b.write(name.replace(/[^\x20-\x7e]/g, '_').slice(-100), 0, 'ascii')
@@ -25,7 +25,7 @@ function header (name, size, mtime, type) {
 }
 
 /** A PAX record: "<length> key=value\n", where length counts its own digits. */
-function paxRecord (key, value) {
+function paxRecord (key: string, value: string | number): string {
   const body = ` ${key}=${value}\n`
   const bodyLength = Buffer.byteLength(body)
   let length = bodyLength + 1
@@ -34,19 +34,32 @@ function paxRecord (key, value) {
 }
 
 /** Turns a torrent path into a safe relative archive path. */
-export function safePath (path) {
+export function safePath (path: string): string {
   return path.split(/[/\\]+/).filter(p => p && p !== '.' && p !== '..').join('/') || 'file'
 }
 
+/** A header/padding segment holds its bytes; a file segment reads them from the torrent. */
+export type TarSegment = { length: number, data: Buffer } | { length: number, file: number }
+
+export interface TarLayout {
+  segments: TarSegment[]
+  /** Total archive size in bytes. */
+  size: number
+}
+
+export interface TarInputFile {
+  path: string
+  length: number
+}
+
 /**
- * @param {Array<{path: string, length: number}>} files
- * @param {number} mtime  seconds since the epoch, the same on every request so ranges line up
- * @returns {{segments: Array<{length: number, data?: Buffer, file?: number}>, size: number}}
+ * @param files archive members in order
+ * @param mtime seconds since the epoch, the same on every request so ranges line up
  */
-export function tarLayout (files, mtime) {
-  const segments = []
-  const add = seg => { if (seg.length) segments.push(seg) }
-  const bytes = data => add({ length: data.length, data })
+export function tarLayout (files: TarInputFile[], mtime: number): TarLayout {
+  const segments: TarSegment[] = []
+  const add = (seg: TarSegment): void => { if (seg.length) segments.push(seg) }
+  const bytes = (data: Buffer): void => add({ length: data.length, data })
   files.forEach((f, i) => {
     const path = safePath(f.path)
     const pax = Buffer.from(paxRecord('path', path) + (f.length > MAX_USTAR_SIZE ? paxRecord('size', f.length) : ''))
@@ -62,16 +75,21 @@ export function tarLayout (files, mtime) {
 
 /**
  * Bytes start..end (inclusive) of the archive.
- * @param {(file: number, start: number, end: number) => AsyncIterable<Uint8Array>} readFile  bytes start..end of a file
+ * @param readFile bytes start..end of a file
  */
-export async function * tarBytes ({ segments }, start, end, readFile) {
+export async function * tarBytes (
+  { segments }: Pick<TarLayout, 'segments'>,
+  start: number,
+  end: number,
+  readFile: (file: number, start: number, end: number) => AsyncIterable<Uint8Array>
+): AsyncGenerator<Uint8Array> {
   let pos = 0
   for (const seg of segments) {
     const last = pos + seg.length - 1
     if (last >= start && pos <= end) {
       const from = Math.max(start, pos) - pos
       const to = Math.min(end, last) - pos
-      if (seg.data) yield seg.data.subarray(from, to + 1)
+      if ('data' in seg) yield seg.data.subarray(from, to + 1)
       else yield * readFile(seg.file, from, to)
     }
     pos += seg.length

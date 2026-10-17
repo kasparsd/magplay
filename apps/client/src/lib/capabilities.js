@@ -20,11 +20,11 @@ const TYPES = {
  *
  * @param {{canPlayType: (type: string) => string}} video
  * @param {{ManagedMediaSource?: {isTypeSupported?: (type: string) => boolean}, MediaSource?: {isTypeSupported?: (type: string) => boolean}}} [browser]
- * @returns {import('./api-types.js').BrowserCapabilities}
+ * @returns {import('@magplay/api-contract').BrowserCapabilities}
  */
 export function measureCaps (video, { ManagedMediaSource, MediaSource } = {}) {
   const MS = ManagedMediaSource || MediaSource
-  return /** @type {import('./api-types.js').BrowserCapabilities} */ (Object.fromEntries(
+  return /** @type {import('@magplay/api-contract').BrowserCapabilities} */ (Object.fromEntries(
     Object.entries(TYPES).map(([key, type]) =>
       [key, !!(MS?.isTypeSupported?.(type) || video.canPlayType(type) === 'probably')])
   ))

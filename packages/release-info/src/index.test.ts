@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { contentWarning, detectEpisode, listFiles } from './episodes.js'
-import { badges } from './sources/release.js'
+import { badges, contentWarning, detectEpisode, listFiles } from './index.ts'
+import type { Episode } from './index.ts'
 
 test('episode patterns', () => {
-  const cases = [
+  const cases: Array<[string, Episode]> = [
     ['Show/Show.S01E02.720p.mkv', { season: 1, episode: 2 }],
     ['show.s1e2.mkv', { season: 1, episode: 2 }],
     ['Show 1x02 Title.mkv', { season: 1, episode: 2 }],
@@ -47,29 +47,29 @@ test('a program file is flagged and is never a video', () => {
     name: 'Movie 2026.1080p. HD h264- OpenContent.exe',
     files: [
       { path: 'Movie 2026.1080p. HD h264- OpenContent.exe', name: 'Movie 2026.1080p. HD h264- OpenContent.exe', length: 1_458_371_843 },
-    ]
+    ],
   })
-  assert.equal(files[0].isVideo, false)
-  assert.equal(files[0].isProgram, true)
+  assert.equal(files[0]?.isVideo, false)
+  assert.equal(files[0]?.isProgram, true)
 })
 
 test('older containers count as video', () => {
   for (const ext of ['ogv', 'ogm', 'wmv', 'asf', 'flv', 'mpg', 'mpeg', 'vob', 'm2ts', 'mts', 'divx', 'rm', 'rmvb', '3gp']) {
-    assert.equal(listFiles({ name: 'Film', files: [{ path: `Film/Film.${ext}`, name: `Film.${ext}`, length: 1 }] })[0].isVideo, true, ext)
+    assert.equal(listFiles({ name: 'Film', files: [{ path: `Film/Film.${ext}`, name: `Film.${ext}`, length: 1 }] })[0]?.isVideo, true, ext)
   }
-  assert.equal(listFiles({ name: 'Album', files: [{ path: 'Album/song.ogg', name: 'song.ogg', length: 1 }] })[0].isVideo, false)
+  assert.equal(listFiles({ name: 'Album', files: [{ path: 'Album/song.ogg', name: 'song.ogg', length: 1 }] })[0]?.isVideo, false)
 })
 
 test('small videos count when nothing big exists; extras count when nothing else does', () => {
   const MB = 1024 ** 2
   const trailer = listFiles({ name: 'Big Buck Bunny trailer', files: [{ path: 'Big Buck Bunny trailer.mp4', name: 'Big Buck Bunny trailer.mp4', length: 5 * MB }] })
-  assert.equal(trailer[0].isVideo, true)
+  assert.equal(trailer[0]?.isVideo, true)
   const shortFilm = listFiles({
     name: 'Short',
     files: [
       { path: 'Short/short.mkv', name: 'short.mkv', length: 60 * MB },
       { path: 'Short/Sample/sample.mkv', name: 'sample.mkv', length: 5 * MB },
-    ]
+    ],
   })
   assert.deepEqual(shortFilm.filter(f => f.isVideo).map(f => f.name), ['short.mkv'])
 })
