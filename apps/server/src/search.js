@@ -29,6 +29,7 @@ export function createSearch (sources, { timeoutMs = 30_000 } = {}) {
   }
 
   async function search (q, cat) {
+    if (!sources.length) throw new HttpError(503, 'No search sources are configured. Set TORZNAB_URL, JACKETT_URL or PROWLARR_URL (see the README).')
     const settled = await Promise.all(sources.map(async source => {
       const started = Date.now()
       try {
