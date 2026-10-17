@@ -48,8 +48,3 @@ export default {
   allowTranscode: /^(1|true|yes|on)$/i.test(env.ALLOW_VIDEO_TRANSCODE || ''),
   transcodeMaxHeight: num('TRANSCODE_MAX_HEIGHT', 720),
 }
-
-/** Error with an HTTP status, shown to the user as-is. */
-export function httpError (status, message) {
-  return Object.assign(new Error(message), { status })
-}

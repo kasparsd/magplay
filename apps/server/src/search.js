@@ -1,6 +1,6 @@
 // Searches every configured source in parallel and merges the results.
 import { createHash } from 'node:crypto'
-import { httpError } from './config.js'
+import { HttpError } from './errors.ts'
 import { SourceError } from './sources/release.js'
 
 const MAX_LINKS = 5000
@@ -34,7 +34,7 @@ export function createSearch (sources, { timeoutMs = 30_000 } = {}) {
         return { name: source.name, ok: false, error, ms: Date.now() - started, items: [] }
       }
     }))
-    if (settled.every(s => !s.ok)) throw httpError(502, settled.map(s => `${s.name}: ${s.error}`).join('; '))
+    if (settled.every(s => !s.ok)) throw new HttpError(502, settled.map(s => `${s.name}: ${s.error}`).join('; '))
 
     // The same torrent often comes from several indexers: keep one, with the best known numbers
     const merged = new Map()

@@ -2,8 +2,9 @@ import http from 'node:http'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import config, { httpError } from './config.js'
-import { createRouter, FileNotFoundError, MalformedPathError, route, sendCached, serveFile } from '@magplay/http-kit'
+import config from './config.js'
+import { HttpError, toHttpError } from './errors.ts'
+import { createRouter, route, sendCached, serveFile } from '@magplay/http-kit'
 import { SourceError } from './sources/release.js'
 import { createSearch } from './search.js'
 import { createSources } from './sources/index.js'
@@ -33,11 +34,11 @@ async function readJson (req) {
   let body = ''
   for await (const chunk of req) {
     body += chunk
-    if (body.length > 1e6) throw httpError(413, 'Request too large')
+    if (body.length > 1e6) throw new HttpError(413, 'Request too large')
   }
   let parsed
-  try { parsed = JSON.parse(body || '{}') } catch { throw httpError(400, 'Invalid JSON') }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw httpError(400, 'Expected a JSON object')
+  try { parsed = JSON.parse(body || '{}') } catch { throw new HttpError(400, 'Invalid JSON') }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new HttpError(400, 'Expected a JSON object')
   return parsed
 }
 
@@ -61,8 +62,8 @@ function cached (key, load, ttl = 60_000) {
   if (hit && Date.now() - hit.at < ttl) return hit.value
   const value = load().catch(err => {
     exploreCache.delete(key)
-    if (err.name === 'TimeoutError') throw httpError(504, 'BitMagnet took too long to answer. Try again in a moment.')
-    if (err instanceof SourceError) throw httpError(502, err.message)
+    if (err.name === 'TimeoutError') throw new HttpError(504, 'BitMagnet took too long to answer. Try again in a moment.')
+    if (err instanceof SourceError) throw new HttpError(502, err.message)
     throw err
   })
   exploreCache.set(key, { at: Date.now(), value })
@@ -72,14 +73,14 @@ function cached (key, load, ttl = 60_000) {
 
 /** Explore's query parameters, checked: type, genre, year, res, sort, page. */
 function exploreParams (query) {
-  if (!browser) throw httpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
+  if (!browser) throw new HttpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
   const type = query.get('type') || 'movie'
-  if (!TYPES.includes(type)) throw httpError(400, 'type must be movie or tv_show')
+  if (!TYPES.includes(type)) throw new HttpError(400, 'type must be movie or tv_show')
   const genre = query.get('genre') || undefined
   const year = query.get('year') ? Number(query.get('year')) : undefined
   const resolution = query.get('res') || undefined
   if ((genre && !/^[\w:.-]+$/.test(genre)) || (year !== undefined && !Number.isInteger(year)) || (resolution && !/^V\d+p$/.test(resolution))) {
-    throw httpError(400, 'Bad filter')
+    throw new HttpError(400, 'Bad filter')
   }
   return { type, genre, year, resolution, sort: query.get('sort') === 'added' ? 'added' : 'seeders', page: Math.max(1, Number(query.get('page')) || 1) }
 }
@@ -98,9 +99,9 @@ async function play (body, cancelled) {
   const start = Number(body.start ?? 0)
   if (!Number.isInteger(idx) || idx < 0 || !Number.isInteger(audio) || audio < 0 || !Number.isFinite(start) || start < 0 ||
       !caps || typeof caps !== 'object' || Array.isArray(caps) || (tab !== undefined && typeof tab !== 'string')) {
-    throw httpError(400, 'Invalid playback options')
+    throw new HttpError(400, 'Invalid playback options')
   }
-  const check = () => { if (cancelled()) throw httpError(499, 'Playback request cancelled') }
+  const check = () => { if (cancelled()) throw new HttpError(499, 'Playback request cancelled') }
   check()
   const file = await getFile(ih, idx)
   check()
@@ -132,10 +133,10 @@ async function play (body, cancelled) {
 
 /** An .m3u for external players: one file, or every video in the torrent (a season) when idx is omitted. */
 async function playlist (req, res, ih, idx) {
-  if (!/^[a-f0-9]{40}$/.test(ih ?? '')) throw httpError(400, 'Bad info hash')
+  if (!/^[a-f0-9]{40}$/.test(ih ?? '')) throw new HttpError(400, 'Bad info hash')
   const torrent = await addTorrent({ infoHash: ih })
   const files = describe(torrent).files.filter(f => idx == null ? f.isVideo : f.idx === Number(idx))
-  if (!files.length) throw httpError(404, 'No video files')
+  if (!files.length) throw new HttpError(404, 'No video files')
   // Links must use the address the browser reached us on, never 127.0.0.1
   const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`
   const base = name => name.split('/').pop()
@@ -151,7 +152,7 @@ async function playlist (req, res, ih, idx) {
 async function subtitles ({ req, res, params }) {
   // Embedded track N (reads the whole file, so used for direct play only) or "file" for an external subtitle file
   const track = params.track.replace(/\.vtt$/, '')
-  if (!/^(\d+|file)$/.test(track)) throw httpError(404, 'Not found')
+  if (!/^(\d+|file)$/.test(track)) throw new HttpError(404, 'Not found')
   const key = `${params.ih}/${params.idx}/${track}`
   if (!subtitleCache.has(key)) {
     const job = (async () => {
@@ -166,7 +167,7 @@ async function subtitles ({ req, res, params }) {
 }
 
 async function searchRoute ({ res, query }) {
-  if (!query.get('q')?.trim()) throw httpError(400, 'Type something to search for')
+  if (!query.get('q')?.trim()) throw new HttpError(400, 'Type something to search for')
   const out = await searcher.search(query.get('q').trim(), query.get('cat'))
   for (const r of out.results) {
     const warning = r.infoHash && knownWarning(r.infoHash)
@@ -178,14 +179,14 @@ async function searchRoute ({ res, query }) {
 async function addRoute ({ req, res }) {
   const { infoHash, magnet, linkId } = await readJson(req)
   const link = linkId ? searcher.linkFor(linkId) : null
-  if (linkId && !link) throw httpError(410, 'This search result has expired. Search again.')
+  if (linkId && !link) throw new HttpError(410, 'This search result has expired. Search again.')
   json(res, 200, describe(await addTorrent({ infoHash, magnet, link })))
 }
 
 async function probeRoute ({ req, res, params }) {
   const torrent = await getTorrent(params.ih)
   const file = torrent.files[Number(params.idx)]
-  if (!file) throw httpError(404, 'No such file in this torrent')
+  if (!file) throw new HttpError(404, 'No such file in this torrent')
   const info = await probe(params.ih, Number(params.idx), file.name)
   const { files } = describe(torrent)
   sendCached(req, res, JSON.stringify({ ...info, externalSubtitles: files.filter(f => f.isSub).map(f => ({ idx: f.idx, name: f.name })) }), { 'Content-Type': 'application/json' })
@@ -229,11 +230,11 @@ const match = createRouter([
     json(res, 200, await cached(`latest:${type}`, () => browser.latest({ type }, exploreTimeout())))
   }),
   route('GET', '/api/title/:type/:source/:id', async ({ res, params, query }) => {
-    if (!browser) throw httpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
-    if (!TYPES.includes(params.type)) throw httpError(400, 'type must be movie or tv_show')
+    if (!browser) throw new HttpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
+    if (!TYPES.includes(params.type)) throw new HttpError(400, 'type must be movie or tv_show')
     const t = await cached(`title:${params.type}:${params.source}:${params.id}`, () =>
       browser.title({ ...params, title: query.get('title'), year: query.get('year') }, exploreTimeout()))
-    if (!t) throw httpError(404, 'No releases of this title found any more.')
+    if (!t) throw new HttpError(404, 'No releases of this title found any more.')
     json(res, 200, t)
   }),
   route('POST', '/api/torrents', addRoute),
@@ -263,19 +264,17 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store') // Safe default for live APIs, mutations, redirects and errors.
   let url
   try {
-    try { url = new URL(req.url, 'http://localhost') } catch { throw httpError(400, 'Malformed URL') }
+    try { url = new URL(req.url, 'http://localhost') } catch { throw new HttpError(400, 'Malformed URL') }
     const found = match(req.method, url.pathname) || (req.method === 'HEAD' && match('GET', url.pathname))
-    if (!found) throw httpError(404, 'Not found')
+    if (!found) throw new HttpError(404, 'Not found')
     await found.handler({ req, res, params: found.params, query: url.searchParams })
   } catch (err) {
-    // Until errors.ts maps typed errors centrally (see the package-boundaries plan)
-    if (err instanceof MalformedPathError) err.status = 400
-    if (err instanceof FileNotFoundError) err.status = 404
-    if (!err.status) console.error(`[http] ${req.method} ${url?.pathname ?? req.url}:`, err)
+    const failure = toHttpError(err)
+    if (failure.unexpected) console.error(`[http] ${req.method} ${url?.pathname ?? req.url}:`, err)
     if (res.destroyed) return
     if (res.headersSent) return res.destroy()
-    if (err.retryAfter) res.setHeader('Retry-After', String(err.retryAfter))
-    json(res, err.status || 500, { error: err.message })
+    if (failure.retryAfter) res.setHeader('Retry-After', String(failure.retryAfter))
+    json(res, failure.status, { error: failure.message })
   }
 })
 server.requestTimeout = 0 // /raw streams stay open for as long as playback needs

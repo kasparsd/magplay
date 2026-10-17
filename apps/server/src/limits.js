@@ -1,6 +1,6 @@
-import { httpError } from './config.js'
+import { HttpError } from './errors.ts'
 
-export const busyError = message => Object.assign(httpError(503, message), { retryAfter: 5 })
+export const busyError = message => new HttpError(503, message, { retryAfter: 5 })
 
 /** Fail fast instead of building an unbounded queue of expensive work. */
 export function createLimiter (limit, label) {

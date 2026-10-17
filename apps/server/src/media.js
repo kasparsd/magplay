@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
-import config, { httpError } from './config.js'
+import config from './config.js'
+import { HttpError } from './errors.ts'
 import { createLimiter } from './limits.js'
 
 const runProbeJob = createLimiter(config.maxProbes, 'Media probing')
@@ -29,11 +30,11 @@ function runProbe (ih, idx, fileName) {
   const args = ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', rawUrl(ih, idx)]
   return new Promise((resolve, reject) => {
     execFile(config.ffprobePath, args, { timeout: 120_000, maxBuffer: 16 * 1024 ** 2 }, (err, stdout, stderr) => {
-      if (err) return reject(httpError(502, `ffprobe failed: ${err.killed ? 'timed out waiting for data' : stderr.trim().split('\n').pop()}`))
+      if (err) return reject(new HttpError(502, `ffprobe failed: ${err.killed ? 'timed out waiting for data' : stderr.trim().split('\n').pop()}`))
       let data
-      try { data = JSON.parse(stdout) } catch { return reject(httpError(502, 'ffprobe returned invalid JSON')) }
+      try { data = JSON.parse(stdout) } catch { return reject(new HttpError(502, 'ffprobe returned invalid JSON')) }
       if (!data || typeof data !== 'object' || (data.streams !== undefined && !Array.isArray(data.streams))) {
-        return reject(httpError(502, 'ffprobe returned an invalid media summary'))
+        return reject(new HttpError(502, 'ffprobe returned an invalid media summary'))
       }
       const { format = {}, streams = [] } = data
       const v = streams.find(s => s.codec_type === 'video' && !s.disposition?.attached_pic)
@@ -67,9 +68,9 @@ function runProbe (ih, idx, fileName) {
  */
 export function decide (info, caps, audio) {
   const v = info.video
-  if (!v) throw httpError(422, 'No video stream found in this file.')
+  if (!v) throw new HttpError(422, 'No video stream found in this file.')
   if (!Number.isInteger(audio) || audio < 0 || (info.audio.length && !info.audio[audio])) {
-    throw httpError(400, 'No such audio track')
+    throw new HttpError(400, 'No such audio track')
   }
   const a = info.audio[audio]
   const vKey = VIDEO_KEYS[v.codec]
@@ -93,7 +94,7 @@ export function decide (info, caps, audio) {
     return { mode: 'transcode', reason: `this browser can't play ${vName}; re-encoding to H.264 ${config.transcodeMaxHeight}p (slow on this server)` }
   }
   const safari = vKey === 'hevc' && v.bitDepth <= 10 ? ', open it in Safari,' : ''
-  throw httpError(422, `This file is ${vName}. This browser can't play it and this server is too slow to convert it. Open it in an external player (VLC, IINA, Infuse…)${safari} or choose an x264 release.`)
+  throw new HttpError(422, `This file is ${vName}. This browser can't play it and this server is too slow to convert it. Open it in an external player (VLC, IINA, Infuse…)${safari} or choose an x264 release.`)
 }
 
 /** ffmpeg arguments for an HLS session starting at `start` seconds, plus WebVTT outputs for text subtitles. */
@@ -126,6 +127,6 @@ export function subtitleToVtt (ih, idx, track) {
   const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', rawUrl(ih, idx), ...map, '-c:s', 'webvtt', '-f', 'webvtt', 'pipe:1']
   return runSubtitleJob(() => new Promise((resolve, reject) => {
     execFile(config.ffmpegPath, args, { timeout: 600_000, maxBuffer: 32 * 1024 ** 2 }, (err, stdout, stderr) =>
-      err ? reject(httpError(502, `Subtitle conversion failed: ${stderr.trim().split('\n').pop() || err.message}`)) : resolve(stdout))
+      err ? reject(new HttpError(502, `Subtitle conversion failed: ${stderr.trim().split('\n').pop() || err.message}`)) : resolve(stdout))
   }))
 }

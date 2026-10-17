@@ -1,4 +1,4 @@
-import { httpError } from './config.js'
+import { HttpError } from './errors.ts'
 
 /** Bound metadata discovery separately from potentially long cached-piece checking. */
 export function waitForTorrent (torrent, { metadataMs, checkingMs }) {
@@ -16,13 +16,13 @@ export function waitForTorrent (torrent, { metadataMs, checkingMs }) {
       timer = setTimeout(() => {
         done()
         torrent.destroy()
-        reject(httpError(504, message))
+        reject(new HttpError(504, message))
       }, ms)
     }
     const metadata = () => arm(checkingMs, 'Checking cached torrent data took too long. Retry or increase TORRENT_CHECK_TIMEOUT_S for large files.')
     const ready = () => { done(); resolve(torrent) }
-    const error = err => { done(); reject(httpError(502, `Torrent error: ${err.message || err}`)) }
-    const closed = () => { done(); reject(httpError(502, 'Torrent closed before its file list was ready. Try again.')) }
+    const error = err => { done(); reject(new HttpError(502, `Torrent error: ${err.message || err}`)) }
+    const closed = () => { done(); reject(new HttpError(502, 'Torrent closed before its file list was ready. Try again.')) }
     torrent.once('ready', ready)
     torrent.once('error', error)
     torrent.once('metadata', metadata)

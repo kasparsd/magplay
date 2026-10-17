@@ -16,8 +16,8 @@ Packages are internal npm workspaces. Publishing any of them is a later, optiona
 
 | Problem | Where | Consequence |
 | --- | --- | --- |
-| HTTP concerns in core logic | `httpError(503/504/499)` thrown from `torrents`, `media`, `sessions`, `limits`, `torrent-ready`, `search`; `retryAfter` set in `limits` | Core code decides HTTP responses and can't be used or tested without the HTTP vocabulary |
-| Config is a global singleton with the dependency inverted | `config.js` imports `sources/index.js` for env parsing and also exports `httpError` | Every module depends on process env; configuration depends on an adapter |
+| HTTP concerns in core logic | `HttpError(503/504/499)` thrown from `torrents`, `media`, `sessions`, `limits`, `torrent-ready`, `search`, `sources/links`; `retryAfter` set in `limits`. Mapping is now central (`toHttpError` in `apps/server/src/errors.ts`) and extracted packages throw typed errors; these modules switch as they move into packages | Core code decides HTTP responses and can't be used or tested without the HTTP vocabulary |
+| Config is a global singleton with the dependency inverted | `config.js` imports `sources/index.js` for env parsing (it no longer exports the HTTP error helper) | Every module depends on process env; configuration depends on an adapter |
 | Work at import time | WebTorrent client created and ports bound in `torrents.js`; facet loading and ffmpeg checks at the top of `server.js`; module-level maps in `sessions.js` | Nothing can be created twice, configured per test or shut down cleanly |
 | Modules with several jobs | `torrents.js` (engine, metadata store, eviction, content warnings, HTTP serving); `sessions.js` (ffmpeg processes, HLS disk budget, tab fencing, HTTP); `server.js` (startup, Explore cache, play orchestration, playlists, subtitle jobs, routes) | Changes in one job touch unrelated code |
 | Content classification split across layers | Resolved: `release-info` owns file kinds, episodes and badges | — |

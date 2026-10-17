@@ -1,4 +1,5 @@
 // Indexer download links: Jackett's /dl/ and Prowlarr's /{id}/download proxies answer with a .torrent file or a redirect to a magnet.
+import { HttpError } from '../errors.ts'
 
 /**
  * @returns {Promise<string|Buffer>} a magnet URI or the .torrent file
@@ -11,7 +12,7 @@ export async function resolveLink (link, { fetch: fetchImpl = globalThis.fetch }
     try {
       res = await fetchImpl(link, { redirect: 'manual', signal: AbortSignal.timeout(20_000) })
     } catch (err) {
-      throw Object.assign(new Error(`Can't fetch the download link: ${err.cause?.code || err.message}`), { status: 502 })
+      throw new HttpError(502, `Can't fetch the download link: ${err.cause?.code || err.message}`)
     }
     const location = res.headers.get('location')
     if (location?.startsWith('magnet:')) return location
@@ -19,11 +20,11 @@ export async function resolveLink (link, { fetch: fetchImpl = globalThis.fetch }
       link = new URL(location, link).href
       continue
     }
-    if (!res.ok) throw Object.assign(new Error(`The download link returned HTTP ${res.status}`), { status: 502 })
+    if (!res.ok) throw new HttpError(502, `The download link returned HTTP ${res.status}`)
     const body = Buffer.from(await res.arrayBuffer())
     // Some proxies send the magnet as the body instead of a redirect
     const asText = body.subarray(0, 7).toString()
     return asText === 'magnet:' ? body.toString().trim() : body
   }
-  throw Object.assign(new Error('Too many redirects from the download link'), { status: 502 })
+  throw new HttpError(502, 'Too many redirects from the download link')
 }

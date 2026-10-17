@@ -3,7 +3,8 @@ import path from 'node:path'
 import { pipeline, Readable } from 'node:stream'
 import WebTorrent from 'webtorrent'
 import parseTorrent from 'parse-torrent'
-import config, { httpError } from './config.js'
+import config from './config.js'
+import { HttpError } from './errors.ts'
 import { contentWarning, listFiles } from '@magplay/release-info'
 import { resolveLink } from './sources/links.js'
 import { attachment, notModified, rangeFor } from '@magplay/http-kit'
@@ -44,14 +45,14 @@ const findTorrent = ih => client.torrents.find(t => t.infoHash === ih)
 export async function addTorrent ({ infoHash, magnet, link }) {
   let id = magnet || infoHash
   if (!id && link) id = await resolveLink(link)
-  if (!id) throw httpError(400, 'Send infoHash, magnet or linkId')
+  if (!id) throw new HttpError(400, 'Send infoHash, magnet or linkId')
   let parsed
   try {
     parsed = await parseTorrent(id)
   } catch {
-    throw httpError(400, 'Not a valid magnet, info hash or torrent file')
+    throw new HttpError(400, 'Not a valid magnet, info hash or torrent file')
   }
-  if (!parsed?.infoHash) throw httpError(400, 'Not a valid magnet, info hash or torrent file')
+  if (!parsed?.infoHash) throw new HttpError(400, 'Not a valid magnet, info hash or torrent file')
   const ih = parsed.infoHash
   touch(ih)
 
@@ -98,7 +99,7 @@ export const knownWarning = infoHash => warnings.get(infoHash) ?? null
 
 /** A loaded torrent, re-adding it by info hash if it was unloaded. */
 export async function getTorrent (ih) {
-  if (!/^[a-f0-9]{40}$/.test(ih)) throw httpError(400, 'Bad info hash')
+  if (!/^[a-f0-9]{40}$/.test(ih)) throw new HttpError(400, 'Bad info hash')
   const torrent = findTorrent(ih)?.ready ? findTorrent(ih) : await addTorrent({ infoHash: ih })
   touch(ih)
   return torrent
@@ -107,7 +108,7 @@ export async function getTorrent (ih) {
 /** A file of a loaded torrent, re-adding the torrent by info hash if it was unloaded. */
 export async function getFile (ih, idx) {
   const file = (await getTorrent(ih)).files[idx]
-  if (!file) throw httpError(404, 'No such file in this torrent')
+  if (!file) throw new HttpError(404, 'No such file in this torrent')
   return file
 }
 

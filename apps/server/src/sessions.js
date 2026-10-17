@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import config, { httpError } from './config.js'
+import config from './config.js'
+import { HttpError } from './errors.ts'
 import { busyError } from './limits.js'
 import { ffmpegArgs } from './media.js'
 
@@ -27,7 +28,7 @@ try {
 }
 
 export function startSession ({ ih, idx, info, audio, start, mode, tab }, { spawnProcess = spawn } = {}) {
-  if ((closedTabs.get(tab) || 0) > Date.now()) throw httpError(409, 'This player was closed. Open the file again.')
+  if ((closedTabs.get(tab) || 0) > Date.now()) throw new HttpError(409, 'This player was closed. Open the file again.')
   const replacing = tab && byTab.get(tab)
   const admitted = [...sessions.values()].filter(s => !s.failure && s.id !== replacing)
   if (admitted.length >= config.maxHlsSessions) {
@@ -126,7 +127,7 @@ export function stopTab (tab) {
 
 /** Close a document activation, including a playback POST whose result is not known yet. */
 export function closeTab (tab) {
-  if (!/^[\w-]{1,64}$/.test(tab)) throw httpError(400, 'Invalid player tab')
+  if (!/^[\w-]{1,64}$/.test(tab)) throw new HttpError(400, 'Invalid player tab')
   stopTab(tab)
   for (const [key, expires] of closedTabs) if (expires < Date.now()) closedTabs.delete(key)
   closedTabs.set(tab, Date.now() + 180_000)
