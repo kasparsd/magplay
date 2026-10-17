@@ -148,9 +148,9 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 
 | Phase | Scope | Status | PR / commit | Notes |
 | --- | --- | --- | --- | --- |
-| 0 | Tooling foundation | ✅ Done | | TypeScript pinned to 5.9.3, not 7 (typescript-eslint 8 peers `<6.1.0`); the ESLint config is `.js` (a `.ts` one needs `jiti`); npm 11.20 gates install scripts, allowed native ones via `allowScripts` in package.json |
-| 1 | Apps skeleton and client build | ✅ Done | `54cd9df` | esbuild `--minify --sourcemap`; URLs unchanged (`/search.js` etc. now served from `dist/client/`); `npm test` and `test:e2e` build first; hls.js moved to devDependencies (bundled at build time, never served); Docker check passed on Node 24 Alpine |
-| 2 | Contract and pure packages | ✅ Done | `ee3ae1d` and the follow-up series | `api-contract`, `release-info`, `seekable-tar`, `http-kit`, boundary lint rules, `toHttpError` and the pure client helpers |
+| 0 | Tooling foundation | ✅ Done | `7b4b27b`, `6a9e2af`, `2152cad` | TypeScript pinned to 5.9.3, not 7 (typescript-eslint 8 peers `<6.1.0`); the ESLint config is `.js` (a `.ts` one needs `jiti`); npm 11.20 gates install scripts, allowed native ones via `allowScripts` in package.json |
+| 1 | Apps skeleton and client build | ✅ Done | `54cd9df`, `6a9e2af` | esbuild `--minify --sourcemap`; URLs unchanged (`/search.js` etc. now served from `dist/client/`); `npm test` and `test:e2e` build first; hls.js moved to devDependencies (bundled at build time, never served); Docker check passed on Node 24 Alpine |
+| 2 | Contract and pure packages | ✅ Done | `ee3ae1d`, `8c1b76c`…`00ef1de` | `api-contract`, `release-info`, `seekable-tar`, `http-kit`, boundary lint rules, `toHttpError` and the pure client helpers |
 | 3 | Indexers | ⬜ Not started | | |
 | 4 | Torrent engine, playback, server split | ⬜ Not started | | |
 | 5 | Client pages | ⬜ Not started | | |
