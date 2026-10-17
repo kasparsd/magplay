@@ -9,18 +9,19 @@ import path from 'node:path'
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-sessions-'))
 process.env.CACHE_DIR = dir
 process.env.MAX_HLS_SESSIONS = '2'
-const { startSession, stopSession, getSession, touchSession, sessionStats, checkSessionResources, closeTab } = await import('./sessions.js')
+const { startSession, stopSession, getSession, touchSession, sessionStats, checkSessionResources, closeTab, parseProcStat } = await import('./sessions.js')
 const { default: config } = await import('./config.js')
 after(() => fs.rm(dir, { recursive: true, force: true }))
 
 const info = { video: { codec: 'h264' }, audio: [], subtitles: [] }
-function session (tab) {
+function session (tab, options = {}) {
   const proc = new EventEmitter()
+  proc.pid = 4242
   proc.stdout = new PassThrough()
   proc.stderr = new PassThrough()
   const signals = []
   proc.kill = signal => { signals.push(signal); return true }
-  const s = startSession({ ih: 'a'.repeat(40), idx: 0, info, audio: 0, start: 0, mode: 'remux', tab }, { spawnProcess: () => proc })
+  const s = startSession({ ih: 'a'.repeat(40), idx: 0, info, audio: 0, start: 0, mode: 'remux', tab }, { spawnProcess: () => proc, ...options })
   return { s, proc, signals }
 }
 
@@ -101,4 +102,48 @@ test('disk budget stops the producer, removes HLS output and retains a useful fa
   await assert.rejects(fs.stat(s.dir), { code: 'ENOENT' })
   proc.emit('exit', null, 'SIGKILL')
   assert.match(sessionStats(s).error, /HLS disk limit reached/)
+})
+
+/** A /proc/<pid>/stat line whose command name holds spaces and parentheses, with the given utime and stime in ticks. */
+const procStat = (utime, stime) => `4242 (ffmpeg (hls) x) S 1 4242 4242 0 -1 4194304 1200 0 0 0 ${utime} ${stime} 0 0 20 0 3 0 100 0 0`
+
+test('/proc stat parsing counts fields after the command name', () => {
+  assert.equal(parseProcStat(procStat(250, 50)), 3)
+  assert.equal(parseProcStat('garbage'), null)
+})
+
+test('fps comes from -progress and cpu is the share of all cores between polls', t => {
+  let text = procStat(0, 0)
+  const pids = []
+  const readCpu = pid => { pids.push(pid); return text == null ? null : parseProcStat(text) }
+  const { s, proc } = session('cpu', { readCpu, cores: 4 })
+  t.after(() => stopSession(s.id))
+  proc.stdout.write('frame=240\nfps=47.92\nout_time_us=10000000\nspeed=2.0x\nprogress=continue\n')
+  const start = s.cpuSample.at
+  // 4 CPU seconds over 2 s of wall time on 4 cores: half the machine
+  text = procStat(300, 100)
+  let stats = sessionStats(s, start + 2000)
+  assert.equal(stats.fps, 47.92)
+  assert.equal(stats.cpu, 0.5)
+  assert.deepEqual(pids, [4242])
+  // The next poll measures only its own window: 1 CPU second in 2 s on 4 cores
+  text = procStat(350, 150)
+  assert.equal(sessionStats(s, start + 4000).cpu, 0.125)
+  // A poll right after another repeats the last value instead of dividing by a tiny window
+  text = procStat(400, 150)
+  assert.equal(sessionStats(s, start + 4100).cpu, 0.125)
+  // Without /proc (macOS) there is no reading
+  text = null
+  stats = sessionStats(s, start + 6000)
+  assert.equal(stats.cpu, null)
+  // A finished ffmpeg uses no CPU and has no pid to read
+  proc.emit('exit', 0, null)
+  assert.equal(sessionStats(s, start + 8000).cpu, null)
+})
+
+test('cpu is null where /proc does not exist', t => {
+  const { s } = session('no-proc', { readCpu: () => null })
+  t.after(() => stopSession(s.id))
+  assert.equal(sessionStats(s).cpu, null)
+  assert.equal(sessionStats(s).fps, null)
 })

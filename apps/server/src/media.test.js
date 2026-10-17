@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decide, ffmpegArgs } from './media.js'
+import { decide, ffmpegArgs, sampleAspect } from './media.js'
 
 const info = (overrides = {}) => ({
   container: 'mov,mp4,m4a,3gp,3g2,mj2',
@@ -47,4 +47,10 @@ test('remux copies HEVC as hvc1, converts audio and maps only text subtitles', (
   assert.equal(value('-c:a'), 'aac')
   assert.ok(args.includes('0:s:0'))
   assert.ok(!args.includes('0:s:1'))
+})
+
+test('sample aspect ratios: anamorphic, square and unknown', () => {
+  assert.equal(sampleAspect('4:3'), 4 / 3)
+  assert.equal(sampleAspect('1:1'), 1)
+  for (const value of [undefined, '', '0:1', 'N/A', '1:0']) assert.equal(sampleAspect(value), 1)
 })
