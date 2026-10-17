@@ -315,11 +315,12 @@ async function loadInfo (signal = pageLife.signal) {
   for (const f of info.externalSubtitles) $('#subs').add(new Option(f.name, `file:${f.idx}`))
   const saved = resumePosition(recall(progressKey(ih, idx)), info.duration)
   pendingPosition = saved
-  if (saved) notify(`Resume from ${clock(saved)}?`, 'error', [
-    button('Resume', () => start(saved), true),
-    button('Start over', () => { remember(progressKey(ih, idx), progressEntry(0, info.duration)); start(0) }),
-  ])
-  else start(0)
+  if (saved) {
+    notify(`Resume from ${clock(saved)}?`, 'error', [
+      button('Resume', () => start(saved), true),
+      button('Start over', () => { remember(progressKey(ih, idx), progressEntry(0, info.duration)); start(0) }),
+    ])
+  } else start(0)
 }
 
 /** Every 2 s: keeps the ffmpeg session alive, updates the details panel and warns when ffmpeg can't keep up. */

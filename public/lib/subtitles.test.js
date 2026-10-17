@@ -29,7 +29,7 @@ test('BOM, CRLF and CR-only files normalize without changing cue text', () => {
 })
 
 test('WebVTT header/NOTE/STYLE/REGION blocks are never parsed as cues', () => {
-  const input = `WEBVTT generated\nHeader metadata\n\nNOTE a comment\n00:01.000 --> 00:05.000\nNot a cue\n\nSTYLE\n::cue { color: lime; }\n00:01.000 --> 00:05.000\n\nREGION\nid:region-1\n00:01.000 --> 00:05.000\n\n00:06.000 --> 00:08.000\nReal cue`
+  const input = 'WEBVTT generated\nHeader metadata\n\nNOTE a comment\n00:01.000 --> 00:05.000\nNot a cue\n\nSTYLE\n::cue { color: lime; }\n00:01.000 --> 00:05.000\n\nREGION\nid:region-1\n00:01.000 --> 00:05.000\n\n00:06.000 --> 00:08.000\nReal cue'
   assert.deepEqual(parseVtt(input), [{ from: 6, to: 8, text: 'Real cue' }])
 })
 

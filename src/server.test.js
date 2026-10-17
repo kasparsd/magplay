@@ -20,8 +20,16 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-http-'))
   const port = await freePort()
   const proc = spawn(process.execPath, ['src/server.js'], {
-    env: { ...process.env, PORT: String(port), TORRENT_PORT: '0', CACHE_DIR: dir,
-      TORZNAB_URL: 'http://127.0.0.1:1/feed', BITMAGNET_URL: '', JACKETT_URL: '', PROWLARR_URL: '' },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      TORRENT_PORT: '0',
+      CACHE_DIR: dir,
+      TORZNAB_URL: 'http://127.0.0.1:1/feed',
+      BITMAGNET_URL: '',
+      JACKETT_URL: '',
+      PROWLARR_URL: ''
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''

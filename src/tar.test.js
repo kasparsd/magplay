@@ -82,6 +82,6 @@ test('range requests', () => {
 })
 
 test('download file names', () => {
-  assert.equal(attachment('Show.S01E01.mkv'), `attachment; filename="Show.S01E01.mkv"; filename*=UTF-8''Show.S01E01.mkv`)
-  assert.equal(attachment('Фильм "1".tar'), `attachment; filename="_____ _1_.tar"; filename*=UTF-8''%D0%A4%D0%B8%D0%BB%D1%8C%D0%BC%20%221%22.tar`)
+  assert.equal(attachment('Show.S01E01.mkv'), 'attachment; filename="Show.S01E01.mkv"; filename*=UTF-8\'\'Show.S01E01.mkv')
+  assert.equal(attachment('Фильм "1".tar'), 'attachment; filename="_____ _1_.tar"; filename*=UTF-8\'\'%D0%A4%D0%B8%D0%BB%D1%8C%D0%BC%20%221%22.tar')
 })

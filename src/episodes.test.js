@@ -43,9 +43,12 @@ test('title badges and the Firefox hint', () => {
 })
 
 test('a program file is flagged and is never a video', () => {
-  const files = listFiles({ name: 'Movie 2026.1080p. HD h264- OpenContent.exe', files: [
-    { path: 'Movie 2026.1080p. HD h264- OpenContent.exe', name: 'Movie 2026.1080p. HD h264- OpenContent.exe', length: 1_458_371_843 },
-  ] })
+  const files = listFiles({
+    name: 'Movie 2026.1080p. HD h264- OpenContent.exe',
+    files: [
+      { path: 'Movie 2026.1080p. HD h264- OpenContent.exe', name: 'Movie 2026.1080p. HD h264- OpenContent.exe', length: 1_458_371_843 },
+    ]
+  })
   assert.equal(files[0].isVideo, false)
   assert.equal(files[0].isProgram, true)
 })
@@ -61,10 +64,13 @@ test('small videos count when nothing big exists; extras count when nothing else
   const MB = 1024 ** 2
   const trailer = listFiles({ name: 'Big Buck Bunny trailer', files: [{ path: 'Big Buck Bunny trailer.mp4', name: 'Big Buck Bunny trailer.mp4', length: 5 * MB }] })
   assert.equal(trailer[0].isVideo, true)
-  const shortFilm = listFiles({ name: 'Short', files: [
-    { path: 'Short/short.mkv', name: 'short.mkv', length: 60 * MB },
-    { path: 'Short/Sample/sample.mkv', name: 'sample.mkv', length: 5 * MB },
-  ] })
+  const shortFilm = listFiles({
+    name: 'Short',
+    files: [
+      { path: 'Short/short.mkv', name: 'short.mkv', length: 60 * MB },
+      { path: 'Short/Sample/sample.mkv', name: 'sample.mkv', length: 5 * MB },
+    ]
+  })
   assert.deepEqual(shortFilm.filter(f => f.isVideo).map(f => f.name), ['short.mkv'])
 })
 

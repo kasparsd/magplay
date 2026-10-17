@@ -8,8 +8,11 @@ const playResponse = page => page.waitForResponse(r => r.url().endsWith('/api/pl
 
 async function expectPlaying (page) {
   await expect.poll(() => page.locator('#video').evaluate(v => ({
-    ready: v.readyState >= 2, playing: !v.paused, width: v.videoWidth,
-    frames: v.getVideoPlaybackQuality().totalVideoFrames > 0, error: v.error?.message ?? null,
+    ready: v.readyState >= 2,
+    playing: !v.paused,
+    width: v.videoWidth,
+    frames: v.getVideoPlaybackQuality().totalVideoFrames > 0,
+    error: v.error?.message ?? null,
   }))).toEqual({ ready: true, playing: true, width: 320, frames: true, error: null })
   const frames = await page.locator('#video').evaluate(v => v.getVideoPlaybackQuality().totalVideoFrames)
   await expect.poll(() => page.locator('#video').evaluate(v => v.getVideoPlaybackQuality().totalVideoFrames)).toBeGreaterThan(frames)
@@ -312,9 +315,11 @@ test('completed media restarts instead of offering to resume at the credits', as
 
 test('blocked browser storage cannot break playback or seeking', async ({ page, app }) => {
   await page.addInitScript(() => {
-    for (const method of ['getItem', 'setItem']) Object.defineProperty(Storage.prototype, method, {
-      value () { throw new DOMException('Storage blocked', 'SecurityError') },
-    })
+    for (const method of ['getItem', 'setItem']) {
+      Object.defineProperty(Storage.prototype, method, {
+        value () { throw new DOMException('Storage blocked', 'SecurityError') },
+      })
+    }
   })
   await openPlayer(page, app, direct)
   await page.locator('#video').evaluate(v => { v.currentTime = 30 })
@@ -322,9 +327,11 @@ test('blocked browser storage cannot break playback or seeking', async ({ page, 
 })
 
 test('HLS overload is retryable and does not disturb admitted players', async ({ page, app }) => {
-  const play = tab => page.request.post(`${app.origin}/api/play`, { data: {
-    ih: app.ih, idx: app.files[remux], caps: { h264: true, aac: true }, tab,
-  } })
+  const play = tab => page.request.post(`${app.origin}/api/play`, {
+    data: {
+      ih: app.ih, idx: app.files[remux], caps: { h264: true, aac: true }, tab,
+    }
+  })
   const first = await play('limit-one')
   const second = await play('limit-two')
   expect(first.status()).toBe(200)

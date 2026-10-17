@@ -45,8 +45,11 @@ try {
   assert.equal((await part.arrayBuffer()).byteLength, 1024)
   report.checks.push('cached torrent verification, ffprobe and raw byte range')
   const play = async (idx, start = 0) => {
-    const response = await get('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ih, idx, start, audio: 0, tab: 'docker-check', caps: { h264: true, aac: true } }) })
+    const response = await get('/api/play', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ih, idx, start, audio: 0, tab: 'docker-check', caps: { h264: true, aac: true } })
+    })
     assert.equal(response.status, 200, await response.clone().text())
     return response.json()
   }

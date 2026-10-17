@@ -11,9 +11,15 @@ test('starts without sources when nothing is configured', () => {
 test('reads numbered Torznab feeds, Jackett and Prowlarr presets', () => {
   const configs = sourcesFromEnv({
     TORZNAB_URL: 'http://bitmagnet:3333/torznab/api',
-    TORZNAB_URL_2: 'http://hydra:5076/torznab/api', TORZNAB_APIKEY_2: 'h', TORZNAB_NAME_2: 'NZBHydra2',
-    JACKETT_URL: 'http://jackett:9117', JACKETT_APIKEY: 'j', JACKETT_INDEXER: 'tag:tv,!type:private',
-    PROWLARR_URL: 'http://prowlarr:9696', PROWLARR_APIKEY: 'p', PROWLARR_INDEXERS: '3, 7',
+    TORZNAB_URL_2: 'http://hydra:5076/torznab/api',
+    TORZNAB_APIKEY_2: 'h',
+    TORZNAB_NAME_2: 'NZBHydra2',
+    JACKETT_URL: 'http://jackett:9117',
+    JACKETT_APIKEY: 'j',
+    JACKETT_INDEXER: 'tag:tv,!type:private',
+    PROWLARR_URL: 'http://prowlarr:9696',
+    PROWLARR_APIKEY: 'p',
+    PROWLARR_INDEXERS: '3, 7',
   })
   assert.deepEqual(configs.map(c => [c.type, c.name]), [
     ['torznab', 'bitmagnet'], ['torznab', 'NZBHydra2'], ['jackett', 'Jackett'], ['prowlarr', 'Prowlarr'],

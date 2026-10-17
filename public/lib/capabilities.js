@@ -26,6 +26,6 @@ export function measureCaps (video, { ManagedMediaSource, MediaSource } = {}) {
   const MS = ManagedMediaSource || MediaSource
   return /** @type {import('./api-types.js').BrowserCapabilities} */ (Object.fromEntries(
     Object.entries(TYPES).map(([key, type]) =>
-      [key, !!(MS?.isTypeSupported?.(type) || video.canPlayType(type) === 'probably')]),
+      [key, !!(MS?.isTypeSupported?.(type) || video.canPlayType(type) === 'probably')])
   ))
 }

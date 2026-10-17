@@ -3,9 +3,12 @@ import assert from 'node:assert/strict'
 import { decide, ffmpegArgs } from './media.js'
 
 const info = (overrides = {}) => ({
-  container: 'mov,mp4,m4a,3gp,3g2,mj2', isWebm: false,
+  container: 'mov,mp4,m4a,3gp,3g2,mj2',
+  isWebm: false,
   video: { codec: 'h264', bitDepth: 8 },
-  audio: [{ codec: 'aac' }], subtitles: [], ...overrides,
+  audio: [{ codec: 'aac' }],
+  subtitles: [],
+  ...overrides,
 })
 const caps = { h264: true, aac: true, hevc: true, vp9: true, opus: true }
 
@@ -28,8 +31,15 @@ test('invalid audio selections and missing video have useful HTTP errors', () =>
 })
 
 test('remux copies HEVC as hvc1, converts audio and maps only text subtitles', () => {
-  const args = ffmpegArgs({ ih: 'a'.repeat(40), idx: 2, audio: 0, start: 30, mode: 'remux', dir: '/tmp/hls',
-    info: info({ video: { codec: 'hevc' }, audio: [{ codec: 'ac3' }], subtitles: [{ index: 0, text: true }, { index: 1, text: false }] }) })
+  const args = ffmpegArgs({
+    ih: 'a'.repeat(40),
+    idx: 2,
+    audio: 0,
+    start: 30,
+    mode: 'remux',
+    dir: '/tmp/hls',
+    info: info({ video: { codec: 'hevc' }, audio: [{ codec: 'ac3' }], subtitles: [{ index: 0, text: true }, { index: 1, text: false }] })
+  })
   const value = key => args[args.indexOf(key) + 1]
   assert.equal(value('-ss'), '30')
   assert.equal(value('-c:v'), 'copy')

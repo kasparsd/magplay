@@ -29,7 +29,8 @@ async function load () {
   const timer = setInterval(tick, 1000)
   let t
   try {
-    t = params.get('link') ? await api('/api/torrents', { json: { linkId: params.get('link') } })
+    t = params.get('link')
+      ? await api('/api/torrents', { json: { linkId: params.get('link') } })
       : await api(`/api/torrents/${infoHash}`)
   } catch (err) {
     setStatus(status, err.message, 'error')

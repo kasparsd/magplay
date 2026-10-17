@@ -56,8 +56,19 @@ test('loopback peers: uncached bytes, disappearing seeder, cancellation, retry a
   const cache = path.join(dir, 'cache')
   const appPort = await port()
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS)/.test(key)))
-  proc = spawn(process.execPath, ['src/server.js'], { env: { ...env, CACHE_DIR: cache, PORT: String(appPort), TORRENT_PORT: '0',
-    EXTRA_TRACKERS: '', DHT_ENABLED: 'false', LSD_ENABLED: 'false', METADATA_TIMEOUT_S: '2' }, stdio: ['ignore', 'pipe', 'pipe'] })
+  proc = spawn(process.execPath, ['src/server.js'], {
+    env: {
+      ...env,
+      CACHE_DIR: cache,
+      PORT: String(appPort),
+      TORRENT_PORT: '0',
+      EXTRA_TRACKERS: '',
+      DHT_ENABLED: 'false',
+      LSD_ENABLED: 'false',
+      METADATA_TIMEOUT_S: '2'
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
   proc.stdout.on('data', b => { logs += b })
   proc.stderr.on('data', b => { logs += b })
   const origin = `http://127.0.0.1:${appPort}`

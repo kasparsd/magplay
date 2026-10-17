@@ -37,8 +37,11 @@ function renderTile (t) {
 /** Genre chips, year and quality options, from BitMagnet's counts for the current filters. */
 function renderFacets ({ genres, years, resolutions }) {
   const chip = (label, value) => el('button', {
-    type: 'button', className: `chip${filters.genre === value ? ' on' : ''}`, textContent: label,
-    ariaPressed: String(filters.genre === value), onclick: () => apply({ genre: value }),
+    type: 'button',
+    className: `chip${filters.genre === value ? ' on' : ''}`,
+    textContent: label,
+    ariaPressed: String(filters.genre === value),
+    onclick: () => apply({ genre: value }),
   })
   fill($('#genres'), chip('All genres', ''), ...genres.slice(0, 14).map(g => chip(`${g.label} ${g.count}`, g.value)))
   const options = (select, list, label) => {

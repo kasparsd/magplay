@@ -78,7 +78,8 @@ export function decide (info, caps, audio) {
   const videoOk = !!(vKey && caps[vKey] && !(vKey === 'h264' && v.bitDepth > 8))
   const audioOk = !a || !!caps[AUDIO_KEYS[a.codec]]
   const container = info.isWebm ? 'webm' : /mp4|mov/.test(info.container) ? 'mp4' : null
-  const containerOk = container === 'webm' ? ['vp9', 'av1'].includes(vKey) && (!a || ['opus', 'vorbis'].includes(a.codec))
+  const containerOk = container === 'webm'
+    ? ['vp9', 'av1'].includes(vKey) && (!a || ['opus', 'vorbis'].includes(a.codec))
     : container === 'mp4' && ['h264', 'hevc', 'av1'].includes(vKey) && !(vKey === 'hevc' && v.tag === 'hev1')
 
   if (videoOk && audioOk && containerOk && (audio === 0 || info.audio.length <= 1)) {

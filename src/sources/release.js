@@ -58,7 +58,8 @@ const ARCHIVE_EXT = /\.(zip|rar|7z|iso)$/i
 export function badges (title) {
   const program = title.match(PROGRAM_EXT)?.[1]
   const archive = title.match(ARCHIVE_EXT)?.[1]
-  const warning = program ? `Not a media file (.${program.toLowerCase()})`
+  const warning = program
+    ? `Not a media file (.${program.toLowerCase()})`
     : archive ? `Archive (.${archive.toLowerCase()}), can't stream` : null
   const found = {}
   for (const [kind, re, label] of RULES) {

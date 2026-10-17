@@ -38,6 +38,12 @@ export async function prepareCachedMedia (dir) {
   await fs.mkdir(torrentDir, { recursive: true })
   await fs.writeFile(path.join(torrentDir, 'meta.torrent'), torrent)
   await fs.cp(media, path.join(torrentDir, parsed.name), { recursive: true })
-  return { media, cache, ih: parsed.infoHash, length: parsed.length, torrent,
-    files: Object.fromEntries(parsed.files.map((f, idx) => [path.basename(f.path), idx])) }
+  return {
+    media,
+    cache,
+    ih: parsed.infoHash,
+    length: parsed.length,
+    torrent,
+    files: Object.fromEntries(parsed.files.map((f, idx) => [path.basename(f.path), idx]))
+  }
 }

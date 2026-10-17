@@ -20,8 +20,11 @@ function renderResult (item) {
         item.warning && el('span', { className: 'badge note', textContent: item.warning }),
         ...item.badges.map(b => el('span', { className: 'badge', textContent: b })),
         item.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser', title: 'H.264 with AAC or unknown audio: likely plays in any browser' })),
-      el('div', { className: 'meta' }, el('span', { className: 'via', title: item.sources.join('\n'),
-        textContent: item.sources.length > 1 ? `${item.sources.length} sources` : item.sources[0] }))),
+      el('div', { className: 'meta' }, el('span', {
+        className: 'via',
+        title: item.sources.join('\n'),
+        textContent: item.sources.length > 1 ? `${item.sources.length} sources` : item.sources[0]
+      }))),
     el('td', { textContent: formatBytes(item.size) }),
     el('td', { textContent: item.seeders ?? '' }))
 }

@@ -138,8 +138,13 @@ async function * fileBytes (file, start, end, signal) {
 
 /** Sends a byte range of `size` bytes produced by `bytes(start, end)`, keeping the torrent loaded while it streams. */
 function send (req, res, ih, { size, type, etag, filename }, bytes) {
-  const headers = { 'Cache-Control': 'private, max-age=3600, must-revalidate', ETag: etag, 'Accept-Ranges': 'bytes',
-    'Content-Type': type, ...(filename && { 'Content-Disposition': attachment(filename) }) }
+  const headers = {
+    'Cache-Control': 'private, max-age=3600, must-revalidate',
+    ETag: etag,
+    'Accept-Ranges': 'bytes',
+    'Content-Type': type,
+    ...(filename && { 'Content-Disposition': attachment(filename) })
+  }
   if (notModified(req, etag)) {
     res.writeHead(304, headers)
     return res.end()

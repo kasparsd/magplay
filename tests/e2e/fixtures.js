@@ -52,9 +52,19 @@ async function startApp () {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
       !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS|ALLOW_VIDEO_TRANSCODE)/.test(key)))
     proc = spawn(process.execPath, ['src/server.js'], {
-      cwd: root, env: { ...env, PORT: String(port), TORRENT_PORT: '0', CACHE_DIR: cache,
-        TORZNAB_URL: `http://127.0.0.1:${indexer.address().port}/feed`, EXTRA_TRACKERS: '',
-        ALLOW_VIDEO_TRANSCODE: 'false', DHT_ENABLED: 'false', LSD_ENABLED: 'false', METADATA_TIMEOUT_S: '5' },
+      cwd: root,
+      env: {
+        ...env,
+        PORT: String(port),
+        TORRENT_PORT: '0',
+        CACHE_DIR: cache,
+        TORZNAB_URL: `http://127.0.0.1:${indexer.address().port}/feed`,
+        EXTRA_TRACKERS: '',
+        ALLOW_VIDEO_TRANSCODE: 'false',
+        DHT_ENABLED: 'false',
+        LSD_ENABLED: 'false',
+        METADATA_TIMEOUT_S: '5'
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     proc.stdout.on('data', chunk => { logs += chunk })
@@ -66,7 +76,13 @@ async function startApp () {
       if (i === 100) throw new Error(`Server did not start:\n${logs}`)
       await sleep(50)
     }
-    return { origin, ih, files, cache, close, logs: () => logs,
+    return {
+      origin,
+      ih,
+      files,
+      cache,
+      close,
+      logs: () => logs,
       player: name => `${origin}/play/${ih}/${files[name]}`,
       torrent: `${origin}/t/${ih}`,
     }
