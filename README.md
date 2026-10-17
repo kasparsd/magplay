@@ -2,6 +2,12 @@
 
 Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a video from it, either in the browser or in an external player such as VLC, IINA or Infuse. One small Node.js service, meant for a home NAS on a private network. It has no login.
 
+![magplay search results on desktop and mobile](docs/screenshots/search.png)
+
+![magplay playing Big Buck Bunny on desktop and mobile](docs/screenshots/player.png)
+
+<sub>The search results come from a local fake indexer that lists only Blender's Creative Commons open movies and US public domain films. The player shows [Big Buck Bunny](https://peach.blender.org/) (© Blender Foundation, CC BY 3.0). To regenerate the screenshots, run `node tools/scripts/screenshots.mjs path/to/big_buck_bunny_720p_h264.mov`.</sub>
+
 For sample media to try it with, Blender’s [Open Movies](https://studio.blender.org/films/) such as Big Buck Bunny and [Elephants Dream](https://orange.blender.org/download/) are shared under Creative Commons.
 
 ```
