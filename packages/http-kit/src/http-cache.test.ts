@@ -5,15 +5,17 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { once } from 'node:events'
-import { serveFile } from './http-cache.js'
+import type { AddressInfo } from 'node:net'
+import { serveFile } from './http-cache.ts'
+import { FileNotFoundError } from './errors.ts'
 
 test('serveFile: changed validators, precedence, wildcard, HEAD and missing files over HTTP', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-cache-'))
   const target = path.join(dir, 'asset.js')
   await fs.writeFile(target, 'first')
   const server = http.createServer((req, res) => {
-    serveFile(req, res, target, 'text/javascript').catch(err => {
-      res.writeHead(err.status || 500, { 'Cache-Control': 'no-store' })
+    serveFile(req, res, target, 'text/javascript').catch((err: unknown) => {
+      res.writeHead(err instanceof FileNotFoundError ? 404 : 500, { 'Cache-Control': 'no-store' })
       res.end()
     })
   })
@@ -23,10 +25,10 @@ test('serveFile: changed validators, precedence, wildcard, HEAD and missing file
     await new Promise(resolve => server.close(resolve))
     await fs.rm(dir, { recursive: true, force: true })
   })
-  const url = `http://127.0.0.1:${server.address().port}`
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   const first = await fetch(url)
-  const etag = first.headers.get('etag')
-  const date = first.headers.get('last-modified')
+  const etag = first.headers.get('etag') ?? ''
+  const date = first.headers.get('last-modified') ?? ''
   assert.equal(await first.text(), 'first')
   for (const headers of [{ 'If-None-Match': '*' }, { 'If-None-Match': `"other", ${etag}` }, { 'If-Modified-Since': date }]) {
     const res = await fetch(url, { headers })

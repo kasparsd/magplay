@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@magplay/api-contract": "*",
+    "@magplay/http-kit": "*",
     "@magplay/release-info": "*",
     "@magplay/seekable-tar": "*",
     "fast-xml-parser": "5.11.2",

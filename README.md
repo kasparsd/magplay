@@ -298,14 +298,14 @@ Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 
 
 Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
 
-- `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by `router.js`.
+- `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by the `http-kit` router.
 - `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/ui.js` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.js` (DOM-independent JSON transport) and `lib/urls.js` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
 - `public/`: HTML and CSS, served as-is.
-- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges) and `seekable-tar` (range-addressable tar streams).
+- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
 
 ### Test layout
 
-Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `apps/server/src/router.test.js` and `packages/seekable-tar/src/index.test.ts`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.js`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
+Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `packages/http-kit/src/router.test.ts` and `packages/seekable-tar/src/index.test.ts`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.js`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
 
 Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `apps/server/src/sources/test-fixtures/`, with shared helpers in `apps/server/src/sources/test-helpers.js`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
 

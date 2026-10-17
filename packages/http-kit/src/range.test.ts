@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rangeFor, attachment } from './range.js'
+import { rangeFor, attachment } from './range.ts'
 
 test('range requests', () => {
   const etag = '"abc-tar"'

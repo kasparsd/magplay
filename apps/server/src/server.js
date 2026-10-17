@@ -3,14 +3,13 @@ import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import config, { httpError } from './config.js'
-import { serveFile, sendCached } from './http-cache.js'
+import { createRouter, FileNotFoundError, MalformedPathError, route, sendCached, serveFile } from '@magplay/http-kit'
 import { SourceError } from './sources/release.js'
 import { createSearch } from './search.js'
 import { createSources } from './sources/index.js'
 import { createBitmagnetBrowser, TYPES } from './sources/bitmagnet.js'
 import { addTorrent, describe, getFile, getTorrent, knownWarning, recent, serveRaw, serveTar, status } from './torrents.js'
 import { probe, decide, subtitleToVtt } from './media.js'
-import { createRouter } from './router.js'
 import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls } from './sessions.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -199,65 +198,65 @@ function statusRoute ({ res, params, query }) {
   json(res, 200, { ...out, session: s ? sessionStats(s) : null })
 }
 
-const route = createRouter([
+const match = createRouter([
   // Pages
-  ['GET', '/', page('index.html')],
-  ['GET', '/t/:ih?', page('torrent.html')],
-  ['GET', '/play/:ih/:idx', page('player.html')],
-  ['GET', '/explore', page('explore.html')],
-  ['GET', '/title/:type/:source/:id', page('title.html')],
-  ['GET', '/player.html', ({ res, query }) => { // links from before /play existed
+  route('GET', '/', page('index.html')),
+  route('GET', '/t/:ih?', page('torrent.html')),
+  route('GET', '/play/:ih/:idx', page('player.html')),
+  route('GET', '/explore', page('explore.html')),
+  route('GET', '/title/:type/:source/:id', page('title.html')),
+  route('GET', '/player.html', ({ res, query }) => { // links from before /play existed
     res.writeHead(301, { Location: `/play/${query.get('ih')}/${query.get('idx')}` })
     res.end()
-  }],
-  ['GET', '/style.css', page('style.css')],
-  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js'].flatMap(name => [['GET', `/${name}`, asset(name)], ['GET', `/${name}.map`, asset(`${name}.map`)]]),
-  ['GET', '/health', ({ res }) => json(res, 200, { ok: true })],
+  }),
+  route('GET', '/style.css', page('style.css')),
+  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js'].flatMap(name => [route('GET', `/${name}`, asset(name)), route('GET', `/${name}.map`, asset(`${name}.map`))]),
+  route('GET', '/health', ({ res }) => json(res, 200, { ok: true })),
 
   // API
-  ['GET', '/api/search', searchRoute],
-  ['GET', '/api/recent', async ({ res }) => json(res, 200, await recent())],
-  ['GET', '/api/explore', async ({ res, query }) => {
+  route('GET', '/api/search', searchRoute),
+  route('GET', '/api/recent', async ({ res }) => json(res, 200, await recent())),
+  route('GET', '/api/explore', async ({ res, query }) => {
     const p = exploreParams(query)
     json(res, 200, await cached(JSON.stringify(p), () => browser.browse(p, exploreTimeout())))
-  }],
-  ['GET', '/api/explore/facets', async ({ res, query }) => {
+  }),
+  route('GET', '/api/explore/facets', async ({ res, query }) => {
     const { type, genre, year, resolution } = exploreParams(query)
     json(res, 200, await loadFacets({ type, genre, year, resolution }))
-  }],
-  ['GET', '/api/explore/latest', async ({ res, query }) => {
+  }),
+  route('GET', '/api/explore/latest', async ({ res, query }) => {
     const { type } = exploreParams(query)
     json(res, 200, await cached(`latest:${type}`, () => browser.latest({ type }, exploreTimeout())))
-  }],
-  ['GET', '/api/title/:type/:source/:id', async ({ res, params, query }) => {
+  }),
+  route('GET', '/api/title/:type/:source/:id', async ({ res, params, query }) => {
     if (!browser) throw httpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
     if (!TYPES.includes(params.type)) throw httpError(400, 'type must be movie or tv_show')
     const t = await cached(`title:${params.type}:${params.source}:${params.id}`, () =>
       browser.title({ ...params, title: query.get('title'), year: query.get('year') }, exploreTimeout()))
     if (!t) throw httpError(404, 'No releases of this title found any more.')
     json(res, 200, t)
-  }],
-  ['POST', '/api/torrents', addRoute],
-  ['GET', '/api/torrents/:ih', async ({ res, params }) => json(res, 200, describe(await getTorrent(params.ih)))],
-  ['GET', '/api/torrents/:ih/status', statusRoute],
-  ['GET', '/api/probe/:ih/:idx', probeRoute],
-  ['POST', '/api/play', async ({ req, res }) => json(res, 200, await play(await readJson(req), () => res.destroyed))],
-  ['POST', '/api/play/tab/:tab', ({ res, params }) => {
+  }),
+  route('POST', '/api/torrents', addRoute),
+  route('GET', '/api/torrents/:ih', async ({ res, params }) => json(res, 200, describe(await getTorrent(params.ih)))),
+  route('GET', '/api/torrents/:ih/status', statusRoute),
+  route('GET', '/api/probe/:ih/:idx', probeRoute),
+  route('POST', '/api/play', async ({ req, res }) => json(res, 200, await play(await readJson(req), () => res.destroyed))),
+  route('POST', '/api/play/tab/:tab', ({ res, params }) => {
     closeTab(params.tab)
     json(res, 200, { ok: true })
-  }],
-  ['DELETE|POST', '/api/play/:session', ({ res, params }) => { // POST too, for navigator.sendBeacon
+  }),
+  route('DELETE|POST', '/api/play/:session', ({ res, params }) => { // POST too, for navigator.sendBeacon
     stopSession(params.session)
     json(res, 200, { ok: true })
-  }],
+  }),
 
   // Media
   // An optional trailing file name lets external players show a title and guess the format
-  ['GET|HEAD', '/raw/:ih/:idx/:name?', ({ req, res, params, query }) => serveRaw(req, res, params.ih, Number(params.idx), { download: query.has('download') })],
-  ['GET|HEAD', '/tar/:ih/:name?', ({ req, res, params }) => serveTar(req, res, params.ih)],
-  ['GET', '/playlist.m3u', ({ req, res, query }) => playlist(req, res, query.get('ih'), query.get('idx'))],
-  ['GET', '/hls/:session/:file', ({ req, res, params }) => serveHls(res, params.session, params.file, req)],
-  ['GET', '/subs/:ih/:idx/:track', subtitles],
+  route('GET|HEAD', '/raw/:ih/:idx/:name?', ({ req, res, params, query }) => serveRaw(req, res, params.ih, Number(params.idx), { download: query.has('download') })),
+  route('GET|HEAD', '/tar/:ih/:name?', ({ req, res, params }) => serveTar(req, res, params.ih)),
+  route('GET', '/playlist.m3u', ({ req, res, query }) => playlist(req, res, query.get('ih'), query.get('idx'))),
+  route('GET', '/hls/:session/:file', ({ req, res, params }) => serveHls(res, params.session, params.file, req)),
+  route('GET', '/subs/:ih/:idx/:track', subtitles),
 ])
 
 const server = http.createServer(async (req, res) => {
@@ -265,10 +264,13 @@ const server = http.createServer(async (req, res) => {
   let url
   try {
     try { url = new URL(req.url, 'http://localhost') } catch { throw httpError(400, 'Malformed URL') }
-    const found = route(req.method, url.pathname) || (req.method === 'HEAD' && route('GET', url.pathname))
+    const found = match(req.method, url.pathname) || (req.method === 'HEAD' && match('GET', url.pathname))
     if (!found) throw httpError(404, 'Not found')
     await found.handler({ req, res, params: found.params, query: url.searchParams })
   } catch (err) {
+    // Until errors.ts maps typed errors centrally (see the package-boundaries plan)
+    if (err instanceof MalformedPathError) err.status = 400
+    if (err instanceof FileNotFoundError) err.status = 404
     if (!err.status) console.error(`[http] ${req.method} ${url?.pathname ?? req.url}:`, err)
     if (res.destroyed) return
     if (res.headersSent) return res.destroy()

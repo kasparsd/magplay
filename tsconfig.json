@@ -11,6 +11,9 @@
       "path": "packages/seekable-tar"
     },
     {
+      "path": "packages/http-kit"
+    },
+    {
       "path": "apps/server"
     },
     {

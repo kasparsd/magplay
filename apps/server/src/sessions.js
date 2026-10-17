@@ -1,4 +1,4 @@
-import { serveFile } from './http-cache.js'
+import { serveFile } from '@magplay/http-kit'
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'

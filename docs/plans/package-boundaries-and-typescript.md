@@ -102,7 +102,7 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 - [x] `api-contract`: `api-types.js` → real types (discriminated `PlaybackDecision` union etc.); the client imports it; delete the JSDoc file. Client JSDoc references `import('@magplay/api-contract')` until its files are `.ts`; server handlers adopt it in Phase 4.
 - [x] `release-info`: move `episodes` detection, badges and `PROGRAM_EXT`/`contentWarning` out of `sources/release.js` and `episodes.js`; `indexers` and the server import from it. Convert with tests.
 - [x] `seekable-tar`: move `tar.js` and tests; replace `Buffer` with `Uint8Array` if cheap; convert. Kept `Buffer` (header writes use its string encoders). The range/`attachment` tests that lived in `tar.test.js` moved to `apps/server/src/range.test.js` and go to `http-kit` with `range.js`.
-- [ ] `http-kit`: move `router`, `range`, `http-cache` and tests; type route params from path patterns; convert.
+- [x] `http-kit`: move `router`, `range`, `http-cache` and tests; type route params from path patterns; convert. Routes are built with `route(methods, pattern, handler)`, whose handler gets `params` typed from the pattern (`'/raw/:ih/:name?'` → `{ ih: string, name?: string }`); `createRouter` takes those rows. The package throws `MalformedPathError` and `FileNotFoundError` instead of setting `status`.
 - [ ] Enable the package-boundary lint rules as soon as the first package exists.
 - [ ] Introduce `apps/server/src/errors.ts` (`toHttpError`) and stop exporting `httpError` from `config.js`; packages from here on throw typed errors.
 - [ ] Convert pure client helpers: `lib/urls`, `lib/requests`, `lib/subtitles`, `lib/progress`, `lib/api`, `lib/ui`.
@@ -150,7 +150,7 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 | --- | --- | --- | --- | --- |
 | 0 | Tooling foundation | ✅ Done | | TypeScript pinned to 5.9.3, not 7 (typescript-eslint 8 peers `<6.1.0`); the ESLint config is `.js` (a `.ts` one needs `jiti`); npm 11.20 gates install scripts, allowed native ones via `allowScripts` in package.json |
 | 1 | Apps skeleton and client build | ✅ Done | `54cd9df` | esbuild `--minify --sourcemap`; URLs unchanged (`/search.js` etc. now served from `dist/client/`); `npm test` and `test:e2e` build first; hls.js moved to devDependencies (bundled at build time, never served); Docker check passed on Node 24 Alpine |
-| 2 | Contract and pure packages | 🟨 In progress | | `api-contract`, `release-info`, `seekable-tar` done; `http-kit`, boundary lint rules, `toHttpError` and client helpers remain |
+| 2 | Contract and pure packages | 🟨 In progress | | `api-contract`, `release-info`, `seekable-tar`, `http-kit` done; boundary lint rules, `toHttpError` and client helpers remain |
 | 3 | Indexers | ⬜ Not started | | |
 | 4 | Torrent engine, playback, server split | ⬜ Not started | | |
 | 5 | Client pages | ⬜ Not started | | |
@@ -166,7 +166,7 @@ Tick when the package exists, has its own `package.json` and `tsconfig`, is full
 - [x] `api-contract` (from `api-types`)
 - [x] `release-info` (from `episodes`, parts of `sources/release`)
 - [x] `seekable-tar` (from `tar`)
-- [ ] `http-kit` (from `router`, `range`, `http-cache`)
+- [x] `http-kit` (from `router`, `range`, `http-cache`)
 - [ ] `indexers` (from `sources/*`, `search`)
 - [ ] `torrent-engine` (from `torrents`, `torrent-ready`, `limits`)
 - [ ] `playback` (from `media`, `sessions`)
@@ -177,7 +177,7 @@ Tick when the package exists, has its own `package.json` and `tsconfig`, is full
 
 Tick when the file is `.ts` in its target location, type-checks, passes the type-aware lint rules and its tests pass.
 
-- **Server, from `src/`:** [ ] `config` · [ ] `limits` · [ ] `range` · [ ] `http-cache` · [ ] `router` · [x] `tar` · [x] `episodes` · [ ] `torrent-ready` · [ ] `search` · [ ] `torrents` · [ ] `media` · [ ] `sessions` · [ ] `server`
+- **Server, from `src/`:** [ ] `config` · [ ] `limits` · [x] `range` · [x] `http-cache` · [x] `router` · [x] `tar` · [x] `episodes` · [ ] `torrent-ready` · [ ] `search` · [ ] `torrents` · [ ] `media` · [ ] `sessions` · [ ] `server`
 - **Sources:** [ ] `release` · [ ] `links` · [ ] `torznab` · [ ] `prowlarr` · [ ] `bitmagnet` · [ ] `index` · [ ] `test-helpers`
 - **Client:** [x] `lib/api-types` · [ ] `lib/urls` · [ ] `lib/requests` · [ ] `lib/subtitles` · [ ] `lib/capabilities` · [ ] `lib/progress` · [ ] `lib/api` · [ ] `lib/ui` · [ ] `search` · [ ] `explore` · [ ] `title` · [ ] `torrent` · [ ] `player`
 - **Tests, scripts, config:** [ ] `tests/e2e/fixtures` · [ ] `tests/e2e/playback.test` · [ ] `tests/fixtures/media` · [ ] `tests/integration/peers.test` · [ ] `tools/scripts/setup-indexers` · [ ] `tools/scripts/check-docker` · [ ] `playwright.config`
@@ -203,3 +203,4 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - 2026-10-17: Phase 0 tooling landed in the working tree (uncommitted by instruction; the formatting pass should be committed separately and listed in `.git-blame-ignore-revs` when the reviewer commits). Spike results: workspace `.ts` packages run under Node type stripping via symlinked real paths (Decision 3 confirmed, no `paths` fallback needed); `node --test` globs find `.ts` tests; `tsc -b` with composite projects works with declarations emitted to `.tsbuild/`. TypeScript 7.0.2 evaluated and rejected: typescript-eslint 8.71.2 peers `typescript <6.1.0`, so type-aware linting requires TypeScript 5.9.3. ESLint 10 loads `eslint.config.ts` via `jiti` (added as a dev dependency). npm 11.20 blocks install scripts unless approved; the native modules WebTorrent needs (node-datachannel, bufferutil, utf-8-validate, utp-native, esbuild) are allowlisted in `package.json` under `allowScripts` so `npm ci` in Docker/CI keeps working. Lint passes with `--max-warnings 0` after a formatting-only pass plus four real fixes (inline `no-unmodified-loop-condition` disable in the player, `no-void` restructure, `curly` braces, `promise/param-names` renames, browser globals for `public/` and `tests/e2e/`). 108 unit + 4 peer tests still pass.
 - 2026-10-17: Review pass before committing Phases 0–1 and the first Phase 2 packages. Fixed: the Docker image could not start after dependencies moved into `apps/server/package.json` (a `manifests` stage now feeds every workspace `package.json` to `npm ci`, and the runtime copies `packages/` and only `apps/server`); `.test.ts` files excluded from the image; `npm start` builds the client first (`prestart`); root `tsBuildInfoFile` moved into `.tsbuild/`; ESLint global ignores restored (neostandard's `ignores` option is per-object, so `.tsbuild/*.d.ts` lost the TypeScript plugin) and `node:test` calls allowed by `no-floating-promises`; `globals`/`jiti` pinned; `ip-set`'s pnpm-only preinstall explicitly denied in `allowScripts`. Wired the server to `@magplay/seekable-tar` (deleting `tar.js`) and the client JSDoc to `@magplay/api-contract` (deleting `api-types.js`); removed the empty `http-kit` stub until its step lands.
 - 2026-10-17: Simplified tooling configs. ESLint: `eslint.config.ts` → `eslint.config.js` with `defineConfig`, ignores read from `.gitignore`, `recommendedTypeChecked` instead of a hand-picked rule list (dropping `jiti`). This fixed a bug: the old `ban-ts-comment` options set `ts-ignore`/`ts-nocheck` to `false`, which *allows* them; the defaults ban them. TypeScript: shared composite/emit options moved into `tsconfig.base.json` via `${configDir}`, project configs shrank to their real differences, root `tsconfig.json` is a pure solution file. Also: `npm test` and `build` use globs, Playwright config drops defaults, `.nvmrc` 22 → 24 (CI's playback job reads it), `.claude/worktrees/` gitignored so lint doesn't scan other agents' checkouts.
+- 2026-10-17: `http-kit` extracted from `router`, `range` and `http-cache` (with their tests, including the range/`attachment` tests split from the old tar tests). The tuple route table became `route()` rows so handlers get typed params; `server.js` maps the package's typed errors to 400/404 inline until `toHttpError` lands.
