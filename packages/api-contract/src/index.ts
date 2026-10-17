@@ -10,8 +10,11 @@ export interface VideoTrack {
   codec: string
   tag: string
   profile: string | null
+  /** Coded size in pixels. */
   width: number
   height: number
+  /** Pixel (sample) aspect ratio, 1 for square pixels. Display aspect is width × sampleAspect / height. */
+  sampleAspect: number
   bitDepth: number
 }
 
@@ -107,6 +110,10 @@ export interface SessionStats {
   mode: 'remux' | 'transcode'
   /** Conversion speed relative to real time. */
   speed: number | null
+  /** Frames per second ffmpeg is producing, from its -progress output. */
+  fps: number | null
+  /** ffmpeg's share of all CPU cores since the previous poll (0–1, 1 saturates the NAS), or null where it can't be measured. */
+  cpu: number | null
   /** Seconds generated relative to this session's start. */
   produced: number
   /** Paused ahead of playback, not the video's play/pause state. */
