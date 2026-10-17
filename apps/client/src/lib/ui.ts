@@ -131,23 +131,55 @@ export const posterTile = (title: string, extra = ''): HTMLDivElement => el('div
 /** `1 seeder`, `2 seeders`. */
 export const count = (n: number, word: string): string => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`
 
-/** One row in a list of releases: name (linking to its torrent page), badges, size and seeders. */
+/** One row in a list of releases: name (linking to its torrent page), badges, size and seeders. Used by every page. */
 export interface ReleaseRowItem {
   name: string
   episode?: string | null
+  /** A caution about the release, such as "Not a video". */
+  warning?: string | null | undefined
   badges?: string[] | undefined
   likelyDirect?: boolean | undefined
   size?: number | null | undefined
   seeders?: number | null | undefined
 }
 
-export function releaseRow (r: ReleaseRowItem, href: string): HTMLLIElement {
+export interface ReleaseRowOptions {
+  /** Extra badges after the release's own, such as "best". */
+  extra?: Child[]
+  /** Facts before size and seeders on the meta line, such as "2 h ago". */
+  meta?: Array<string | null | undefined | false>
+  /** A muted line under the badges, such as where the result came from. */
+  note?: string | null | undefined
+}
+
+export function releaseRow (r: ReleaseRowItem, href: string, { extra = [], meta = [], note }: ReleaseRowOptions = {}): HTMLLIElement {
   return el('li', {},
     el('div', { className: 'main' },
       el('a', { href, className: 'title', textContent: r.name }),
       el('div', { className: 'badges' },
+        r.warning && el('span', { className: 'badge note', textContent: r.warning }),
         r.episode && el('span', { className: 'badge note', textContent: r.episode }),
         ...(r.badges ?? []).map(b => el('span', { className: 'badge', textContent: b })),
-        r.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser' }))),
-    el('span', { className: 'size' }, [formatBytes(r.size), r.seeders != null && count(r.seeders, 'seeder')].filter(Boolean).join(' · ')))
+        r.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser', title: 'H.264 with AAC or unknown audio: likely plays in any browser' }),
+        ...extra),
+      note && el('div', { className: 'meta', textContent: note })),
+    el('span', { className: 'size' }, [...meta, formatBytes(r.size), r.seeders != null && count(r.seeders, 'seeder')].filter(Boolean).join(' · ')))
 }
+
+/** An error in a status line, with a Try again button that reruns `retry` on the page instead of reloading it. */
+export function setError (node: HTMLElement, message: string, retry?: () => void): void {
+  setStatus(node, message, 'error')
+  if (retry) node.append(' ', el('button', { type: 'button', className: 'retry', textContent: 'Try again', onclick: retry }))
+}
+
+/** "dd8255ec…" for a heading or label that would otherwise be a 40-character infohash. */
+export const shortHash = (infoHash: string): string => `${infoHash.slice(0, 8)}…`
+
+// The last search, so the header search box keeps it on every page (sessionStorage: per tab, like Back)
+export function lastSearch (): string {
+  try { return sessionStorage.getItem('magplay:q') ?? '' } catch { return '' }
+}
+export function rememberSearch (q: string): void {
+  try { sessionStorage.setItem('magplay:q', q) } catch {}
+}
+for (const input of document.querySelectorAll<HTMLInputElement>('.topsearch input[name="q"]')) if (!input.value) input.value = lastSearch()
