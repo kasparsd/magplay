@@ -34,11 +34,44 @@ async function seek (page, seconds) {
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.dispatchEvent(new Event('change', { bubbles: true }))
   }, seconds)
+  // The slider keeps the dragged value until the next timeupdate publishes the
+  // real position; wait for one tick so polls can't pass on the stale value.
+  // Bounded: a seek that restarts the HLS session has no ticks until then.
+  await page.locator('#video').evaluate(v => new Promise(resolve => {
+    const timer = setTimeout(resolve, 5000)
+    v.addEventListener('timeupdate', () => { clearTimeout(timer); resolve() }, { once: true })
+  }))
 }
 
 async function expectCues (page, text) {
   await expect.poll(() => page.locator('#video').evaluate(v =>
     [...v.textTracks[0].cues ?? []].map(c => c.text))).toContain(text)
+}
+
+/** Serves only the first `segments` of every HLS playlist, so the browser's seekable range stays fixed however fast ffmpeg works. */
+async function capHlsPlaylist (page, segments = 3) {
+  await page.route('**/hls/*/index.m3u8', async route => {
+    const response = await route.fetch()
+    const kept = []
+    let seen = 0
+    for (const line of (await response.text()).split('\n')) {
+      if (seen >= segments) break
+      kept.push(line)
+      if (line.endsWith('.m4s')) seen++
+    }
+    const headers = { ...response.headers() }
+    delete headers['content-length']
+    delete headers['transfer-encoding']
+    await route.fulfill({ response, headers, body: kept.join('\n') })
+  })
+}
+
+/** Seconds of media ffmpeg has written into the current HLS session, read from disk — unaffected by what the browser was served. */
+async function producedSeconds (app) {
+  const [session] = await fs.readdir(path.join(app.cache, 'hls'))
+  if (!session) return 0
+  const text = await fs.readFile(path.join(app.cache, 'hls', session, 'index.m3u8'), 'utf8').catch(() => '')
+  return [...text.matchAll(/#EXTINF:([\d.]+)/g)].reduce((sum, m) => sum + Number(m[1]), 0)
 }
 
 test('cold concurrent torrent/probe requests share one initialization', async ({ page, app }) => {
@@ -82,6 +115,21 @@ test('MKV/AC3 remux: seek, switch audio, restart before session offset', async (
   expect(restarted.session).not.toBe(switched.session)
   expect(restarted.offset).toBe(10)
   await expectPlaying(page)
+})
+
+test('seeking past the loaded HLS playlist restarts the session at the exact target', async ({ page, app }) => {
+  await capHlsPlaylist(page) // the browser never sees past the first ~18 s of the session
+  await openPlayer(page, app, remux)
+  // ffmpeg is not capped: once it has produced well past the seek target, a
+  // decision based on server-side progress would wrongly seek in-session and
+  // the browser would silently clamp to the capped playlist's end instead
+  await expect.poll(() => producedSeconds(app), { timeout: 30_000 }).toBeGreaterThan(32)
+  const restarting = playResponse(page)
+  await seek(page, 30)
+  const decision = await (await restarting).json()
+  expect(decision.offset).toBe(30)
+  await expectPlaying(page)
+  await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(30)
 })
 
 test('rapid audio changes preserve position and leave only the latest session', async ({ page, app }) => {

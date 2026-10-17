@@ -26,7 +26,6 @@ let info = null
 let cur = null
 let hls = null
 let audio = 0
-let produced = 0 // seconds of output ffmpeg has written for the current session
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
 let file = null // this file's entry from the torrent's file list
@@ -174,7 +173,6 @@ async function start (at = 0) {
   const pageSignal = pageLife.signal
   const current = () => gen === generation && !signal.aborted
   notify('Starting…', 'busy')
-  produced = 0
   cur = null
   const selectedAudio = audio
   try {
@@ -252,8 +250,15 @@ function seekTo (t) {
     return
   }
   const rel = t - cur.offset
-  if (rel >= 0 && rel < produced - 2) video.currentTime = rel
-  else start(t) // outside what ffmpeg has made: restart it there
+  // The browser's seekable range lags the server's `produced` count (hls.js
+  // re-fetches the growing event playlist on its own schedule), and seeking
+  // past it silently clamps to the range edge. Only seek locally where the
+  // browser can actually land; otherwise restart the session at the target.
+  const seekable = video.seekable
+  const from = seekable.length ? seekable.start(0) : 0
+  const end = seekable.length ? seekable.end(seekable.length - 1) : 0
+  if (rel >= from - 2 && rel < end - 2) video.currentTime = rel
+  else start(t) // outside what the browser has: restart it there
 }
 
 // Subtitles share one text track. Parsing is pure; polling, growing-file
@@ -347,7 +352,6 @@ async function pollStatus (signal = pageLife.signal) {
     lastStatus = st
     const s = st.session
     if (s) {
-      produced = s.produced
       cur.complete = !s.running
       const nowSlow = s.running && !s.paused && s.speed && s.speed < 1 && s.produced - video.currentTime < 30
       if (s.failed) notify(`ffmpeg failed: ${s.error}`, 'error', [button('Try again', () => start(position()), true)])

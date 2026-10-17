@@ -63,7 +63,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 ### 1. One player chrome for every mode
 
-**Today.** There are two chromes. `direct` files get the browser's native controls (`video.controls = !hlsMode` in `apps/client/src/player.js`). Remux and transcode get the custom `#controls` bar in `public/player.html`, because every seek outside what ffmpeg has made starts a new session and the native timeline only knows that session. As a result:
+**Today.** There are two chromes. `direct` files get the browser's native controls (`video.controls = !hlsMode` in `apps/client/src/player.js`). Remux and transcode get the custom `#controls` bar in `public/player.html`, because every seek outside what the browser can still play starts a new session and the native timeline only knows that session. As a result:
 
 - Controls look and behave differently from one release to the next.
 - Audio, Subtitles and Open in sit below the video, so fullscreen can't reach them.
@@ -85,7 +85,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
   `#pieces` and its 2 s background-gradient update are removed.
 - **Seek tooltip.** On hover or drag, show the time under the pointer and what a jump there will do. The rules mirror `seekTo()`:
   - Inside the browser buffer, or anywhere in `direct` mode when that part is on the NAS: just the time.
-  - Inside `[offset, offset + produced − 2]`: just the time.
+  - Inside the session's browser-seekable range (`video.seekable` shifted by `offset`): just the time.
   - Outside the converted range but on the NAS: "Restarts conversion here".
   - Not on the NAS: "Not downloaded yet. Starts when peers send it."
 - **Seek feedback.** When a seek restarts ffmpeg, the overlay says "Starting at 14:20…" with the spinner instead of the generic "Buffering…".
