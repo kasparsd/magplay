@@ -9,11 +9,15 @@ const ITEM_FIELDS = `infoHash contentType seeders publishedAt videoResolution ep
 const SEARCH = `query($input: TorrentContentSearchQueryInput!) { torrentContent { search(input: $input) {
   hasNextPage items { ${ITEM_FIELDS} } } } }`
 
-// Counts are slow on a big index (tens of seconds for TV), so they're a separate, cacheable query
+// Counts are slow on a big index (tens of seconds for TV), so they're a separate, cacheable query.
+// Within its default aggregation budget BitMagnet answers some counts with Postgres planner estimates, which can be off
+// by 100× (film genres: Drama ≈675 against an exact 82,587). Exact ones cost 35–50 s per type and starve searches while
+// they run, so the budget stays and estimated counts are marked for the page to leave out.
 const FACETS = `query($input: TorrentContentSearchQueryInput!) { torrentContent { search(input: $input) {
-  aggregations { genre { value label count } releaseYear { value count } videoResolution { value count } } } } }`
+  aggregations { genre { value label count isEstimate } releaseYear { value count isEstimate } videoResolution { value count isEstimate } } } } }`
 
 export const TYPES = ['movie', 'tv_show']
+export const TITLE_SEARCH_LIMIT = 100
 
 /** A release as the pages show it, with the same title badges as search results. */
 export function toRelease (item) {
@@ -60,7 +64,8 @@ export function groupTitles (items) {
   return [...groups.values()].map(({ releases, ...title }) => {
     const bySeeders = [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
     const best = bySeeders.find(r => r.likelyDirect) ?? bySeeders[0]
-    return { ...title, releaseCount: releases.length, seeders: bySeeders[0].seeders, playable: releases.some(r => r.likelyDirect), best: best.infoHash }
+    // Only this page's releases are grouped here, so there's no release count: the title page has the full list
+    return { ...title, seeders: bySeeders[0].seeders, playable: releases.some(r => r.likelyDirect), best: best.infoHash }
   })
 }
 
@@ -81,9 +86,9 @@ function filterFacets ({ type, genre, year, resolution }) {
 export function createBitmagnetBrowser ({ url }, { fetch: fetchImpl = globalThis.fetch } = {}) {
   const endpoint = new URL('/graphql', url).href
 
-  async function search (input, signal, query = SEARCH) {
+  async function search (variables, signal, query = SEARCH) {
     const res = await request(fetchImpl, endpoint, {
-      method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables: { input } }),
+      method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }),
     })
     const body = await res.json()
     if (body.errors?.length) throw new SourceError(`BitMagnet: ${body.errors[0].message}`)
@@ -94,11 +99,13 @@ export function createBitmagnetBrowser ({ url }, { fetch: fetchImpl = globalThis
     /** A page of titles. Filters: genre (e.g. tmdb:35), year, resolution (e.g. V1080p); sort 'seeders' or 'added'. */
     async browse ({ type = 'movie', genre, year, resolution, sort = 'seeders', page = 1 } = {}, { signal } = {}) {
       const r = await search({
-        facets: filterFacets({ type, genre, year, resolution }),
-        orderBy: [{ field: sort === 'added' ? 'published_at' : 'seeders', descending: true }],
-        limit: 100,
-        page,
-        hasNextPage: true,
+        input: {
+          facets: filterFacets({ type, genre, year, resolution }),
+          orderBy: [{ field: sort === 'added' ? 'published_at' : 'seeders', descending: true }],
+          limit: 100,
+          page,
+          hasNextPage: true,
+        }
       }, signal)
       return { titles: groupTitles(r.items), hasMore: !!r.hasNextPage }
     },
@@ -107,32 +114,40 @@ export function createBitmagnetBrowser ({ url }, { fetch: fetchImpl = globalThis
     async facets ({ type = 'movie', genre, year, resolution } = {}, { signal } = {}) {
       const facets = filterFacets({ type, genre, year, resolution })
       for (const name of ['genre', 'releaseYear', 'videoResolution']) facets[name] = { ...facets[name], aggregate: true }
-      const r = await search({ facets, limit: 1, cached: true }, signal, FACETS)
+      const r = await search({ input: { facets, limit: 1, cached: true } }, signal, FACETS)
       const agg = r.aggregations ?? {}
+      // Any count still estimated is marked, so the page can say so instead of showing it as exact
+      const entry = ({ value, count, isEstimate }) => ({ value, count, ...(isEstimate && { estimate: true }) })
       return {
-        genres: (agg.genre ?? []).map(g => ({ value: g.value, label: g.label, count: g.count })).sort((a, b) => b.count - a.count),
-        years: (agg.releaseYear ?? []).filter(y => y.value).map(y => ({ value: y.value, count: y.count })).sort((a, b) => b.value - a.value),
-        resolutions: (agg.videoResolution ?? []).map(v => ({ value: v.value, count: v.count })),
+        genres: (agg.genre ?? []).map(g => ({ ...entry(g), label: g.label })).sort((a, b) => b.count - a.count),
+        years: (agg.releaseYear ?? []).filter(y => y.value).map(entry).sort((a, b) => b.value - a.value),
+        resolutions: (agg.videoResolution ?? []).map(entry),
       }
     },
 
     /** The newest releases, matched or not (adult ones hidden). */
     async latest ({ type = 'movie', limit = 20 } = {}, { signal } = {}) {
-      const r = await search({ facets: { contentType: { filter: [type] } }, orderBy: [{ field: 'published_at', descending: true }], limit }, signal)
+      const r = await search({ input: { facets: { contentType: { filter: [type] } }, orderBy: [{ field: 'published_at', descending: true }], limit } }, signal)
       return r.items.filter(shown).map(item => ({ ...toRelease(item), title: item.content ? toTitle(item.content) : null }))
     },
 
-    /** A film or show with its releases, found by searching its name and keeping exact matches. */
+    /**
+     * A film or show with its releases, found by searching its name and keeping exact matches.
+     * Only the TITLE_SEARCH_LIMIT most-seeded search hits are read; `truncated` says there were more.
+     */
     async title ({ type, source, id, title, year }, { signal } = {}) {
       const r = await search({
-        queryString: [title, year].filter(Boolean).join(' '),
-        facets: { contentType: { filter: [type] } },
-        orderBy: [{ field: 'seeders', descending: true }],
-        limit: 100,
+        input: {
+          queryString: [title, year].filter(Boolean).join(' '),
+          facets: { contentType: { filter: [type] } },
+          orderBy: [{ field: 'seeders', descending: true }],
+          limit: TITLE_SEARCH_LIMIT,
+          hasNextPage: true,
+        }
       }, signal)
       const matches = r.items.filter(i => shown(i) && i.content?.source === source && String(i.content.id) === String(id))
       if (!matches.length) return null
-      return { ...toTitle(matches[0].content), releases: matches.map(toRelease) }
+      return { ...toTitle(matches[0].content), releases: matches.map(toRelease), truncated: !!r.hasNextPage }
     },
   }
 }
