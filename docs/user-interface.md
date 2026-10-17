@@ -160,6 +160,8 @@ Each lane's label shows the current value. In `direct` mode the Transcoder lane 
 
 **Implementation checklist**
 
+The first two items are pulled forward as playback instrumentation ([roadmap](roadmap.md#what-to-do-next) item 2), ahead of steps 1–2.
+
 - [ ] Keep `fps` from `-progress`, and add `cpu` (share of all cores, or `null`) to the session state and `sessionStats` in `apps/server/src/sessions.js`, with unit tests that use a fake `/proc` reader.
 - [ ] Add both fields to the shared API contract types.
 - [ ] Add a 90-sample ring buffer in `apps/client/src/player.js`, fed by `pollStatus` and by `waiting`/`playing` events for stalls.

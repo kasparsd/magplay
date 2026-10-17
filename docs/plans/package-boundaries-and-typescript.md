@@ -1,16 +1,18 @@
 # Package boundaries and TypeScript
 
-Status: **In progress (Phase 3 next)** · Owner: unassigned · Last updated: 2026-10-17
+Status: **In progress (Phases 3–4 scheduled; 5–6 on touch)** · Owner: unassigned · Last updated: 2026-10-17
 
 The target structure, its reasons and its rules are canonical in [architecture.md](../architecture.md); priority and completion evidence are in [the roadmap](../roadmap.md). This plan tracks how we get there.
 
 ## Goal
 
-Reorganize the code into isolated internal packages with one-way dependencies, convert every first-party file to strict TypeScript and bring it under ESLint in the same pass. Each file is converted and moved once.
+Reorganize the code into isolated internal packages with one-way dependencies, in strict TypeScript under ESLint. Each file is converted and moved once.
+
+**Scope (revised 2026-10-17, see [the roadmap](../roadmap.md#why-this-order)):** Phases 0–4 are scheduled work, because they carry the structural payoff: typed upstream parsing, factories with `close()`, graceful shutdown and a typed server. Phases 5–6 (client pages, tests, scripts, config) happen on touch: a file becomes `.ts` when it is next changed for another reason. The player is rewritten in TypeScript by the [Player roadmap](../user-interface.md#player-roadmap) rather than converted first. Phase 7's review runs once Phase 4 is done.
 
 ### Success criteria
 
-- All first-party code lives in `packages/*`, `apps/*`, `tests/` and `tools/scripts/` as `.ts`. No first-party `.js`/`.mjs` remains outside gitignored build output, except `eslint.config.js` (Decision 10).
+- All first-party code lives in `packages/*`, `apps/*`, `tests/` and `tools/scripts/`. Everything in `packages/*` and `apps/server` is `.ts` (the scheduled criterion). Client pages, tests and scripts reach `.ts` on touch; until then `allowJs` stays on for `apps/client` and the root tooling, and `eslint.config.js` stays JavaScript (Decision 10).
 - Packages follow the dependency graph in the architecture doc. Each declares its dependencies in its own `package.json`, and an undeclared import fails type checking.
 - Core packages throw typed errors; only `apps/server` knows HTTP statuses.
 - No work at import time. Every owner of processes, timers, ports or directories is created by a factory and released by `close()`. `apps/server/main.ts` runs startup and graceful shutdown.
@@ -123,26 +125,32 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 - [ ] Tests construct packages with factories instead of relying on module state; add a graceful-shutdown test.
 - [ ] Convert with tests; remove `allowJs` from the server and packages.
 
-### Phase 5: Client pages
+### Phase 5: Client pages (on touch)
 
-- [ ] Convert `capabilities`, then the `search`, `explore`, `title`, `torrent` and `player` entries. The player keeps its imperative lifecycle ([lifetime rules](../lifecycle.md)); per-activation state objects are fine where they fall out naturally.
-- [ ] Add a typed `requireElement(selector, ctor)` helper instead of non-null assertions.
-- [ ] Remove `allowJs` from `apps/client`.
+Not a dedicated sweep. Each page entry is converted the next time it changes substantively; `player.js` is replaced by the TypeScript rewrite in [Player step 1](../user-interface.md#1-one-player-chrome-for-every-mode). `capabilities` converts with Phase 4, when it starts importing codec keys from `playback`.
 
-### Phase 6: Tests, scripts and config files
+- [ ] Convert `capabilities`, then the `search`, `explore`, `title`, `torrent` and `player` entries as they are touched. The player keeps its imperative lifecycle ([lifetime rules](../lifecycle.md)); per-activation state objects are fine where they fall out naturally.
+- [ ] Add a typed `requireElement(selector, ctor)` helper instead of non-null assertions, with the first page conversion.
+- [ ] Remove `allowJs` from `apps/client` once the last page is converted.
+
+### Phase 6: Tests, scripts and config files (on touch)
+
+As Phase 5: convert a test or script when it is next changed. The closing items wait until nothing is left.
 
 - [ ] `tests/e2e/*`, `tests/fixtures/*`, `tests/integration/*` (types for `bittorrent-tracker` and `create-torrent`).
 - [ ] `tools/scripts/setup-indexers` and `tools/scripts/check-docker` → `.ts`; `playwright.config` → `.ts`.
-- [ ] Remove `allowJs` everywhere; add a CI check that fails on first-party `.js`/`.mjs`.
+- [ ] When nothing is left: remove `allowJs` everywhere and add a CI check that fails on first-party `.js`/`.mjs`.
 - [ ] Widen the type-aware block in `eslint.config.js` from `**/*.ts` to every file.
 
 ### Phase 7: Tighten and document
+
+Runs once Phase 4 is done, since Phase 4 adds most vendor-boundary types (`webtorrent`, `parse-torrent`). Its doc updates happen with each phase rather than at the end.
 
 - [ ] Review every `any`, `as unknown as`, non-null `!` and `@ts-expect-error`; justify or remove each.
 - [ ] Consider `noPropertyAccessFromIndexSignature` and `noUnusedLocals`/`noUnusedParameters`.
 - [ ] Evaluate typescript-eslint `strictTypeChecked` and `stylisticTypeChecked`; enable the rules that find real issues without noise. Review every inline `eslint-disable`.
 - [ ] Update `README.md` (layout, dev workflow, requirements), `DEPENDENCIES.md`, `docs/architecture.md` (mark delivered, remove the findings table if obsolete), the roadmap entry and the test READMEs.
-- [ ] Mark this plan complete.
+- [ ] Mark the scheduled scope (Phases 0–4 and 7) complete. Phases 5–6 stay open until their last file converts.
 
 ## Progress tracker
 
@@ -153,9 +161,9 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 | 2 | Contract and pure packages | ✅ Done | `ee3ae1d`, `8c1b76c`…`00ef1de` | `api-contract`, `release-info`, `seekable-tar`, `http-kit`, boundary lint rules, `toHttpError` and the pure client helpers |
 | 3 | Indexers | ⬜ Not started | | |
 | 4 | Torrent engine, playback, server split | ⬜ Not started | | |
-| 5 | Client pages | ⬜ Not started | | |
-| 6 | Tests, scripts, config files | ⬜ Not started | | |
-| 7 | Tighten and document | ⬜ Not started | | |
+| 5 | Client pages | ⬜ On touch | | Player rewritten in TS by Player step 1 |
+| 6 | Tests, scripts, config files | ⬜ On touch | | |
+| 7 | Tighten and document | ⬜ Not started | | After Phase 4 |
 
 Legend: ⬜ Not started · 🟨 In progress · ✅ Done · ⛔ Blocked
 
@@ -207,3 +215,4 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - 2026-10-17: Package-boundary lint rules enabled. Test files are exempt from the Node built-ins ban because they import `node:test` and `node:assert`.
 - 2026-10-17: `apps/server/src/errors.ts` added with `HttpError` and `toHttpError`; `config.js` no longer exports `httpError`, and the server's error handler goes through `toHttpError` (same statuses, `Retry-After` and logging as before).
 - 2026-10-17: Pure client helpers converted to `.ts` with their tests; `apps/client` split into app and test projects so tests get Node types without leaking them into page code. Lint `files` globs for client tests name their extensions (`*.test.{js,ts}`), because a bare `*.test.*` also matched `tsconfig.test.json` and made ESLint parse it. Phase 2 complete: typecheck, lint, 110 unit + 4 peer + 19 e2e tests and the isolated Docker check pass (linux/arm64, remux first segment 219 ms, seek-to-30 s 216 ms).
+- 2026-10-17: Scope revised with the roadmap reorder. Phases 3–4 stay scheduled (roadmap item 5, after the UI bug fixes, playback instrumentation, real-world acceptance and advisory triage). Phases 5–6 become convert-on-touch, the player is rewritten in TypeScript by the Player roadmap instead of being converted first, and Phase 7 runs after Phase 4. The "every file is `.ts`" success criterion now applies to `packages/*` and `apps/server`.

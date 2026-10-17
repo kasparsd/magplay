@@ -2,7 +2,7 @@
 
 ## Scope and direction
 
-A single-user media app for a trusted local network/NAS, with no accounts. Keep the Node service and multi-page browser clients. Prioritize watching reliably on the actual device. Alongside that, reorganize the code into isolated packages and strict TypeScript now, while it is cheap (decided 2026-10-17; see [architecture](architecture.md)).
+A single-user media app for a trusted local network/NAS, with no accounts. Keep the Node service and multi-page browser clients. Prioritize watching reliably on the actual device. Alongside that, finish splitting the server into isolated, strictly typed packages while it is cheap (decided 2026-10-17; see [architecture](architecture.md)); the remaining client, test and script files become TypeScript when they are next changed.
 
 **Not for public/untrusted exposure:** there is no authentication or request-origin protection. Resource safeguards are now present, but they are not an authorization boundary. Require an authenticated gateway or application-level protection before changing that deployment assumption.
 
@@ -46,20 +46,35 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-| Priority | Work | Completion evidence |
-| --- | --- | --- |
-| **P1** | **Validate representative playback on the NAS** | Record cold/warm startup, seeking, peak/sustained CPU/memory, ffmpeg speed, large-cache verification and disk-pressure behavior using the actual deployment and typical media. Follow [the acceptance procedure](deployment-acceptance.md). Tune limits from those results. |
-| **P1** | **Package boundaries, TypeScript and linting** (Phases 0–2 done; Phase 3 indexers next, then the Phase 4 server split) | All first-party code lives in `packages/*` and `apps/*` as strict TypeScript under ESLint; core packages throw typed errors instead of HTTP statuses; no work at import time and every resource owner has `close()`; server and client share `api-contract`; typecheck, lint, unit, peer, e2e and Docker checks pass. Tracked in [the plan](plans/package-boundaries-and-typescript.md). Runs in parallel with NAS validation, which is mostly manual measurement. |
-| **P1** | Triage the dependency advisory | Record relevant vulnerable call paths and exposure, then adopt a compatible patch/upgrade or explicitly document the accepted mitigation. Preserve peer/media regressions. |
-| **P2** | New player chrome, theater layout, performance graph | The three steps in the [Player roadmap](user-interface.md#player-roadmap), in order, each with its checklist complete. |
-| **P2** | Check the browsers/devices actually used | Exercise mobile controls/fullscreen, audio/subtitle switching and unsupported-format/external-player handoff. Add automated cases for observed failures, not a speculative matrix of every device. |
-| **P2** | Improve discovery/navigation where use shows friction | Intentional filter history/Back behavior, visible local retries, selected genres outside the top chips, useful source errors without hover-only explanations, honest title-list truncation. Avoid unrelated page migrations. Work through the [UI cleanup todo](user-interface.md#cleanup-todo) in its priority order. |
-| **P2** | Finish boundary/error hardening incrementally | Validate remaining ports/timeouts/cache settings and upstream shapes/URL schemes; bound indexer bodies/redirect policy; keep secrets out of logs. New resource settings already reject invalid values. |
-| **P2** | Observe long-session cache/shutdown behavior | Add TTL/size limits for probe/subtitle memory if warranted, readiness/diagnostics useful for troubleshooting, and targeted graceful-shutdown tests built on the package factories. |
-| **P3 / conditional** | Fingerprinted client assets | The esbuild client build now exists; add content hashes and immutable caching only if revalidating unversioned assets becomes a measured problem. Preserve multi-page URLs, Node-only deployment and media cache/range semantics; test the production artifact. |
-| **P3 / conditional** | Browser remux or cross-origin hosting | Prototype only for a demonstrated NAS CPU/compatibility or deployment need. Measure seeking, memory and fallback behavior first. General browser video transcoding is not planned. |
+Reordered on 2026-10-17 after Phases 0–2 of the TypeScript work landed. Work top to bottom; items in the same priority can run in parallel where they don't touch the same files.
 
-**Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. The current player can be split further if future fixes become materially easier that way. The package/TypeScript reorganization above is the one scheduled structural change, and it must not change behavior.
+| # | Priority | Work | Completion evidence |
+| --- | --- | --- | --- |
+| 1 | **P1** | **Fix the known broken UI behaviour** | Every item under [P1: broken behaviour](user-interface.md#p1-broken-behaviour) is ticked: the clipped More menu, `[hidden]` being overridden, stale Explore genres, invalid Explore `type`, and the unknown-file Player state. Add an e2e case where it is cheap. |
+| 2 | **P1** | **Instrument playback for measurement** | `fps` and ffmpeg `cpu` (share of all cores, `null` without `/proc`) in `sessionStats` and `api-contract`, with unit tests using a fake `/proc` reader, shown in ⓘ Details. These are the server half of [Player step 3](user-interface.md#3-playback-performance-graph), pulled forward so item 3 produces numbers rather than impressions. |
+| 3 | **P1** | **Real-world acceptance: the NAS and the devices actually used** | On the actual deployment with typical media: cold/warm startup, seeking, peak/sustained CPU/memory, ffmpeg speed, large-cache verification and disk-pressure behaviour, following [the acceptance procedure](deployment-acceptance.md). On each browser/device in use: mobile controls and fullscreen, audio/subtitle switching, and unsupported-format/external-player handoff. Record a dated checkpoint, tune limits from it, and turn each observed failure into a test or a Player roadmap item. |
+| 4 | **P1** | Triage the dependency advisory (time-boxed to half a day) | Record whether the vulnerable `ip` call paths are reachable here and what is exposed, then adopt a compatible patch/upgrade or document the accepted mitigation. Preserve peer/media regressions. |
+| 5 | **P1** | **TypeScript Phases 3–4: indexers, torrent engine, playback, server split** | The [plan](plans/package-boundaries-and-typescript.md)'s Phases 3 and 4 are done: `indexers`, `torrent-engine` and `playback` packages; factories with `close()` and no work at import time; `main.ts` with graceful shutdown and a test for it; server handlers typed against `api-contract`. No behaviour change; every suite and the Docker check pass. |
+| 6 | **P2** | Player chrome and theater layout ([Player steps 1–2](user-interface.md#player-roadmap)) | Each step's checklist is complete. Write the new player in TypeScript (this replaces converting the old `player.js` first) and fold in item 3's device findings. |
+| 7 | **P2** | Playback performance graph ([Player step 3](user-interface.md#3-playback-performance-graph)) | The client half of the checklist, built on item 2's fields. |
+| 8 | **P2** | Remaining UI cleanup and discovery friction | The [cleanup todo](user-interface.md#cleanup-todo) P2–P4 items in order; intentional filter history/Back behaviour, visible local retries, selected genres outside the top chips, useful source errors without hover-only explanations, honest title-list truncation. Avoid unrelated page migrations. |
+| 9 | **P2** | Finish boundary/error hardening | Validate remaining ports/timeouts/cache settings; bound indexer bodies and redirect policy; keep secrets out of logs. Upstream response shapes and URL schemes are covered by item 5's Phase 3 parse functions. |
+| 10 | **P2** | Observe long-session cache/shutdown behaviour | After item 5: TTL/size limits for probe/subtitle memory if warranted, readiness/diagnostics useful for troubleshooting, and targeted shutdown tests built on the package factories. |
+| 11 | **P3 / on touch** | The rest of the TypeScript conversion | The other client pages, tests and scripts become `.ts` when they are next changed for another reason. There is no dedicated sweep. The plan's Phase 7 review runs once item 5 is done. |
+| 12 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Not scheduled. Start only if a second interface language is actually wanted, and then with the smallest version: `Intl.PluralRules` plus one catalog. Catalog tooling and AI translation wait until there is more than one language to maintain. |
+| 13 | **P3 / conditional** | Fingerprinted client assets | Add content hashes and immutable caching only if revalidating unversioned bundles becomes a measured problem. Preserve multi-page URLs, Node-only deployment and media cache/range semantics, and test the production artifact. |
+| 14 | **P3 / conditional** | Browser remux or cross-origin hosting | Prototype only for a demonstrated NAS CPU/compatibility or deployment need. Measure seeking, memory and fallback behaviour first. General browser video transcoding is not planned. |
+
+### Why this order
+
+- **The product goal comes first.** Every item in the earlier P1 list except the refactor needed a person at the NAS, so the refactor was the only thing moving. Items 1–4 put the stated priority back on top: items 1 and 2 are a few hours of agent work, and item 3 is the measurement session they prepare for.
+- **Known bugs before structure.** The five broken-behaviour items are small CSS and state fixes that a user hits today. They should not wait behind a seven-phase reorganization.
+- **Only the refactor's payoff phases are scheduled.** Phases 3–4 give the server typed upstream parsing, factories, `close()` and graceful shutdown, which items 9 and 10 build on. Converting the remaining client pages, tests and scripts mostly changes syntax. Doing it on touch costs nothing extra, while a sweep would conflict with items 6–8, which rewrite the same files.
+- **Don't convert code that is about to be replaced.** Item 6 rewrites most of `player.js`. Converting it first and then rewriting it is double work.
+- **Instrument, then measure, then redesign.** Item 2's numbers make item 3 useful, and item 3's device findings feed the chrome redesign in item 6.
+- **Item 2 touches `sessions.js` just before Phase 4 moves it.** The change is a few lines, so it will move with the file.
+
+**Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Item 6 reshapes the player's chrome, not its lifecycle ([lifetime rules](lifecycle.md)). Phases 3–4 are the scheduled structural work, and they must not change behaviour.
 
 Before public/untrusted exposure, authentication, media/API access protection and Origin/CSRF handling become mandatory deployment gates. They are intentionally not account features on the local-only roadmap.
 
