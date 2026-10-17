@@ -1,78 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { test, expect } from './fixtures.js'
-
-const direct = 'Playback.S01E01.mp4'
-const remux = 'Playback.S01E02.mkv'
-const playResponse = page => page.waitForResponse(r => r.url().endsWith('/api/play') && r.request().method() === 'POST')
-
-async function expectPlaying (page) {
-  await expect.poll(() => page.locator('#video').evaluate(v => ({
-    ready: v.readyState >= 2,
-    playing: !v.paused,
-    width: v.videoWidth,
-    frames: v.getVideoPlaybackQuality().totalVideoFrames > 0,
-    error: v.error?.message ?? null,
-  }))).toEqual({ ready: true, playing: true, width: 320, frames: true, error: null })
-  const frames = await page.locator('#video').evaluate(v => v.getVideoPlaybackQuality().totalVideoFrames)
-  await expect.poll(() => page.locator('#video').evaluate(v => v.getVideoPlaybackQuality().totalVideoFrames)).toBeGreaterThan(frames)
-}
-
-async function openPlayer (page, app, file) {
-  const response = playResponse(page)
-  await page.goto(app.player(file))
-  const res = await response
-  expect(res.ok(), await res.text()).toBeTruthy()
-  const decision = await res.json()
-  await expectPlaying(page)
-  return decision
-}
-
-async function seek (page, seconds) {
-  await page.locator('#seek').evaluate((input, seconds) => {
-    input.value = seconds
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    input.dispatchEvent(new Event('change', { bubbles: true }))
-  }, seconds)
-  // The slider keeps the dragged value until the next timeupdate publishes the
-  // real position; wait for one tick so polls can't pass on the stale value.
-  // Bounded: a seek that restarts the HLS session has no ticks until then.
-  await page.locator('#video').evaluate(v => new Promise(resolve => {
-    const timer = setTimeout(resolve, 5000)
-    v.addEventListener('timeupdate', () => { clearTimeout(timer); resolve() }, { once: true })
-  }))
-}
-
-async function expectCues (page, text) {
-  await expect.poll(() => page.locator('#video').evaluate(v =>
-    [...v.textTracks[0].cues ?? []].map(c => c.text))).toContain(text)
-}
-
-/** Serves only the first `segments` of every HLS playlist, so the browser's seekable range stays fixed however fast ffmpeg works. */
-async function capHlsPlaylist (page, segments = 3) {
-  await page.route('**/hls/*/index.m3u8', async route => {
-    const response = await route.fetch()
-    const kept = []
-    let seen = 0
-    for (const line of (await response.text()).split('\n')) {
-      if (seen >= segments) break
-      kept.push(line)
-      if (line.endsWith('.m4s')) seen++
-    }
-    const headers = { ...response.headers() }
-    delete headers['content-length']
-    delete headers['transfer-encoding']
-    await route.fulfill({ response, headers, body: kept.join('\n') })
-  })
-}
-
-/** Seconds of media ffmpeg has written into the current HLS session, read from disk — unaffected by what the browser was served. */
-async function producedSeconds (app) {
-  const [session] = await fs.readdir(path.join(app.cache, 'hls'))
-  if (!session) return 0
-  const text = await fs.readFile(path.join(app.cache, 'hls', session, 'index.m3u8'), 'utf8').catch(() => '')
-  return [...text.matchAll(/#EXTINF:([\d.]+)/g)].reduce((sum, m) => sum + Number(m[1]), 0)
-}
+import { capHlsPlaylist, chooseAudio, chooseSubtitles, direct, expectCues, expectPlaying, openPlayer, playResponse, producedSeconds, remux, seek } from './helpers.js'
 
 test('cold concurrent torrent/probe requests share one initialization', async ({ page, app }) => {
   const responses = await Promise.all(Array.from({ length: 8 }, (_, i) =>
@@ -104,7 +33,7 @@ test('MKV/AC3 remux: seek, switch audio, restart before session offset', async (
   await seek(page, 35)
   await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(35)
   const switching = playResponse(page)
-  await page.locator('#audio').selectOption('1')
+  await chooseAudio(page, 1)
   const switched = await (await switching).json()
   expect(switched.mode).toBe('remux')
   expect(switched.offset).toBeGreaterThanOrEqual(35)
@@ -149,10 +78,10 @@ test('rapid audio changes preserve position and leave only the latest session', 
     await route.fulfill({ response })
   })
   try {
-    await page.locator('#audio').selectOption('1')
+    await chooseAudio(page, 1)
     await blocked
-    await page.locator('#audio').selectOption('0')
-    await page.locator('#audio').selectOption('1')
+    await chooseAudio(page, 0)
+    await chooseAudio(page, 1)
     release()
     await expect.poll(() => requests.length).toBe(2)
     expect(requests.at(-1).audio).toBe(1)
@@ -164,12 +93,12 @@ test('rapid audio changes preserve position and leave only the latest session', 
 
 test('embedded and external subtitles follow a restarted HLS offset', async ({ page, app }) => {
   await openPlayer(page, app, remux)
-  await page.locator('#subs').selectOption('embedded:0')
+  await chooseSubtitles(page, 'embedded:0')
   await expectCues(page, 'First subtitle')
   await seek(page, 30)
   await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(30)
   const switching = playResponse(page)
-  await page.locator('#audio').selectOption('1')
+  await chooseAudio(page, 1)
   const decision = await (await switching).json()
   await expectPlaying(page)
   await expectCues(page, 'Middle subtitle')
@@ -177,20 +106,20 @@ test('embedded and external subtitles follow a restarted HLS offset', async ({ p
   const embeddedStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
   expect(Math.abs(embeddedStart - (70 - decision.offset))).toBeLessThan(2)
   const external = `file:${app.files['Playback.S01E02.srt']}`
-  await page.locator('#subs').selectOption(external)
+  await chooseSubtitles(page, external)
   await expectCues(page, 'Last subtitle')
   const lastStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
   expect(lastStart).toBeCloseTo(70 - decision.offset, 0)
   // A → Off → A must not create duplicate polling loops/cues.
-  await page.locator('#subs').selectOption('')
-  await page.locator('#subs').selectOption(external)
+  await chooseSubtitles(page, '')
+  await chooseSubtitles(page, external)
   await expectCues(page, 'Last subtitle')
   expect(await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].filter(c => c.text === 'Last subtitle').length)).toBe(1)
 })
 
 test('direct playback can load external subtitles without an HLS session', async ({ page, app }) => {
   expect((await openPlayer(page, app, direct)).mode).toBe('direct')
-  await page.locator('#subs').selectOption(`file:${app.files['Playback.S01E02.srt']}`)
+  await chooseSubtitles(page, `file:${app.files['Playback.S01E02.srt']}`)
   await expectCues(page, 'Last subtitle')
   const lastStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
   expect(lastStart).toBe(70)
@@ -338,7 +267,7 @@ test('HLS resume uses absolute file position after audio/seek session offsets', 
   await seek(page, 30)
   await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(30)
   const switching = playResponse(page)
-  await page.locator('#audio').selectOption('1')
+  await chooseAudio(page, 1)
   await switching
   await expectPlaying(page)
   await page.locator('#video').evaluate(v => v.pause())

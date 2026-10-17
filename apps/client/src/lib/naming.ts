@@ -31,3 +31,25 @@ export function sameLanguage (a: string | null | undefined, b: string | null | u
 export function pickByLanguage<T extends { language: string | null }> (tracks: readonly T[], language: string | null | undefined): T | undefined {
   return language ? tracks.find(t => sameLanguage(t.language, language)) : undefined
 }
+
+const LANGUAGES = new Intl.DisplayNames(['en'], { type: 'language' })
+
+/** "eng" → "English"; unknown codes are returned as they are, missing ones as ''. */
+export function languageName (code: string | null | undefined): string {
+  if (!code || code === 'und') return ''
+  try {
+    const name = LANGUAGES.of(code)
+    return name && name !== 'root' ? name : code
+  } catch {
+    return code
+  }
+}
+
+const CODECS: Record<string, string> = { aac: 'AAC', ac3: 'AC3', eac3: 'E-AC3', dts: 'DTS', truehd: 'TrueHD', mp3: 'MP3', mp2: 'MP2', opus: 'Opus', vorbis: 'Vorbis', flac: 'FLAC' }
+const CHANNELS: Record<number, string> = { 1: 'mono', 2: 'stereo', 6: '5.1', 8: '7.1' }
+
+/** "AC3 5.1", "MP3 stereo". */
+export function audioFormat (codec: string, channels: number): string {
+  const name = CODECS[codec] ?? (codec.startsWith('pcm') ? 'PCM' : codec.toUpperCase())
+  return `${name} ${CHANNELS[channels] ?? `${channels} ch`}`
+}

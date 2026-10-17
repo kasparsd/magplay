@@ -1,6 +1,17 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { languageFromName, pickByLanguage, releaseName, sameLanguage } from './naming.ts'
+import { audioFormat, languageFromName, languageName, pickByLanguage, releaseName, sameLanguage } from './naming.ts'
+
+test('human language names and audio formats', () => {
+  assert.equal(languageName('eng'), 'English')
+  assert.equal(languageName('lav'), 'Latvian')
+  assert.equal(languageName('und'), '')
+  assert.equal(languageName(null), '')
+  assert.equal(languageName('qqq'), 'qqq')
+  assert.equal(audioFormat('ac3', 6), 'AC3 5.1')
+  assert.equal(audioFormat('mp3', 2), 'MP3 stereo')
+  assert.equal(audioFormat('pcm_s16le', 3), 'PCM 3 ch')
+})
 
 test('release names lose years, episodes and technical tags', () => {
   assert.equal(releaseName('Fleabag.S01.1080p.BluRay.x264-SHORTBREHD'), 'Fleabag')

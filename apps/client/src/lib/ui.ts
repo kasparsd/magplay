@@ -85,9 +85,14 @@ export function menu (label: string | Node, items: Child[], { title = '', classN
   const summary = el('summary', { title })
   summary.append(label)
   if (ariaLabel) summary.setAttribute('aria-label', ariaLabel)
+  // A summary isn't announced as a button everywhere; say what it is and whether it is open
+  summary.setAttribute('role', 'button')
+  summary.setAttribute('aria-haspopup', 'menu')
+  summary.setAttribute('aria-expanded', 'false')
   const list = el('div', { className: `menu-items${up ? ' up' : ''}` }, ...items)
   const box = el('details', { className: `menu ${className}`.trim() }, summary, list)
   box.addEventListener('toggle', () => {
+    summary.setAttribute('aria-expanded', String(box.open))
     if (!box.open) return
     for (const other of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) if (other !== box) other.open = false
     list.style.left = ''

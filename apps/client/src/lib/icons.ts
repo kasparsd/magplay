@@ -32,7 +32,7 @@ export function icon (name: IconName): SVGSVGElement {
   svg.append(path)
   if (name === 'back' || name === 'forward') {
     const text = document.createElementNS(SVG, 'text')
-    for (const [k, v] of Object.entries({ x: '12', y: '16.6', 'text-anchor': 'middle', 'font-size': '7', 'font-weight': '700' })) text.setAttribute(k, v)
+    for (const [k, v] of Object.entries({ x: '12', y: '16.6', 'text-anchor': 'middle', 'font-size': '7.5', 'font-weight': '700' })) text.setAttribute(k, v)
     text.textContent = '10'
     svg.append(text)
   }
