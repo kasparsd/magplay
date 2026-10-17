@@ -50,7 +50,7 @@ details.menu > summary::-webkit-details-marker { display: none; }
 details.menu.button > summary { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; }
 details.menu.button[open] > summary, details.menu.button > summary:hover { background: var(--hover); }
 .menu-items { position: absolute; left: 0; top: calc(100% + 4px); z-index: 10; min-width: 220px; max-width: min(320px, 90vw); display: flex; flex-direction: column; padding: 4px 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); font-size: 14px; }
-.menu-items.end { left: auto; right: 0; }
+.menu-items.up { top: auto; bottom: calc(100% + 6px); overflow-y: auto; }
 .menu-items > a, .menu-items > button { display: block; width: 100%; text-align: left; padding: 7px 14px; color: var(--fg); background: none; border: 0; border-radius: 0; font: inherit; }
 .menu-items > a:hover, .menu-items > button:hover { background: var(--hover); text-decoration: none; }
 .menu-items > button.copy { padding: 7px 14px; font: inherit; color: var(--fg); }
@@ -191,31 +191,113 @@ table.peers tr.choking { opacity: 0.55; }
 .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.5s; }
 
 /* Player */
-/* Video and overlay share one grid cell, so a message card makes the stage taller instead of spilling out */
-#stage { display: grid; background: #000; }
-#stage > video, #overlay { grid-area: 1 / 1; }
-#stage > #controls { grid-area: 2 / 1; }
-#stage:fullscreen { align-content: center; }
-video { display: block; width: 100%; max-height: 80vh; background: #000; }
-#controls { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #111; color: #eee; }
-#controls button { background: none; border: 0; color: inherit; padding: 4px 8px; }
-#seek { flex: 1; min-width: 0; padding: 0; }
-#time { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
-#pieces { height: 3px; margin-bottom: 8px; }
-.options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.options select { max-width: 70vw; }
-#overlay { position: relative; align-self: start; z-index: 1; pointer-events: none; }
+/* The stage is one grid cell: video, overlay, chrome and key sheet stack, so a tall message card makes the stage taller instead of spilling out.
+   Everything on the stage sits on video, so it uses fixed light-on-dark colours in both themes. */
+#stage {
+  --ov-fg: #f5f5f4; --ov-muted: #d6d3d1; --ov-accent: #60a5fa; --ov-focus: #93c5fd; --ov-panel: rgb(20 18 16 / 0.96); --ov-line: #44403c; --ov-hover: rgb(255 255 255 / 0.12);
+  --seek-track: rgb(255 255 255 / 0.16); --seek-nas: rgb(255 255 255 / 0.2); --seek-conv: rgb(255 255 255 / 0.38); --seek-buf: rgb(255 255 255 / 0.7);
+  position: relative; display: grid; grid-template: minmax(0, auto) / minmax(0, 1fr); container-type: inline-size; background: #000; color: var(--ov-fg);
+}
+#stage > * { grid-area: 1 / 1; }
+#stage > video { display: block; width: 100%; max-height: 80vh; align-self: center; background: #000; }
+#stage:fullscreen { grid-template: minmax(0, 1fr) / minmax(0, 1fr); width: 100%; height: 100%; }
+#stage:fullscreen > video { height: 100%; max-height: none; }
+#stage.idle { cursor: none; }
+#stage :focus-visible { outline: 2px solid var(--ov-focus); outline-offset: -2px; }
+#stage .icon { width: 24px; height: 24px; fill: currentColor; }
+#stage .icon text { font-family: system-ui, sans-serif; fill: currentColor; }
+
+/* Messages on the video: notices top left, a spinner in the middle, cards centred */
+#overlay { position: relative; z-index: 3; pointer-events: none; display: grid; align-self: stretch; min-height: 0; }
 #overlay > * { pointer-events: auto; }
 .toast { position: absolute; top: 10px; left: 10px; max-width: calc(100% - 20px); padding: 6px 10px; border-radius: 6px; background: rgb(0 0 0 / 0.72); color: #eee; font-size: 13px; }
+.toast.busy { top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 8px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toast.busy::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.5em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -0.1em; }
-.toast.warn { background: rgb(120 53 15 / 0.9); }
-#overlay .card { margin: 12px; max-width: 520px; padding: 12px 14px; border-radius: 8px; background: rgb(12 10 9 / 0.88); border: 1px solid #44403c; color: #eee; font-size: 14px; }
+.toast.warn { background: rgb(120 53 15 / 0.92); }
+.toast button.link { margin-left: 8px; padding: 0; border: 0; background: none; color: #bfdbfe; text-decoration: underline; font: inherit; }
+#stage:fullscreen .toast:not(.busy) { top: 72px; }
+#overlay .card { place-self: center; margin: 12px; max-width: min(520px, calc(100% - 24px)); padding: 12px 14px; border-radius: 8px; background: rgb(12 10 9 / 0.9); border: 1px solid var(--ov-line); color: #eee; font-size: 14px; }
 #overlay .card p { margin: 0 0 8px; }
 #overlay .card p.actions { margin: 0; }
-#overlay .card .button { color: #93c5fd; border-color: #57534e; }
-#overlay .card .button.primary { background: #60a5fa; border-color: #60a5fa; color: #111; }
-#overlay .card button.copy { font: 14px system-ui, sans-serif; color: #93c5fd; padding: 6px 4px; }
-.next { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+#overlay .card .button { color: var(--ov-focus); border-color: #57534e; }
+#overlay .card .button.primary { background: var(--ov-accent); border-color: var(--ov-accent); color: #111; }
+#overlay .card button.copy { font: 14px system-ui, sans-serif; color: var(--ov-focus); padding: 6px 4px; }
+
+/* The title on the video, in fullscreen only; it fades with the chrome */
+.screen-title { display: none; align-self: start; z-index: 2; padding: 16px 20px 48px; background: linear-gradient(rgb(0 0 0 / 0.7), transparent); font-size: 13px; transition: opacity 0.2s; pointer-events: none; }
+.screen-title b { display: block; font-size: 20px; font-weight: 650; }
+.screen-title span { color: var(--ov-muted); }
+#stage:fullscreen .screen-title { display: block; }
+
+/* The chrome: seek bar and one row of controls over the bottom of the video */
+.chrome { align-self: end; z-index: 2; padding: 36px 6px 4px; background: linear-gradient(transparent, rgb(0 0 0 / 0.55) 35%, rgb(0 0 0 / 0.8)); font-size: 13px; transition: opacity 0.2s; }
+#stage.idle .chrome, #stage.idle .screen-title { opacity: 0; pointer-events: none; }
+.chrome .controls { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.chrome .gap { flex: 1; min-width: 4px; }
+.chrome .ic, .chrome details.menu > summary { flex: none; display: inline-grid; place-items: center; min-width: 40px; height: 40px; padding: 0; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; }
+.chrome .ic:hover, .chrome details.menu > summary:hover, .chrome details.menu[open] > summary { background: var(--ov-hover); }
+.chrome details.menu > summary.on { box-shadow: inset 0 -3px 0 -1px var(--ov-accent); }
+.chrome .time { padding: 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chrome .pill { display: inline-block; padding: 3px 10px; border: 1px solid rgb(255 255 255 / 0.4); border-radius: 14px; font-size: 12px; line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chrome details.menu > summary:has(.pill) { padding: 0 4px; }
+a.pill-link { flex: none; display: inline-grid; place-items: center; min-width: 40px; height: 40px; padding: 0 4px; border-radius: 6px; color: inherit; }
+a.pill-link:hover { text-decoration: none; background: var(--ov-hover); }
+#stage .keysheet .ic { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 6px; background: none; color: inherit; }
+#stage .keysheet .ic:hover { background: var(--ov-hover); }
+
+/* Volume: a slim slider next to Mute */
+#volume { width: 64px; height: 40px; margin: 0 6px 0 0; padding: 0; border: 0; background: none; appearance: none; cursor: pointer; --vol: 100%; }
+#volume::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #fff var(--vol), rgb(255 255 255 / 0.3) var(--vol)); }
+#volume::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #fff var(--vol), rgb(255 255 255 / 0.3) var(--vol)); }
+#volume::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: #fff; }
+#volume::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; }
+
+/* Seek bar: four layers on one track (on the NAS, converted, in the browser, played) under a transparent range input.
+   The track is inset by half the thumb so the played layer ends where the thumb's centre is. */
+.seekbar { position: relative; height: 22px; margin: 0 4px; }
+.seekbar .track { position: absolute; left: 7px; right: 7px; top: 9px; height: 4px; border-radius: 2px; background: var(--seek-track); overflow: hidden; transition: top 0.1s, height 0.1s; }
+.seekbar:hover .track { top: 8px; height: 6px; }
+.seekbar .layer { position: absolute; inset: 0; }
+.seekbar .layer.played { right: auto; width: 0; background: var(--ov-accent); }
+#seek { position: absolute; inset: 0; width: 100%; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; appearance: none; cursor: pointer; }
+#seek::-webkit-slider-runnable-track { height: 22px; background: none; }
+#seek::-moz-range-track { background: none; }
+#seek::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: 4px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25); }
+#seek::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
+#seek:focus-visible { outline-offset: 0; border-radius: 4px; }
+.seektip { position: absolute; bottom: 26px; left: 0; z-index: 1; transform: translateX(-50%); padding: 6px 9px; border-radius: 6px; background: var(--ov-panel); border: 1px solid var(--ov-line); font-size: 12px; line-height: 1.35; white-space: nowrap; pointer-events: none; }
+.seektip b { display: block; font-size: 13px; font-variant-numeric: tabular-nums; }
+.seektip span:empty { display: none; }
+
+/* Chrome menus open upward inside the stage, as dark panels */
+.chrome .menu-items { min-width: 200px; background: var(--ov-panel); border-color: var(--ov-line); color: var(--ov-fg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.5); }
+.chrome .menu-items > a, .chrome .menu-items > button, .chrome .menu-items > button.copy { position: relative; padding: 9px 14px 9px 34px; color: var(--ov-fg); }
+.chrome .menu-items > a:hover, .chrome .menu-items > button:hover { background: var(--ov-hover); }
+.chrome .menu-items > button:disabled { opacity: 0.5; cursor: default; background: none; }
+.chrome .menu-heading { color: #a8a29e; padding-left: 34px; }
+.chrome .menu-items hr { border-top-color: var(--ov-line); }
+.menu-items .choice[aria-checked="true"]::before { content: ""; position: absolute; left: 15px; top: 50%; width: 5px; height: 10px; margin-top: -7px; border: solid var(--ov-accent, var(--accent)); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+
+/* Below 600 px of stage width: no ±10 s, volume slider, Speed or Next label; Speed moves into More */
+@container (max-width: 599.98px) {
+  .chrome .wide-only { display: none !important; }
+  .chrome .time { padding: 0 4px; }
+}
+@container (min-width: 600px) {
+  .chrome .narrow-only { display: none !important; }
+}
+
+/* The ? key sheet, over the video so it works in fullscreen */
+.keysheet { place-self: center; z-index: 4; width: min(460px, calc(100% - 24px)); margin: 12px 0; padding: 6px 8px 12px 18px; border-radius: 10px; background: var(--ov-panel); border: 1px solid var(--ov-line); font-size: 13px; }
+.keysheet-head { display: flex; align-items: center; justify-content: space-between; }
+.keysheet h2 { margin: 0; font-size: 15px; }
+.keysheet dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 4px 10px 0 0; }
+.keysheet dd { margin: 0; color: var(--ov-muted); }
+kbd { display: inline-block; min-width: 1.7em; padding: 1px 5px; border: 1px solid #57534e; border-bottom-width: 2px; border-radius: 4px; font: 12px ui-monospace, monospace; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) { .chrome, .screen-title, .seekbar .track { transition: none; } }
+
+.options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .muted { color: var(--muted); }
 details.details { margin-top: 12px; font-size: 13px; }
 details.details > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }

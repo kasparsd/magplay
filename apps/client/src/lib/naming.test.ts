@@ -1,0 +1,55 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { audioFormat, containerLabel, languageFromName, languageName, pickByLanguage, releaseName, sameLanguage } from './naming.ts'
+
+test('human language names and audio formats', () => {
+  assert.equal(languageName('eng'), 'English')
+  assert.equal(languageName('lav'), 'Latvian')
+  assert.equal(languageName('und'), '')
+  assert.equal(languageName(null), '')
+  assert.equal(languageName('qqq'), 'qqq')
+  assert.equal(audioFormat('ac3', 6), 'AC3 5.1')
+  assert.equal(audioFormat('mp3', 2), 'MP3 stereo')
+  assert.equal(audioFormat('pcm_s16le', 3), 'PCM 3 ch')
+})
+
+test('release names lose years, episodes and technical tags', () => {
+  assert.equal(releaseName('Fleabag.S01.1080p.BluRay.x264-SHORTBREHD'), 'Fleabag')
+  assert.equal(releaseName('Fleabag.S01E01.1080p.BluRay.x264-SHORTBREHD.mkv'), 'Fleabag')
+  assert.equal(releaseName('Big_Buck_Bunny_(2008)_1080p.mov'), 'Big Buck Bunny')
+  assert.equal(releaseName('[Group] Some Show - 03 [1080p].mkv'), 'Some Show - 03')
+  assert.equal(releaseName('Sintel.2010.2160p.UHD.HEVC'), 'Sintel')
+  assert.equal(releaseName('Playback fixtures'), 'Playback fixtures')
+  assert.equal(releaseName('2012.1080p.mkv'), '2012') // a title that is a year stays
+})
+
+test('subtitle languages from file names', () => {
+  assert.equal(languageFromName('Movie.en.srt'), 'en')
+  assert.equal(languageFromName('Subs/Movie.eng.forced.srt'), 'eng')
+  assert.equal(languageFromName('Movie.srt'), null)
+})
+
+test('tracks are picked by language, with two- and three-letter codes matching', () => {
+  assert.ok(sameLanguage('en', 'ENG'))
+  assert.ok(!sameLanguage('eng', 'est'))
+  assert.ok(!sameLanguage(null, 'eng'))
+  const tracks = [{ language: null, n: 0 }, { language: 'lav', n: 1 }, { language: 'eng', n: 2 }]
+  assert.equal(pickByLanguage(tracks, 'en')?.n, 2)
+  assert.equal(pickByLanguage(tracks, 'lav')?.n, 1)
+  assert.equal(pickByLanguage(tracks, 'fra'), undefined)
+  assert.equal(pickByLanguage(tracks, null), undefined)
+})
+
+const MP4_FAMILY = 'mov,mp4,m4a,3gp,3g2,mj2'
+
+test('containers read as one name, with the extension choosing within ffprobe\'s family', () => {
+  assert.equal(containerLabel(MP4_FAMILY, 'Big Buck Bunny.mp4'), 'MP4')
+  assert.equal(containerLabel(MP4_FAMILY, 'clip.mov'), 'QuickTime')
+  assert.equal(containerLabel(MP4_FAMILY), 'MP4')
+  assert.equal(containerLabel('matroska,webm', 'Show.S01E02.mkv'), 'Matroska')
+  assert.equal(containerLabel('matroska,webm', 'clip.webm'), 'WebM')
+  assert.equal(containerLabel('mpegts', 'a.ts'), 'MPEG-TS')
+  assert.equal(containerLabel('avi', 'wrongly-named.mkv'), 'AVI') // the extension can't override a different format
+  assert.equal(containerLabel('nut'), 'NUT')
+  assert.equal(containerLabel(null), '')
+})

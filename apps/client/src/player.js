@@ -1,16 +1,21 @@
 import Hls from 'hls.js'
-// The player page, /play/<infohash>/<file index>.
+// The player page, /play/<infohash>/<file index>. One chrome over the video for every playback mode:
+// direct files play from /raw, remux and transcode through an HLS session whose timeline starts at cur.offset.
 import { api } from './lib/api.ts'
 import { measureCaps } from './lib/capabilities.js'
+import { icon } from './lib/icons.ts'
+import { audioFormat, languageFromName, languageName, pickByLanguage } from './lib/naming.ts'
 import { parseVtt } from './lib/subtitles.ts'
 import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
-import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, recall, remember } from './lib/ui.ts'
+import { canSeekLocally, layerBackground, seekHint, seekOutcome, spans } from './lib/seek.ts'
+import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuChoice, menuHeading, menuSeparator, recall, remember } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 
 import { serialLatest, delay as sleep } from './lib/requests.ts'
 
 const requestPlayback = serialLatest()
 const video = $('#video')
+const stage = $('#stage')
 const [, , ih, idxPart] = location.pathname.split('/')
 const idx = Number(idxPart)
 let tab = Math.random().toString(36).slice(2) // new id for each document activation
@@ -28,21 +33,31 @@ let hls = null
 let audio = 0
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
+let starting = '' // what the busy spinner says until playback resumes ("Starting at 14:20…")
 let file = null // this file's entry from the torrent's file list
 let next = null // the next video in the torrent, if any
 /** @type {import('@magplay/api-contract').TorrentStatus | null} */
-let lastStatus = null // the latest /status poll, for the details panel
+let lastStatus = null // the latest /status poll, for the details panel and the seek bar
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
 
+// Remembered choices, in localStorage through recall()/remember() (stored as "magplay:<key>"):
+//   player:volume            0–1
+//   player:muted             true | false
+//   player:speed             playback rate, 1 = normal
+//   player:audioLanguage     language code of the last chosen audio track ("eng"), or null
+//   player:subtitleLanguage  language code of the last chosen subtitles, "off", or "any" for a track without a language
+const PREF = { volume: 'player:volume', muted: 'player:muted', speed: 'player:speed', audio: 'player:audioLanguage', subtitles: 'player:subtitleLanguage' }
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
 /**
- * Messages on the video itself: 'busy' (spinner chip), 'notice' and 'warn' (chips), or a card with actions for errors.
- * An empty text clears it.
+ * Messages on the video itself: 'busy' (spinner in the middle), 'notice' and 'warn' (chips, with optional
+ * link buttons), or a centred card with actions for errors and questions. An empty text clears it.
  */
 function notify (text, kind = 'notice', actions = []) {
   const overlay = $('#overlay')
   if (!text) return fill(overlay)
   if (kind === 'error') return fill(overlay, el('div', { className: 'card' }, el('p', { textContent: text }), actions.length > 0 && el('p', { className: 'actions' }, ...actions)))
-  fill(overlay, el('div', { className: `toast ${kind}` }, text))
+  fill(overlay, el('div', { className: `toast ${kind}` }, text, ...actions))
 }
 
 const button = (label, onclick, primary) => el('button', { type: 'button', className: `button${primary ? ' primary' : ''}`, textContent: label, onclick })
@@ -60,9 +75,11 @@ function refusalActions () {
 
 /** A file number this torrent doesn't have: retrying can't help, so offer only the way back and hide the empty controls. */
 function missingFile (err) {
-  for (const sel of ['.options', '#details', '#pieces', '#next']) $(sel).hidden = true
+  for (const sel of ['.options', '#details', '#chrome']) $(sel).hidden = true
   return notify(err.message, 'error', [linkButton('Back to files', urls.torrent(ih), true)])
 }
+
+const fileLabel = f => episodeLabel(f) || baseName(f.name)
 
 /** Names the page after the file, links back to its torrent, offers external players and finds the next episode. */
 async function loadTitle (signal = pageLife.signal) {
@@ -75,6 +92,8 @@ async function loadTitle (signal = pageLife.signal) {
   const label = episodeLabel(file)
   $('#title').textContent = [label, baseName(file.name)].filter(Boolean).join(' · ')
   document.title = `${label || baseName(file.name)} · magplay`
+  $('#screen-name').textContent = label || baseName(file.name)
+  $('#screen-sub').textContent = t.name
   fill($('#openin'), menu('Open in ▾', [
     menuHeading('Other players'),
     ...playerApps(ih, idx, file.name).map(([text, href, title = '']) => el('a', { href, title, textContent: text })),
@@ -84,10 +103,14 @@ async function loadTitle (signal = pageLife.signal) {
   const videos = t.files.filter(f => f.isVideo)
   next = videos[videos.findIndex(f => f.idx === idx) + 1] ?? null
   if (next) {
-    fill($('#next'), el('span', {}, el('span', { className: 'muted', textContent: 'Next ' }), episodeLabel(next) || baseName(next.name)),
-      linkButton('Play ›', urls.player(ih, next.idx)))
-    $('#next').hidden = false
+    const name = `Next: ${fileLabel(next)}`
+    const link = $('#next')
+    Object.assign(link, { href: urls.player(ih, next.idx), title: `${name} (N)`, hidden: false })
+    link.setAttribute('aria-label', name)
+    fill(link, el('span', { className: 'pill wide-only', textContent: name }), el('span', { className: 'narrow-only' }, icon('next')))
   }
+  renderMore()
+  setMediaSession(t)
   renderFacts()
 }
 
@@ -107,7 +130,7 @@ function countdownToNext () {
     notify('')
   }
   cancelNext = cancel
-  const render = () => notify(`Next: ${episodeLabel(next) || baseName(next.name)} in ${left} s`, 'error',
+  const render = () => notify(`Next: ${fileLabel(next)} in ${left} s`, 'error',
     [linkButton('Play now', target, true), button('Cancel', cancel)])
   render()
   video.addEventListener('play', cancel, { once: true })
@@ -119,16 +142,15 @@ function renderFacts () {
   const a = info?.audio[audio]
   const st = lastStatus
   const s = st?.session
-  const ahead = video.buffered.length ? video.buffered.end(video.buffered.length - 1) - video.currentTime : 0
   const rows = [
     ['Mode', cur ? `${cur.mode}: ${cur.reason}` : null],
     ['File', file ? `${baseName(file.name)} (${formatBytes(file.size)})` : null],
     ['Container', info?.container],
     ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.height}p, ${v.bitDepth}-bit`],
-    ['Audio', a && `${a.codec}, ${a.channels} ch${a.language ? `, ${a.language}` : ''}`],
+    ['Audio', a && [audioFormat(a.codec, a.channels), languageName(a.language)].filter(Boolean).join(', ')],
     ['Peers', st?.loaded ? `${st.peers.length} · ↓ ${formatSpeed(st.downloadSpeed)}` : null],
     ['On the NAS', st?.file ? `${Math.round(st.file.progress * 100)}% of this file` : null],
-    ['Buffered', cur ? `${Math.max(0, Math.round(ahead))} s ahead` : null],
+    ['Buffered', cur ? `${Math.max(0, Math.round(bufferedAhead()))} s ahead` : null],
     ['ffmpeg', s ? `${s.speed ? `${s.speed.toFixed(1)}x` : '…'}${s.paused ? ', paused far enough ahead' : s.running ? '' : ', finished'}` : null],
   ].filter(([, value]) => value)
   fill($('#facts'), ...rows.flatMap(([k, value]) => [el('dt', { textContent: k }), el('dd', { textContent: value })]))
@@ -137,14 +159,22 @@ function renderFacts () {
 const caps = measureCaps(video, window)
 
 const position = () => cur ? cur.offset + video.currentTime : pendingPosition
+/** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
+const duration = () => cur?.duration || info?.duration || (cur?.mode === 'direct' && Number.isFinite(video.duration) ? video.duration : 0)
+/** Seconds the browser has buffered past the playhead. */
+function bufferedAhead () {
+  const now = video.currentTime
+  const range = spans(video.buffered).find(([a, b]) => now >= a - 0.5 && now <= b)
+  return range ? range[1] - now : 0
+}
 
 function persistProgress (force = false, ended = false) {
   if (!cur || video.readyState < 2) return
   const now = Date.now()
   if (!force && now - lastProgressSave < 5000) return
   // A growing HLS playlist's local duration is not the whole file duration.
-  const duration = cur.duration ?? (cur.mode === 'direct' ? video.duration : null)
-  const record = progressEntry(position(), duration, { ended, at: now })
+  const total = cur.duration ?? (cur.mode === 'direct' ? video.duration : null)
+  const record = progressEntry(position(), total, { ended, at: now })
   if (record) {
     remember(progressKey(ih, idx), record)
     lastProgressSave = now
@@ -162,17 +192,21 @@ function teardown () {
   video.load()
 }
 
-/** Asks the server how to play from `at` seconds and loads the result. */
-async function start (at = 0) {
+/**
+ * Asks the server how to play from `at` seconds and loads the result.
+ * `message` is what the spinner says until the video plays again, such as "Starting at 14:20…".
+ */
+async function start (at = 0, message = '') {
   if (pageLife.signal.aborted) return
   const gen = ++generation
   pendingPosition = at
+  starting = message
   teardown()
   const signal = (playLife = new AbortController()).signal
   const requestTab = tab
   const pageSignal = pageLife.signal
   const current = () => gen === generation && !signal.aborted
-  notify('Starting…', 'busy')
+  notify(message || 'Starting…', 'busy')
   cur = null
   const selectedAudio = audio
   try {
@@ -194,16 +228,13 @@ async function start (at = 0) {
     return notify(err.message, 'error', err.status === 422 ? refusalActions() : [button('Try again', () => start(at), true), linkButton('Back to files', urls.torrent(ih))])
   }
   if (gen !== generation) return
-  $('#seek').max = Math.floor(cur.duration || 0)
-  const hlsMode = cur.mode !== 'direct'
-  video.controls = !hlsMode
-  $('#controls').hidden = !hlsMode
+  updateTimeline()
 
-  if (!hlsMode) {
+  if (cur.mode === 'direct') {
     video.src = cur.url
     if (at) video.currentTime = at
   } else {
-    notify(cur.mode === 'transcode' ? 'Converting the video…' : 'Preparing the stream…', 'busy')
+    notify(message || (cur.mode === 'transcode' ? 'Converting the video…' : 'Preparing the stream…'), 'busy')
     try {
       await waitForPlaylist(cur.url, gen, signal)
     } catch (err) {
@@ -225,6 +256,7 @@ async function start (at = 0) {
   video.play().then(() => current() && notify(''), () => {
     if (!current()) return
     video.muted = true
+    autoMuted = true
     video.play().then(() => current() && notify('Muted: autoplay with sound was blocked. Click the video or press M to unmute.'),
       () => current() && notify('Press play to start.'))
   })
@@ -242,34 +274,32 @@ async function waitForPlaylist (url, gen, signal) {
   throw new Error('ffmpeg produced nothing in 45 s. The torrent may be too slow; try again or pick another release.')
 }
 
+/** Jumps to absolute time `t`. The seek tooltip predicts the same outcome through seekOutcome(). */
 function seekTo (t) {
   if (!cur) return
-  t = Math.max(0, Math.min(t, (cur.duration || Infinity) - 1))
+  t = Math.max(0, Math.min(t, (duration() || Infinity) - 1))
   if (cur.mode === 'direct') {
     video.currentTime = t
     return
   }
   const rel = t - cur.offset
-  // The browser's seekable range lags the server's `produced` count (hls.js
-  // re-fetches the growing event playlist on its own schedule), and seeking
-  // past it silently clamps to the range edge. Only seek locally where the
-  // browser can actually land; otherwise restart the session at the target.
-  const seekable = video.seekable
-  const from = seekable.length ? seekable.start(0) : 0
-  const end = seekable.length ? seekable.end(seekable.length - 1) : 0
-  if (rel >= from - 2 && rel < end - 2) video.currentTime = rel
-  else start(t) // outside what the browser has: restart it there
+  // Only seek locally where the browser can actually land (see canSeekLocally); otherwise restart the session at the target
+  if (canSeekLocally(rel, spans(video.seekable))) video.currentTime = rel
+  else start(t, `Starting at ${clock(t)}…`)
 }
 
 // Subtitles share one text track. Parsing is pure; polling, growing-file
 // handling and HLS offset application remain owned by this page.
 let subtitleRun = 0
+let subsChoice = '' // '' (off), 'embedded:<n>' or 'file:<idx>'
+let lastSubs = '' // the last track turned on, for C
+let subOptions = [] // { value, label, name, language, disabled }
 async function loadSubtitles (gen = generation) {
   subtitleLife?.abort()
   const signal = (subtitleLife = new AbortController()).signal
   const run = ++subtitleRun
   for (const cue of [...(subTrack.cues ?? [])]) subTrack.removeCue(cue)
-  const choice = $('#subs').value
+  const choice = subsChoice
   subTrack.mode = choice ? 'showing' : 'hidden'
   if (!choice || !cur) return
   const [kind, n] = choice.split(':')
@@ -288,7 +318,7 @@ async function loadSubtitles (gen = generation) {
   // Session subtitles grow as ffmpeg works, so poll until it's done
   for (;;) {
     const res = await fetch(url, { cache: 'no-store', signal }).catch(() => null)
-    if (signal.aborted || gen !== generation || run !== subtitleRun || $('#subs').value !== choice) return
+    if (signal.aborted || gen !== generation || run !== subtitleRun || subsChoice !== choice) return
     const growing = url.startsWith('/hls/') && !cur.complete
     if (res?.ok) {
       let text
@@ -296,7 +326,7 @@ async function loadSubtitles (gen = generation) {
         if (!signal.aborted) notify('Subtitle response was interrupted. Select the track again to retry.', 'warn')
         return
       }
-      if (signal.aborted || gen !== generation || run !== subtitleRun || $('#subs').value !== choice) return
+      if (signal.aborted || gen !== generation || run !== subtitleRun || subsChoice !== choice) return
       const cues = parseVtt(text)
       const ready = growing ? cues.slice(0, -1) : cues // the last cue may be half-written
       for (const c of ready.slice(added)) subTrack.addCue(new VTTCue(c.from + shift, c.to + shift, c.text))
@@ -310,6 +340,117 @@ async function loadSubtitles (gen = generation) {
   }
 }
 
+/** Turns subtitles on with `choice`, or off with ''. Remembers the language for the next file unless `save` is false. */
+function setSubtitles (choice, save = true) {
+  subsChoice = choice
+  const option = subOptions.find(o => o.value === choice)
+  if (choice) lastSubs = choice
+  if (save) remember(PREF.subtitles, !choice ? 'off' : option?.language || 'any')
+  renderSubtitlesMenu()
+  loadSubtitles()
+}
+
+/** C: subtitles off, or back on with the last track used (the first text track if none was). */
+function toggleSubtitles () {
+  if (subsChoice) return setSubtitles('')
+  const choice = lastSubs || subOptions.find(o => !o.disabled)?.value
+  if (choice) setSubtitles(choice)
+}
+
+// Chrome menus open upward and stay inside the stage, so they work in fullscreen too
+const chromeMenu = (label, items, ariaLabel, className = '') => menu(label, items, { title: ariaLabel, ariaLabel, up: true, within: () => stage, className })
+
+/** Tags a menu choice with the value it selects, for tests and debugging. */
+const withValue = (item, value) => { item.dataset.value = String(value); return item }
+
+function renderSubtitlesMenu () {
+  const current = subOptions.find(o => o.value === subsChoice)
+  const name = `Subtitles: ${current ? current.name : 'Off'}`
+  const box = $('#subs-slot details') ?? (fill($('#subs-slot'), chromeMenu(icon('subtitles'), [], name)), $('#subs-slot details'))
+  const summary = $('summary', box)
+  summary.setAttribute('aria-label', name)
+  summary.title = `${name} (C)`
+  summary.classList.toggle('on', !!current)
+  fill($('.menu-items', box), menuHeading('Subtitles'), withValue(menuChoice('Off', !subsChoice, () => setSubtitles('')), ''),
+    ...subOptions.map(o => withValue(menuChoice(o.label, o.value === subsChoice, () => setSubtitles(o.value), { disabled: o.disabled, title: o.disabled ? 'Image subtitles are not supported' : '' }), o.value)))
+  $('#subs-slot').hidden = subOptions.length === 0
+}
+
+function renderAudioMenu () {
+  const tracks = info?.audio ?? []
+  const label = a => [languageName(a.language) || `Track ${a.index + 1}`, a.title].filter(Boolean).join(' · ')
+  const name = `Audio: ${tracks[audio] ? label(tracks[audio]) : 'Track 1'}`
+  fill($('#audio-slot'), chromeMenu(icon('audio'), [
+    menuHeading('Audio'),
+    ...tracks.map(a => withValue(menuChoice(`${label(a)} (${audioFormat(a.codec, a.channels)})`, a.index === audio, () => setAudio(a.index)), a.index)),
+  ], name))
+  $('#audio-slot').hidden = tracks.length < 2
+}
+
+/** Switching audio restarts the session at the current position with the other track. */
+function setAudio (index) {
+  if (index === audio) return
+  audio = index
+  remember(PREF.audio, info?.audio[index]?.language ?? null)
+  renderAudioMenu()
+  start(position(), 'Switching audio…')
+}
+
+const speedLabel = rate => `${rate}×`
+const speedChoices = () => SPEEDS.map(rate => menuChoice(rate === 1 ? '1× (normal)' : speedLabel(rate), video.playbackRate === rate, () => setSpeed(rate)))
+
+function setSpeed (rate, save = true) {
+  video.defaultPlaybackRate = video.playbackRate = rate // the default survives loading a new session
+  if (save) remember(PREF.speed, rate)
+  renderSpeedMenu()
+  renderMore()
+}
+
+/** < and >: one step slower or faster. */
+function stepSpeed (direction) {
+  const i = SPEEDS.indexOf(video.playbackRate)
+  const nextRate = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i < 0 ? SPEEDS.indexOf(1) : i) + direction))]
+  setSpeed(nextRate)
+  notify(`Speed ${speedLabel(nextRate)}`)
+  setTimeout(() => $('#overlay .toast.notice')?.textContent.startsWith('Speed') && notify(''), 1200)
+}
+
+function renderSpeedMenu () {
+  const name = `Speed: ${speedLabel(video.playbackRate)}`
+  fill($('#speed-slot'), chromeMenu(el('span', { className: 'pill', textContent: speedLabel(video.playbackRate) }), [menuHeading('Speed'), ...speedChoices()], name))
+}
+
+/** More: the same file actions as the torrent page's ⋯ menu, Picture in picture, the key list, and Speed on narrow screens. */
+function renderMore () {
+  const pip = document.pictureInPictureEnabled && !video.disablePictureInPicture
+  const narrow = el => { el.classList.add('narrow-only'); return el }
+  const items = [
+    ...(file
+      ? [
+          menuHeading('Open in'),
+          ...playerApps(ih, idx, file.name).map(([text, href, title = '']) => el('a', { href, title, textContent: text })),
+          menuSeparator(),
+          el('a', { href: urls.download(ih, idx, file.name), textContent: 'Download file' }),
+          copyButton('Copy stream link', streamUrl(ih, idx, file.name), 'Copy the stream link for any player'),
+          menuSeparator(),
+        ]
+      : []),
+    pip && el('button', { type: 'button', textContent: document.pictureInPictureElement ? 'Exit picture in picture' : 'Picture in picture', onclick: togglePip }),
+    el('button', { type: 'button', textContent: 'Keyboard shortcuts', onclick: () => showKeys(true) }),
+    narrow(menuSeparator()),
+    narrow(menuHeading('Speed')),
+    ...speedChoices().map(narrow),
+  ]
+  const box = $('#more-slot details')
+  if (box) fill($('.menu-items', box), ...items)
+  else fill($('#more-slot'), chromeMenu(icon('more'), items, 'More'))
+}
+
+function togglePip () {
+  const action = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture()
+  action.catch(err => notify(`Picture in picture: ${err.message}`, 'warn'))
+}
+
 async function loadInfo (signal = pageLife.signal) {
   try {
     const result = await api(`/api/probe/${ih}/${idx}`, { signal })
@@ -320,17 +461,32 @@ async function loadInfo (signal = pageLife.signal) {
     if (err.status === 404) return missingFile(err)
     return notify(err.message, 'error', [button('Try again', () => location.reload(), true), linkButton('Back to files', urls.torrent(ih))])
   }
-  const name = t => [t.language, t.title].filter(Boolean).join(' · ')
-  $('#audio').replaceChildren(...info.audio.map(a =>
-    new Option(`${a.index + 1}. ${name(a) || 'Track'} (${a.codec} ${a.channels}ch)`, a.index)))
-  for (const s of info.subtitles) {
-    const opt = new Option(`${name(s) || `Track ${s.index + 1}`} (${s.codec})${s.text ? '' : ' — image subtitles, not supported'}`, `embedded:${s.index}`)
-    opt.disabled = !s.text
-    $('#subs').add(opt)
-  }
-  for (const f of info.externalSubtitles) $('#subs').add(new Option(f.name, `file:${f.idx}`))
+  // The remembered audio language picks the track, else track 1
+  audio = pickByLanguage(info.audio, recall(PREF.audio))?.index ?? 0
+  renderAudioMenu()
+  const named = t => [languageName(t.language), t.title].filter(Boolean).join(' · ')
+  subOptions = [
+    ...info.subtitles.map(s => ({
+      value: `embedded:${s.index}`,
+      name: named(s) || `Track ${s.index + 1}`,
+      label: `${named(s) || `Track ${s.index + 1}`}${s.text ? '' : ' (image, not supported)'}`,
+      language: s.language,
+      disabled: !s.text,
+    })),
+    ...info.externalSubtitles.map(f => {
+      const language = languageFromName(f.name)
+      return { value: `file:${f.idx}`, name: languageName(language) || baseName(f.name), label: baseName(f.name), language, disabled: false }
+    }),
+  ]
+  // The remembered subtitle language turns subtitles on for this file when it has that language
+  const pref = recall(PREF.subtitles)
+  const usable = subOptions.filter(o => !o.disabled)
+  const preferred = pref === 'any' ? usable[0] : typeof pref === 'string' && pref !== 'off' ? pickByLanguage(usable, pref) : undefined
+  subsChoice = lastSubs = preferred?.value ?? ''
+  renderSubtitlesMenu()
   const saved = resumePosition(recall(progressKey(ih, idx)), info.duration)
   pendingPosition = saved
+  updateTimeline()
   if (saved) {
     notify(`Resume from ${clock(saved)}?`, 'error', [
       button('Resume', () => start(saved), true),
@@ -339,7 +495,7 @@ async function loadInfo (signal = pageLife.signal) {
   } else start(0)
 }
 
-/** Every 2 s: keeps the ffmpeg session alive, updates the details panel and warns when ffmpeg can't keep up. */
+/** Every 2 s: keeps the ffmpeg session alive, updates the seek bar and details, and warns when ffmpeg can't keep up. */
 async function pollStatus (signal = pageLife.signal) {
   let slow = false
   while (!signal.aborted) {
@@ -360,61 +516,267 @@ async function pollStatus (signal = pageLife.signal) {
       slow = nowSlow
     }
     if ($('#details').open) renderFacts()
-    if (st.file) {
-      $('#pieces').style.background = st.file.ranges.length
-        ? `linear-gradient(to right, ${st.file.ranges.flatMap(([a, b]) => [`transparent ${a * 100}%`, `var(--accent) ${a * 100}%`, `var(--accent) ${b * 100}%`, `transparent ${b * 100}%`]).join(', ')})`
-        : 'transparent'
-    }
+    drawSeekbar()
   }
 }
 
-// Custom controls for HLS modes, where the native timeline only knows the current session
+// The chrome ---------------------------------------------------------------
+
 const seek = $('#seek')
 let dragging = false
-seek.addEventListener('input', () => { dragging = true; $('#time').textContent = `${clock(seek.value)} / ${clock(cur?.duration)}` })
-seek.addEventListener('change', () => { dragging = false; seekTo(Number(seek.value)) })
+let autoMuted = false // muted by the autoplay fallback, not by choice
+
+/** The four seek bar layers: on the NAS, converted by ffmpeg, in the browser, played. */
+function drawSeekbar () {
+  const total = duration()
+  const layer = (id, value) => { $(id).style.backgroundImage = value }
+  if (!total) {
+    for (const id of ['#layer-nas', '#layer-conv', '#layer-buf']) layer(id, 'none')
+    $('#layer-played').style.width = '0'
+    return
+  }
+  const offset = cur?.offset ?? 0
+  const session = cur?.session && lastStatus?.session?.id === cur.session ? lastStatus.session : null
+  layer('#layer-nas', layerBackground(lastStatus?.file?.ranges ?? [], 'var(--seek-nas)'))
+  layer('#layer-conv', layerBackground(session ? [[offset / total, (offset + session.produced) / total]] : [], 'var(--seek-conv)'))
+  layer('#layer-buf', layerBackground(cur ? spans(video.buffered).map(([a, b]) => [(a + offset) / total, (b + offset) / total]) : [], 'var(--seek-buf)'))
+  $('#layer-played').style.width = `${Math.min(100, (dragging ? Number(seek.value) : position()) / total * 100)}%`
+}
+
+/** Time, slider range and its spoken value; while dragging the slider shows where it will land. */
+function updateTimeline () {
+  const total = duration()
+  const at = dragging ? Number(seek.value) : position()
+  seek.max = String(Math.floor(total))
+  if (!dragging) seek.value = String(at)
+  seek.setAttribute('aria-valuetext', `${clock(at)} of ${clock(total)}`)
+  $('#time').textContent = `${clock(at)} / ${clock(total)}`
+  drawSeekbar()
+}
+
+/** The tooltip over the seek bar: the time under the pointer and what jumping there will do. */
+function showTip (t, x) {
+  const tip = $('#seektip')
+  const total = duration()
+  if (!total) return
+  const outcome = cur
+    ? seekOutcome(t, { mode: cur.mode, offset: cur.offset, duration: total, buffered: spans(video.buffered), seekable: spans(video.seekable), ranges: lastStatus?.file?.ranges ?? null })
+    : 'seekable'
+  $('b', tip).textContent = clock(t)
+  $('span', tip).textContent = seekHint(outcome)
+  tip.hidden = false
+  // Keep the tooltip inside the seek bar
+  const bar = $('#seekbar').getBoundingClientRect()
+  const half = tip.offsetWidth / 2
+  tip.style.left = `${Math.max(half, Math.min(bar.width - half, x))}px`
+}
+const hideTip = () => { $('#seektip').hidden = true }
+
+/** Seek bar x (in px from its left edge) for time `t`, matching the inset track. */
+function trackPosition (t) {
+  const track = $('#seekbar .track')
+  return track.offsetLeft + (duration() ? t / duration() : 0) * track.offsetWidth
+}
+
+$('#seekbar').addEventListener('pointermove', e => {
+  if (dragging) return
+  const track = $('#seekbar .track').getBoundingClientRect()
+  const fraction = Math.max(0, Math.min(1, (e.clientX - track.left) / track.width))
+  showTip(fraction * duration(), e.clientX - $('#seekbar').getBoundingClientRect().left)
+})
+$('#seekbar').addEventListener('pointerleave', () => dragging || hideTip())
+seek.addEventListener('input', () => {
+  dragging = true
+  updateTimeline()
+  showTip(Number(seek.value), trackPosition(Number(seek.value)))
+})
+seek.addEventListener('change', () => {
+  dragging = false
+  hideTip()
+  seekTo(Number(seek.value))
+})
+
+// Visibility: shown while paused, while a menu is open, while focus is inside it, and for 2.5 s after the last pointer move, touch or key
+let idleTimer = 0
+function wake () {
+  stage.classList.remove('idle')
+  clearTimeout(idleTimer)
+  idleTimer = setTimeout(sleepChrome, 2500)
+}
+function sleepChrome () {
+  if (video.paused || !cur || $('#chrome details.menu[open]') || !$('#keys').hidden || $('#chrome :focus-visible') || dragging) return
+  stage.classList.add('idle')
+  hideTip()
+}
+stage.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') wake() })
+stage.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') { clearTimeout(idleTimer); sleepChrome() } })
+$('#chrome').addEventListener('toggle', wake, true)
+$('#chrome').addEventListener('focusin', wake)
+
+const togglePlay = () => video.paused ? video.play() : video.pause()
+// A tap on the video shows hidden chrome first; with the chrome showing, a tap or click plays or pauses
+let tapWoke = false
+video.addEventListener('pointerdown', e => {
+  tapWoke = e.pointerType === 'touch' && stage.classList.contains('idle')
+  wake()
+})
+video.addEventListener('click', () => {
+  if (tapWoke) return
+  if ($('#chrome details.menu[open]')) return // the click only closes the menu
+  if (autoMuted && video.muted) { video.muted = false; autoMuted = false; return }
+  togglePlay()
+})
+video.addEventListener('dblclick', toggleFullscreen)
+
+function renderPlayButton () {
+  const label = video.paused ? 'Play' : 'Pause'
+  const b = $('#playpause')
+  fill(b, icon(video.paused ? 'play' : 'pause'))
+  b.setAttribute('aria-label', label)
+  b.title = `${label} (K)`
+}
+$('#playpause').addEventListener('click', togglePlay)
+$('#back10').addEventListener('click', () => seekTo(position() - 10))
+$('#fwd10').addEventListener('click', () => seekTo(position() + 10))
+fill($('#back10'), icon('back'))
+fill($('#fwd10'), icon('forward'))
+fill($('#keys-close'), icon('close'))
+
+/** Volume and mute are saved only when the viewer changes them, not by the autoplay fallback. */
+function setVolume (value) {
+  video.volume = Math.max(0, Math.min(1, Math.round(value * 100) / 100))
+  video.muted = video.volume === 0
+  autoMuted = false
+  remember(PREF.volume, video.volume)
+  remember(PREF.muted, video.muted)
+}
+function toggleMute () {
+  if (video.muted && video.volume === 0) video.volume = 0.5
+  video.muted = !video.muted
+  autoMuted = false
+  remember(PREF.muted, video.muted)
+  remember(PREF.volume, video.volume)
+}
+function renderVolume () {
+  const silent = video.muted || video.volume === 0
+  const label = silent ? 'Unmute' : 'Mute'
+  const b = $('#mute')
+  fill(b, icon(silent ? 'muted' : video.volume < 0.5 ? 'volumeLow' : 'volume'))
+  b.setAttribute('aria-label', label)
+  b.title = `${label} (M)`
+  const slider = $('#volume')
+  slider.value = String(silent ? 0 : video.volume)
+  slider.style.setProperty('--vol', `${silent ? 0 : video.volume * 100}%`)
+  slider.setAttribute('aria-valuetext', `${Math.round((silent ? 0 : video.volume) * 100)}%`)
+}
+$('#mute').addEventListener('click', toggleMute)
+$('#volume').addEventListener('input', e => setVolume(Number(e.target.value)))
+
+function toggleFullscreen () {
+  if (document.fullscreenElement) document.exitFullscreen()
+  else if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {})
+  else video.webkitEnterFullscreen?.() // iPhone: only the video element can go fullscreen
+}
+function renderFullscreen () {
+  const on = !!document.fullscreenElement
+  const label = on ? 'Exit fullscreen' : 'Fullscreen'
+  const b = $('#fullscreen')
+  fill(b, icon(on ? 'exitFullscreen' : 'fullscreen'))
+  b.setAttribute('aria-label', label)
+  b.title = `${label} (F)`
+}
+$('#fullscreen').addEventListener('click', toggleFullscreen)
+document.addEventListener('fullscreenchange', () => { renderFullscreen(); wake() })
+
+/** The ? sheet over the video. */
+function showKeys (open = $('#keys').hidden) {
+  $('#keys').hidden = !open
+  if (open) $('#keys-close').focus()
+  wake()
+}
+$('#keys-close').addEventListener('click', () => showKeys(false))
+
+function setMediaSession (t) {
+  if (!('mediaSession' in navigator)) return
+  const ep = episodeLabel(file)
+  navigator.mediaSession.metadata = new MediaMetadata({ title: ep ? `${ep} · ${baseName(file.name)}` : baseName(file.name), artist: ep, album: t.name })
+  try { navigator.mediaSession.setActionHandler('nexttrack', next ? () => { location.href = urls.player(ih, next.idx) } : null) } catch {}
+}
+if ('mediaSession' in navigator) {
+  const handlers = {
+    play: () => video.play(),
+    pause: () => video.pause(),
+    seekbackward: d => seekTo(position() - (d.seekOffset || 10)),
+    seekforward: d => seekTo(position() + (d.seekOffset || 10)),
+  }
+  for (const [action, handler] of Object.entries(handlers)) {
+    try { navigator.mediaSession.setActionHandler(action, handler) } catch {} // older browsers lack some actions
+  }
+}
+
+// Keys. Ignored while typing; Space and Enter keep their usual meaning on buttons and links.
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return
+  const target = e.target
+  if (target.matches('input:not([type="range"]), select, textarea, [contenteditable]')) return
+  if (target === $('#volume') && /^Arrow/.test(e.key)) return
+  if ((e.key === ' ' || e.key === 'Enter') && target.closest('button, summary, a')) return
+  wake()
+  if (e.key === '?') { showKeys(); return }
+  if (e.key === 'Escape' && !$('#keys').hidden) { showKeys(false); return }
+  if (!cur) return
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+  const actions = {
+    ' ': togglePlay,
+    k: togglePlay,
+    ArrowLeft: () => seekTo(position() - 10),
+    j: () => seekTo(position() - 10),
+    ArrowRight: () => seekTo(position() + 10),
+    l: () => seekTo(position() + 10),
+    ArrowUp: () => setVolume((video.muted ? 0 : video.volume) + 0.1),
+    ArrowDown: () => setVolume((video.muted ? 0 : video.volume) - 0.1),
+    m: toggleMute,
+    f: toggleFullscreen,
+    c: toggleSubtitles,
+    n: () => { if (next) location.href = urls.player(ih, next.idx) },
+    '<': () => stepSpeed(-1),
+    '>': () => stepSpeed(1),
+  }
+  const action = actions[key]
+  if (!action) return
+  e.preventDefault() // no page scroll, and the seek slider doesn't also move by one step
+  action()
+})
+
+// Player events
 video.addEventListener('timeupdate', () => {
   persistProgress()
-  if (!cur || dragging) return
-  seek.value = position()
-  $('#time').textContent = `${clock(position())} / ${clock(cur.duration)}`
+  if (cur) updateTimeline()
 })
-video.addEventListener('play', () => { $('#playpause').textContent = '❚❚' })
-video.addEventListener('pause', () => { $('#playpause').textContent = '▶'; persistProgress(true) })
+video.addEventListener('progress', drawSeekbar)
+video.addEventListener('durationchange', updateTimeline)
+video.addEventListener('play', () => { renderPlayButton(); wake() })
+video.addEventListener('pause', () => { renderPlayButton(); wake(); persistProgress(true) })
 video.addEventListener('seeked', () => persistProgress(true))
-video.addEventListener('waiting', () => cur && notify('Buffering…', 'busy'))
+video.addEventListener('waiting', () => cur && notify(starting || 'Buffering…', 'busy'))
 video.addEventListener('playing', () => {
   if (pageLife.signal.aborted) return
+  starting = ''
   persistProgress(true)
   if ($('#overlay .toast.busy')) notify('')
   // For "Continue" on the torrent page and the home page
-  if (file) remember(`last:${ih}`, { idx, label: episodeLabel(file) || baseName(file.name), at: Date.now() })
+  if (file) remember(`last:${ih}`, { idx, label: fileLabel(file), at: Date.now() })
 })
 video.addEventListener('error', () => cur?.mode === 'direct' && notify(`Playback error: ${video.error?.message || video.error?.code}`, 'error', refusalActions()))
 video.addEventListener('ended', () => { persistProgress(true, true); countdownToNext() })
 video.addEventListener('volumechange', () => {
-  $('#mute').textContent = video.muted ? '🔇' : '🔊'
+  renderVolume()
   if (!video.muted && $('#overlay .toast.notice')) notify('')
 })
-$('#mute').addEventListener('click', () => { video.muted = !video.muted })
+video.addEventListener('enterpictureinpicture', renderMore)
+video.addEventListener('leavepictureinpicture', renderMore)
 $('#details').addEventListener('toggle', () => $('#details').open && renderFacts())
-const togglePlay = () => video.paused ? video.play() : video.pause()
-$('#playpause').addEventListener('click', togglePlay)
-video.addEventListener('click', () => {
-  if (video.muted) video.muted = false
-  else if (!video.controls) togglePlay()
-})
-$('#fullscreen').addEventListener('click', () =>
-  document.fullscreenElement ? document.exitFullscreen() : ($('#stage').requestFullscreen?.() ?? video.webkitEnterFullscreen?.()))
-document.addEventListener('keydown', e => {
-  if (e.target.matches('input, select') || !cur) return
-  if (e.key === ' ') { e.preventDefault(); togglePlay() }
-  if (e.key === 'ArrowRight') seekTo(position() + 10)
-  if (e.key === 'ArrowLeft') seekTo(position() - 10)
-  if (e.key === 'm') video.muted = !video.muted
-})
-$('#audio').addEventListener('change', e => { audio = Number(e.target.value); start(position()) })
-$('#subs').addEventListener('change', () => loadSubtitles())
+
 let resumeAt = 0
 addEventListener('pagehide', () => {
   if (pageLife.signal.aborted) return
@@ -435,6 +797,19 @@ addEventListener('pageshow', e => {
   if (!file) loadTitle()
   pollStatus()
 })
+
+// Remembered volume, mute and speed; native controls stay off in every mode
+video.controls = false
+const savedVolume = recall(PREF.volume)
+if (typeof savedVolume === 'number' && savedVolume >= 0 && savedVolume <= 1) video.volume = savedVolume
+video.muted = recall(PREF.muted) === true
+const savedSpeed = recall(PREF.speed)
+setSpeed(SPEEDS.includes(savedSpeed) ? savedSpeed : 1, false)
+renderPlayButton()
+renderVolume()
+renderFullscreen()
+renderSubtitlesMenu()
+renderAudioMenu()
 
 if (!/^[a-f0-9]{40}$/.test(ih ?? '') || !Number.isInteger(idx) || idx < 0) notify('This player link is incomplete. Open the file from its torrent page.', 'error', [linkButton('Search', '/')])
 else {
