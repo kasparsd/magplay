@@ -26,6 +26,21 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
 
+  # Release notes (docs/releases.md): every PR adds a note or is a release that consumes them
+  changesets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - if: github.event_name == 'pull_request'
+        run: node tools/scripts/check-changesets.mjs --base origin/${{ github.base_ref }}
+      - if: github.event_name != 'pull_request'
+        run: node tools/scripts/check-changesets.mjs
+
   playback:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -3,7 +3,6 @@
 import http from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { execFile } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
@@ -26,6 +25,7 @@ import { createStatusChecks } from './services/status-checks.ts'
 import { createStatus } from './services/status.ts'
 import { createSubtitles } from './services/subtitles.ts'
 import { createTabs } from './services/tabs.ts'
+import { version } from './version.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
@@ -57,7 +57,6 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   const current = config.current
   const boot = current()
   let port = boot.port
-  const { version } = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { version: string }
   const logging = suppliedLogging ?? createLogging({ level: boot.logLevel, version })
   const log = logging.logger
   const telemetry = createMetrics({ version, runtime: false })
