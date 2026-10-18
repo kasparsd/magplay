@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "prestart": "npm run build",
-    "start": "node apps/server/src/server.js",
+    "start": "node apps/server/src/main.ts",
     "test": "npm run build && node --test '{apps,packages}/**/*.test.{js,ts}'",
     "test:e2e": "npm run build && playwright test",
     "test:peers": "node --test tests/integration/*.test.js",
@@ -25,8 +25,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "build": "esbuild 'apps/client/src/*.js' --bundle --minify --format=esm --sourcemap --outdir=dist/client",
-    "dev": "npm run build -- --watch & node --watch apps/server/src/server.js"
+    "build": "esbuild 'apps/client/src/*.js' 'apps/client/src/*.ts' --bundle --minify --format=esm --sourcemap --outdir=dist/client",
+    "dev": "npm run build -- --watch & node --watch apps/server/src/main.ts"
   },
   "engines": {
     "node": ">=24"

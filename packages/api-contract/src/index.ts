@@ -1,8 +1,20 @@
 // Wire contracts for the server JSON API, shared by apps/server (handlers) and
-// apps/client (pages). These describe wire data, not runtime validation or UI state.
-// This package is type-only: nothing here executes.
+// apps/client (pages). Mostly types; the settings schema and its validate() and the
+// status level helpers also run, on both sides, so they stay free of Node and DOM APIs.
 
-export type CodecKey = 'h264' | 'hevc' | 'vp9' | 'av1' | 'aac' | 'ac3' | 'eac3' | 'opus' | 'flac'
+export * from './settings.ts'
+export * from './status.ts'
+export * from './redact.ts'
+export type * from './search.ts'
+export type * from './explore.ts'
+
+/** Codecs the browser reports support for and the server's playback decision reads, in one list for both sides. */
+export const VIDEO_CODEC_KEYS = ['h264', 'hevc', 'vp9', 'av1'] as const
+export const AUDIO_CODEC_KEYS = ['aac', 'ac3', 'eac3', 'opus', 'flac'] as const
+export const CODEC_KEYS = [...VIDEO_CODEC_KEYS, ...AUDIO_CODEC_KEYS] as const
+export type VideoCodecKey = typeof VIDEO_CODEC_KEYS[number]
+export type AudioCodecKey = typeof AUDIO_CODEC_KEYS[number]
+export type CodecKey = typeof CODEC_KEYS[number]
 
 export type BrowserCapabilities = Record<CodecKey, boolean>
 

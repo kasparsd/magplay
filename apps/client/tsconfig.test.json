@@ -10,7 +10,9 @@
       "node"
     ],
     "outDir": "${configDir}/.tsbuild/test",
-    "tsBuildInfoFile": "${configDir}/.tsbuild/test.tsbuildinfo"
+    "tsBuildInfoFile": "${configDir}/.tsbuild/test.tsbuildinfo",
+    "allowJs": true,
+    "checkJs": false
   },
   "include": [
     "${configDir}/src/**/*.test.ts"

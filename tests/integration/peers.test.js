@@ -55,7 +55,7 @@ test('loopback peers: uncached bytes, disappearing seeder, cancellation, retry a
   const cache = path.join(dir, 'cache')
   const appPort = await port()
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS)/.test(key)))
-  const proc = spawn(process.execPath, ['apps/server/src/server.js'], {
+  const proc = spawn(process.execPath, ['apps/server/src/main.ts'], {
     env: {
       ...env,
       CACHE_DIR: cache,

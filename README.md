@@ -37,14 +37,14 @@ Searches always use free-text `t=search` (or `type=search`), never season/episod
 
 Some results have no magnet or infohash, only a download link through the indexer's proxy (Jackett's `/dl/…`, Prowlarr's `/<id>/download…`). These links contain the indexer's API key in plain text, so they never go to the browser. The page gets an opaque `linkId`, and magplay fetches the link itself when you open the result: either a `.torrent` file or a redirect to a magnet. Ids are kept for the last 5,000 results and are lost on restart ("This search result has expired. Search again."). Prowlarr also rewrites raw magnets into proxy links, so when it reports an infohash magplay builds the magnet itself and skips the proxy.
 
-Each kind of indexer is an adapter in `src/sources/` with one method, `search(query, { cat, signal })`, returning normalized releases. Adding another kind means writing an adapter and registering it in `src/sources/index.js`.
+Each kind of indexer is an adapter in `packages/indexers/src/` implementing the `Source` interface: `search(query, { cat, signal })`, returning normalized releases, and `check()` for the status menu. Adding another kind means writing an adapter with a parse function for its responses, adding its config to the `SourceConfig` union in `sources.ts`, and reading it from env in `apps/server/src/config.ts`.
 
 ## Using it
 
 Three pages, each with its own URL, so Back, reload, bookmarks and new tabs all work:
 
-- **Search** (`/?q=…`). Results from every source, merged, with size, seeders, title badges and "plays in browser" for H.264 releases with AAC or unknown audio. Chips under the search show each source's result count; a failed source is red, with the reason on hover. All / Movies / TV searches again at once. With no search, the page lists **recently opened** torrents from the cache, with the last episode this browser played.
-- **Explore** (`/explore`, needs BitMagnet). Films and shows from BitMagnet's TMDB-matched index, one tile per title (plain coloured tiles, no posters, nothing loaded from outside). Movies / TV, Most seeded / Newest, genre chips with counts, year and quality. A title page (`/title/…`) shows rating, runtime, genres, overview, IMDb/TMDB links and every release of that exact title in BitMagnet, browser-playable first, with **Best release** and **Search all sources**. "Just added" lists the newest releases, including ones BitMagnet couldn't match.
+- **Search** (`/?q=…`). Results from every source, merged, with size, seeders, title badges and "plays in browser" for H.264 releases with AAC or unknown audio. With more than one source, chips under the search show each source's result count and each row says where it came from; a failed source is listed with the reason and a **Search again** button. All / Movies / TV searches again at once. With no search, the page lists **recently opened** torrents from the cache, with the last episode this browser played (✕ hides one in this browser until it's opened again), or a line of help on first run.
+- **Explore** (`/explore`, needs BitMagnet). Films and shows from BitMagnet's TMDB-matched index, one tile per title (plain coloured tiles, no posters, nothing loaded from outside). Movies / TV, Most seeded / Newest, genre chips with counts (left out where BitMagnet only estimated them), year and quality. Each filter change is a history entry, so Back steps back through them. A title page (`/title/…`) shows rating, runtime, genres, overview, IMDb/TMDB links and every release of that exact title in BitMagnet, most seeded first, with **Best release** (the most seeded one that plays in the browser, marked in the list) and **Search all sources**. "Just added" lists the newest releases, including ones BitMagnet couldn't match.
 - **Torrent** (`/t/<infohash>`). Opens straight away and counts the seconds while magplay finds peers and the file list (up to `METADATA_TIMEOUT_S`). One **Play** button (or **Resume S01E04 at 12:34** where you left off), a **More** menu for the whole torrent (playlist of all episodes, Download all as `.tar`, open or copy the magnet, copy the infohash), and a row per file with ▶ and a ⋯ menu (external players, copy the stream link, download the file). One activity line (peers, speed, how much is on the NAS) opens into the peer table; each file has a progress bar.
 - **Player** (`/play/<infohash>/<file>`). Messages appear on the video. Audio, subtitles, **Open in** (external players) and **ⓘ Details** (mode, codecs, peers, buffer, ffmpeg speed) sit below. A **Next** bar links to the next episode, and at the end of one the next starts after 10 s unless you cancel.
 
@@ -100,6 +100,7 @@ services:
       CACHE_MAX_GB: "50"
     volumes:
       - magplay_data:/data
+      - /run/avahi-daemon:/run/avahi-daemon:ro   # optional: .local names in source URLs
 
 volumes:
   magplay_data:
@@ -115,7 +116,7 @@ Then open `http://example-host:3382/`. To build from a checkout instead of pulli
 
 Prebuilt images are published to `ghcr.io/kasparsd/magplay`. Publishing a GitHub release `vX.Y.Z` tags the image `X.Y.Z`, `X.Y` and `X`; a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to `main` moves the `edge` tag, and older edge builds are deleted. There is no `latest` tag, so pin a release or follow `edge` on purpose.
 
-**Indexer addresses:** inside the container, use Compose service names (`http://bitmagnet:3333/...`, `http://jackett:9117`) or IP addresses. `.local` mDNS names such as `example-host.local` resolve on a Mac, and inside Docker Desktop, but usually **not** inside a Linux container, because the image has no mDNS resolver.
+**Indexer addresses:** inside the container, use Compose service names (`http://bitmagnet:3333/...`, `http://jackett:9117`), IP addresses, or `.local` mDNS names such as `example-host.local`. mDNS multicast doesn't reach a container on Docker's bridge network, so magplay asks the host's avahi-daemon instead: install it on the host (`apt install avahi-daemon`; Synology and most NAS systems already run it) and mount its socket directory with `- /run/avahi-daemon:/run/avahi-daemon:ro` under `volumes:`. The log says `Resolving .local names through the host’s avahi-daemon` at startup when the socket is there. Without it, `.local` names fall through to normal DNS, which works in Docker Desktop but usually not on Linux.
 
 **Behind Nginx Proxy Manager:** turn off buffering for streams (Advanced tab: `proxy_buffering off;`). Otherwise nginx buffers `/raw` and `/hls` responses and seeking gets slow. Links in `.m3u` files honour `X-Forwarded-Proto`/`X-Forwarded-Host`.
 
@@ -174,6 +175,10 @@ response may need a hard reload/cache clear. No Node/proxy speedup has been benc
 
 ## Configuration
 
+Open **Settings** from the gear at the right of the top bar (`/settings`). It edits sources, playback and storage limits, saved to `settings.json` in the data folder (`CACHE_DIR`, `./data` by default), and they apply without a restart. The rest of the variables below (ports, cache folder, job limits, timeouts, trackers, ffmpeg paths, DHT and LSD) are set only in the environment. The status button next to the gear shows whether sources, Explore, ffmpeg and the disk are healthy.
+
+Env vars still work and win over saved settings: a field set by one is read-only in Settings and names its variable. magplay never writes `.env`. Sources from env vars are listed first and locked; sources added in Settings follow them.
+
 | Var | Default | Meaning |
 |---|---|---|
 | `PORT` | `8080` | HTTP port |
@@ -204,10 +209,10 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 | Method + path | Does |
 |---|---|
 | `GET /`, `/t/:ih`, `/play/:ih/:idx` | The pages: search, a torrent's files and activity, the player. Every step has its own URL, so reload, Back, bookmarks and new tabs work. `/t?link=<linkId>` opens a link-only search result and switches to `/t/<infohash>` once resolved. Old `/player.html?ih=&idx=` links redirect. |
-| `GET /api/explore?type=&genre=&year=&res=&sort=&page=` | A page of titles from BitMagnet: `{titles:[{type, source, id, title, year, rating, runtime, overview, genres, links, releaseCount, seeders, playable, best}], hasMore}`. `type` is `movie` or `tv_show`, `sort` is `seeders` or `added`. Cached 60 s. |
-| `GET /api/explore/facets?type=&genre=&year=&res=` | Genre, year and resolution counts under those filters. Slow on a big index (tens of seconds for TV), so cached 15 min and warmed for both types at startup. |
+| `GET /api/explore?type=&genre=&year=&res=&sort=&page=` | A page of titles from BitMagnet: `{titles:[{type, source, id, title, year, rating, runtime, overview, genres, links, seeders, playable, best}], hasMore}`. `seeders` is the most-seeded release's on that page. `type` is `movie` or `tv_show`, `sort` is `seeders` or `added`. Cached 60 s. |
+| `GET /api/explore/facets?type=&genre=&year=&res=` | Genre, year and resolution counts under those filters: `{genres:[{value, label, count, estimate?}], years, resolutions}`. Slow on a big index (tens of seconds for TV), so cached 15 min and warmed for both types at startup. `estimate: true` marks a count BitMagnet only estimated from Postgres statistics (film genre estimates can be 100× too low); Explore shows those without a number. |
 | `GET /api/explore/latest?type=` | The newest releases, matched or not |
-| `GET /api/title/:type/:source/:id?title=&year=` | A title's metadata and its releases in BitMagnet |
+| `GET /api/title/:type/:source/:id?title=&year=` | A title's metadata and its releases in BitMagnet, from the 100 most-seeded search hits for its name; `truncated: true` when there were more hits |
 | `GET /api/recent` | Torrents with saved metadata in the cache, most recently used first: `[{infoHash, name, length, onDisk, lastUsed}]` |
 | `GET /api/search?q=&cat=` | Searches all sources. Returns `{results: [{title, infoHash, magnet, linkId, size, seeders\|null, sources, badges, likelyDirect}], sources: [{name, ok, count, error, ms}]}`, with results sorted by seeders, then size. 502 only if every source fails. |
 | `POST /api/torrents` `{infoHash \| magnet \| linkId}` | Adds or reuses the torrent, waits for metadata (504 after `METADATA_TIMEOUT_S`) and returns `{infoHash, name, files:[{idx, name, size, isVideo, isSub, season, episode}]}`. Nothing is downloaded until a file is streamed. `linkId` refers to a download link from a recent search (410 if it has expired). |
@@ -222,7 +227,14 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 | `DELETE` or `POST /api/play/:session` | Stops ffmpeg and deletes the session directory. `POST` is for `navigator.sendBeacon` when the tab closes. Sessions with no requests for 45 s are also stopped. |
 | `POST /api/play/tab/:tab` | Closes a page activation, including a session whose POST result has not reached the browser yet; late requests for that activation are fenced briefly. |
 | `GET /subs/:ih/:idx/:track.vtt` | Embedded text subtitle `track` as WebVTT (direct mode; reads the whole file), or `file.vtt` to convert a `.srt`/`.vtt`/`.ass` file in the torrent |
-| `GET /health` | 200 |
+| `GET /api/status` | `{level, checks:[{id, label, level, required, value, message, action}]}`. Checks run when asked and are cached (sources and Explore 60 s, disk 30 s, ffmpeg once). |
+| `GET /api/settings` | Server settings in use, secrets masked as `{set}`, with `meta[key] = {source: env\|file\|default, env, locked}` |
+| `PATCH /api/settings` | A partial update, validated as a whole (400 with `fields` per key, nothing saved) and written atomically. Same-origin only (403 otherwise), like every write below. |
+| `POST /api/settings/test` `{key: 'sources', item}` | Checks a source with unsaved values; returns a check result |
+| `GET /api/debug` | Version, uptime, ffmpeg versions, busy slots and limits, disk and cache use, and the last 200 log lines |
+| `POST /api/debug/clear-hls` | Stops every conversion and deletes its segments |
+| `GET /api/speedtest` | Random bytes (up to 256 MB) for the browser's connection test |
+| `GET /health` | 200 `{ ok, uptimeS }`; 503 once shutdown has begun |
 
 ## Dependencies
 
@@ -304,16 +316,16 @@ Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 
 
 Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
 
-- `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by the `http-kit` router.
+- `apps/server/src/`: the Node service. `main.ts` is the entry point (config, startup checks, graceful shutdown); `app.ts` builds the server from the packages; `config.ts` parses env and saved settings; `services/` coordinates the packages (play, tabs, search, Explore, playlists, subtitles, status); `http/` holds the routes, matched by the `http-kit` router, and the media and error handling.
 - `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/ui.ts` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.ts` (DOM-independent JSON transport) and `lib/urls.ts` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
 - `public/`: HTML and CSS, served as-is.
-- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
+- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `indexers` (Torznab, Jackett, Prowlarr and BitMagnet adapters, merged search, download links), `torrent-engine` (the WebTorrent client, torrent cache and eviction), `playback` (ffprobe, the direct/remux/transcode decision, HLS ffmpeg sessions), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
 
 ### Test layout
 
 Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `packages/http-kit/src/router.test.ts` and `packages/seekable-tar/src/index.test.ts`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.ts`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
 
-Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `apps/server/src/sources/test-fixtures/`, with shared helpers in `apps/server/src/sources/test-helpers.js`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
+Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `packages/indexers/src/test-fixtures/`, with shared helpers in `packages/indexers/src/test-helpers.ts`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
 
 Docker excludes tests, fixture data and helpers from its build context, and the runtime image carries only the server, the packages, `public/` and the built bundles. Node serves the page bundles and their source maps through an explicit allowlist; client sources and colocated tests are never exposed.
 
@@ -321,7 +333,7 @@ Docker excludes tests, fixture data and helpers from its build context, and the 
 
 Import `api` from `apps/client/src/lib/api.ts`. The client keeps same-origin relative URLs, forwards fetch options/AbortSignal/cache settings, preserves caller headers when posting JSON, and never retries implicitly. HTTP errors are `ApiError`s exposing `status` and the server's string error message (or `HTTP <status>` for a non-JSON proxy error). Invalid or empty JSON on a successful response now produces an explicit `Invalid JSON response` error instead of silently returning `{}`. Network, body-stream and abort failures retain their original error/reason. Use ordinary `fetch` for HEAD requests, text subtitles, playlists and media bytes.
 
-`@magplay/api-contract` types probe results, browser capability keys, play requests, direct/HLS decisions and torrent/session status. They are compile-time contracts, not runtime response validation.
+`@magplay/api-contract` types probe results, browser capability keys (and holds `CODEC_KEYS`), play requests, direct/HLS decisions, torrent/session status, search results, torrent file lists and Explore responses; the server's handlers are typed against the same interfaces. They are compile-time contracts, not runtime response validation.
 
 ### Player helpers
 

@@ -1,26 +1,32 @@
 // A film or show from Explore, /title/<type>/<source>/<id>?title=&year=: what it is, and its releases in BitMagnet.
+import './lib/topbar.ts'
 import { api } from './lib/api.ts'
-import { $, el, fill, posterTile, releaseRow, setStatus } from './lib/ui.ts'
+import { $, count, el, fill, posterTile, releaseRow, setError, setStatus } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
+import { backTarget } from './lib/back.ts'
 
 const [, , type, source, id] = location.pathname.split('/')
 const params = new URLSearchParams(location.search)
 const status = $('#status')
 
-// Back to Explore with its filters, when we came from it
-const back = $('#back')
-if (document.referrer.startsWith(`${location.origin}/explore`)) {
-  back.href = document.referrer
-  back.addEventListener('click', e => { e.preventDefault(); history.back() })
-} else if (type === 'tv_show') {
-  back.href = urls.explore({ type })
-}
+// Back to Explore with its filters (or the search) when we came from it, otherwise to Explore for this type
+const back = backTarget(document.referrer, location.origin, { label: '← Explore', href: urls.explore({ type: type === 'tv_show' ? type : '' }) })
+Object.assign($('#back'), { href: back.href, textContent: back.label })
+if (back.history) $('#back').addEventListener('click', e => { e.preventDefault(); history.back() })
 
 const LINK_NAMES = { imdb: 'IMDb', tmdb: 'TMDB', tvdb: 'TheTVDB' }
 
-function renderHeader (t) {
-  const releases = [...t.releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
-  const best = releases.find(r => r.likelyDirect) ?? releases[0]
+/** Most seeded first, the same order as Explore's "Most seeded" and the seeders on its tile. */
+const bySeeders = releases => [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
+/** The release Best release opens: the most seeded one that plays in the browser, otherwise the most seeded. */
+const bestOf = releases => releases.find(r => r.likelyDirect) ?? releases[0]
+
+/** What Best release chose and why, since it isn't always the top of the list. */
+const bestNote = best => best.likelyDirect
+  ? `Best release: the most seeded one that plays in the browser (${count(best.seeders ?? 0, 'seeder')}).`
+  : `Best release: the most seeded one (${count(best.seeders ?? 0, 'seeder')}). None looks like it plays in the browser, so the player converts it.`
+
+function renderHeader (t, best) {
   const query = [t.title, t.year].filter(Boolean).join(' ')
   return [
     posterTile(t.title, 'large'),
@@ -33,7 +39,8 @@ function renderHeader (t) {
       el('p', { className: 'actions' },
         best && el('a', { className: 'button primary', href: urls.torrent(best.infoHash, { title: best.name }), title: best.name },
           best.likelyDirect ? '▶ Best release' : 'Open best release'),
-        el('a', { className: 'button', href: urls.search(query), textContent: 'Search all sources' }))),
+        el('a', { className: 'button', href: urls.search(query), textContent: 'Search all sources' })),
+      best && el('p', { className: 'meta best-note', textContent: bestNote(best) })),
   ]
 }
 
@@ -46,12 +53,20 @@ async function load () {
   try {
     t = await api(`/api/title/${type}/${source}/${id}?${new URLSearchParams({ title, ...(params.get('year') && { year: params.get('year') }) })}`)
   } catch (err) {
-    return setStatus(status, err.message, 'error')
+    return setError(status, err.message, load)
   }
   setStatus(status, '')
-  fill($('#header'), ...renderHeader(t))
-  const releases = [...t.releases].sort((a, b) => (b.likelyDirect - a.likelyDirect) || ((b.seeders ?? 0) - (a.seeders ?? 0)))
-  fill($('#releases ul'), ...releases.map(r => releaseRow(r, urls.torrent(r.infoHash, { title: r.name }))))
+  const releases = bySeeders(t.releases)
+  const best = bestOf(releases)
+  fill($('#header'), ...renderHeader(t, best))
+  $('#releases h2').textContent = count(releases.length, 'release')
+  fill($('#releases ul'), ...releases.map(r => releaseRow(r, urls.torrent(r.infoHash, { title: r.name }), {
+    extra: [r === best && el('span', { className: 'badge good', textContent: 'best' })],
+  })))
+  // BitMagnet's search for the name returned more hits than were read, so this list may be incomplete
+  fill($('#releases .truncated'), ...(t.truncated
+    ? ['These are the releases among the 100 most-seeded matches for its name; BitMagnet has more. ', el('a', { href: urls.search([t.title, t.year].filter(Boolean).join(' ')), textContent: 'Search all sources' }), ' for the rest.']
+    : []))
   $('#releases').hidden = false
 }
 

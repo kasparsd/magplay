@@ -1,3 +1,0 @@
-# Formatting-only commits; use with: git config blame.ignoreRevsFile .git-blame-ignore-revs
-# style: apply neostandard formatting
-7b4b27bb784a56ecaff478b7bbb4f192308eb1d5

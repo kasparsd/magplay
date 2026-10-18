@@ -1,7 +1,7 @@
 # Local stack for trying magplay with Jackett and Prowlarr next to it.
 #   docker compose up -d --build
 #   node tools/scripts/setup-indexers.mjs     # adds public indexers, writes their API keys to .env, restarts magplay
-# BitMagnet isn't included: point BITMAGNET_URL at yours (an IP address; .local names don't resolve in containers).
+# BitMagnet isn't included: point BITMAGNET_URL at yours (an IP address, or a .local name when the host runs avahi-daemon).
 
 services:
   magplay:
@@ -21,6 +21,8 @@ services:
       CACHE_MAX_GB: "${CACHE_MAX_GB:-20}"
     volumes:
       - magplay_data:/data
+      # The host's avahi-daemon resolves .local (mDNS) names in source URLs; harmless where avahi isn't installed
+      - /run/avahi-daemon:/run/avahi-daemon:ro
     depends_on: [jackett, prowlarr]
 
   jackett:

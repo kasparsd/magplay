@@ -19,4 +19,18 @@ Before admitting HLS, the server checks session capacity and filesystem free spa
 
 This is a **soft budget**, not an operating-system disk quota: output and other processes can consume space between checks. Use a dedicated filesystem/container storage quota if a hard bound is required. Startup probing/subtitle work and raw downloads can still grow the torrent cache; active torrents remain protected from its LRU eviction. The reserve does not promise a whole-machine free-space guarantee.
 
+## In-memory caches
+
+Long-running servers keep a few answers in memory. Each one is bounded, and Settings → Debug lists their current sizes next to the busy slots.
+
+| Cache | Bound | Notes |
+| --- | --- | --- |
+| Probe results | 256 inputs, least recently used out | A file's streams don't change, so only the count is bounded. A failed probe is forgotten so the next request retries. |
+| Converted subtitle tracks | 64 tracks and 64 MiB of WebVTT, least recently used out | The newest track is always kept, however big. |
+| Search download links | 5,000 opaque link IDs | The links can carry indexer API keys, so they never reach the browser. An evicted ID answers 410 "search again". |
+| Explore answers | 200 entries, 60 s (counts 15 min) | Cleared when BitMagnet's address changes. |
+| Closed player tabs | 1,000 fences of three minutes | See [lifetimes](lifecycle.md). |
+
+These are fixed constants rather than settings: none has needed tuning, and the Debug numbers show whether one ever does.
+
 Keep `HLS_MAX_GB` large enough for expected remux output: HLS retains past segments to support seeking, so pause-ahead throttling alone does not bound a long film's total output. Raising the budget may be preferable to server transcoding; external players use no HLS storage. Observe representative files on the actual NAS before tuning the defaults.

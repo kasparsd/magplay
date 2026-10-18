@@ -1,6 +1,7 @@
 // The explore page, /explore?type=&genre=&year=&res=&sort=: films and shows from BitMagnet, one tile per title.
+import './lib/topbar.ts'
 import { api } from './lib/api.ts'
-import { $, count, el, fill, posterTile, releaseRow, setStatus, timeAgo } from './lib/ui.ts'
+import { $, count, el, fill, posterTile, releaseRow, setError, setStatus, timeAgo } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
 
 import { latestRequest } from './lib/requests.ts'
@@ -9,14 +10,18 @@ const beginBrowse = latestRequest()
 const beginLatest = latestRequest()
 const form = $('#filters')
 const status = $('#status')
-const params = new URLSearchParams(location.search)
-const filters = {
-  type: params.get('type') === 'tv_show' ? 'tv_show' : 'movie', // anything else falls back to films
-  sort: params.get('sort') || 'seeders',
-  genre: params.get('genre') || '',
-  year: params.get('year') || '',
-  res: params.get('res') || '',
+/** The filters a URL asks for. */
+function filtersFrom (search) {
+  const params = new URLSearchParams(search)
+  return {
+    type: params.get('type') === 'tv_show' ? 'tv_show' : 'movie', // anything else falls back to films
+    sort: params.get('sort') === 'added' ? 'added' : 'seeders',
+    genre: params.get('genre') || '',
+    year: params.get('year') || '',
+    res: params.get('res') || '',
+  }
 }
+const filters = filtersFrom(location.search)
 let page = 1
 let shown = new Set() // titles already on the page, so "Show more" doesn't repeat them
 
@@ -34,6 +39,11 @@ function renderTile (t) {
         t.seeders != null && el('span', { className: 'badge', textContent: count(t.seeders, 'seeder') }))))
 }
 
+// BitMagnet's estimated counts can be 100× off (film genres), so only exact ones are shown
+const exact = o => o.estimate || o.count == null ? '' : o.count.toLocaleString()
+const optionLabel = (label, o) => exact(o) ? `${label} (${exact(o)})` : label
+const TOP_GENRES = 14
+
 /** Genre chips, year and quality options, from BitMagnet's counts for the current filters. */
 function renderFacets ({ genres, years, resolutions }) {
   const chip = (label, value) => el('button', {
@@ -43,7 +53,10 @@ function renderFacets ({ genres, years, resolutions }) {
     ariaPressed: String(filters.genre === value),
     onclick: () => apply({ genre: value }),
   })
-  fill($('#genres'), chip('All genres', ''), ...genres.slice(0, 14).map(g => chip(`${g.label} ${g.count}`, g.value)))
+  // The chosen genre always has a chip, even when it isn't among the most common ones
+  const top = genres.slice(0, TOP_GENRES)
+  const chosen = filters.genre && !top.some(g => g.value === filters.genre) && (genres.find(g => g.value === filters.genre) ?? { value: filters.genre, label: filters.genre })
+  fill($('#genres'), chip('All genres', ''), ...[...top, chosen].filter(Boolean).map(g => chip(exact(g) ? `${g.label} ${exact(g)}` : g.label, g.value)))
   const options = (select, list, label) => {
     const current = filters[select.name]
     const choices = list.map(o => new Option(label(o), o.value))
@@ -51,9 +64,9 @@ function renderFacets ({ genres, years, resolutions }) {
     fill(select, select.options[0], ...choices)
     select.value = current
   }
-  options(form.year, years.slice(0, 40), y => `${y.value} (${y.count})`)
+  options(form.year, years.slice(0, 40), y => optionLabel(String(y.value), y))
   const order = Object.keys(RESOLUTIONS) // highest first
-  options(form.res, resolutions.filter(r => RESOLUTIONS[r.value]).sort((a, b) => order.indexOf(a.value) - order.indexOf(b.value)), r => `${RESOLUTIONS[r.value]} (${r.count})`)
+  options(form.res, resolutions.filter(r => RESOLUTIONS[r.value]).sort((a, b) => order.indexOf(a.value) - order.indexOf(b.value)), r => optionLabel(RESOLUTIONS[r.value], r))
 }
 
 async function load ({ append = false } = {}) {
@@ -82,7 +95,7 @@ async function load ({ append = false } = {}) {
       page = requestedPage - 1
       $('#more').hidden = false
     }
-    setStatus(status, err.message, 'error')
+    setError(status, err.message, () => { if (append) page++; load({ append }) })
   }
 }
 
@@ -93,9 +106,7 @@ async function loadLatest () {
   fill($('#latest ul'), ...list.map(r => {
     // Matched releases read as "Show · S02E05"; unmatched ones keep their release name
     const name = r.title ? [r.title.title, r.episode].filter(Boolean).join(' · ') : r.name
-    const row = releaseRow({ ...r, name, episode: null }, urls.torrent(r.infoHash, { title: r.name }))
-    if (r.publishedAt) row.querySelector('.size').prepend(`${timeAgo(Date.parse(r.publishedAt))} · `)
-    return row
+    return releaseRow({ ...r, name, episode: null }, urls.torrent(r.infoHash, { title: r.name }), { meta: [r.publishedAt && timeAgo(Date.parse(r.publishedAt))] })
   }))
   $('#latest').hidden = !list.length
 }
@@ -107,32 +118,49 @@ async function loadFacets (q) {
   if (!$('#genres').children.length) fill($('#genres'), el('span', { className: 'chip', textContent: 'Counting genres…' }))
   const facets = await api(`/api/explore/facets?${q}`).catch(() => null)
   if (run !== facetsRun) return
-  if (facets) renderFacets(facets)
-  else if ($('#genres').textContent === 'Counting genres…') fill($('#genres'), el('span', { className: 'muted', textContent: 'Genre counts unavailable. Try changing filters.' }))
+  if (facets) return renderFacets(facets)
+  if ($('#genres').textContent === 'Counting genres…') {
+    fill($('#genres'), el('span', { className: 'muted', textContent: 'Genre counts didn\'t arrive in time.' }),
+      el('button', { type: 'button', className: 'chip', textContent: 'Try again', onclick: () => { fill($('#genres')); loadFacets(q) } }))
+  }
 }
 
-/** Changes filters, keeps them in the URL (so Back and reload work) and reloads. */
-function apply (changes) {
+const filtersUrl = () => urls.explore({ ...filters, type: filters.type === 'movie' ? '' : filters.type, sort: filters.sort === 'seeders' ? '' : filters.sort })
+
+/**
+ * Changes filters and reloads. Each change is its own history entry, so Back steps back through the filters
+ * (and then off Explore) instead of leaving with every choice lost; reload and shared links keep them too.
+ */
+function apply (changes, { push = true } = {}) {
   const typeChanged = changes.type && changes.type !== filters.type
   Object.assign(filters, changes)
   if (typeChanged) {
-    Object.assign(filters, { genre: '', year: '', res: '' }) // genres differ between films and shows
+    Object.assign(filters, { genre: changes.genre ?? '', year: changes.year ?? '', res: changes.res ?? '' }) // genres differ between films and shows
     facetsRun++ // drop the previous type's counts if they arrive late
     fill($('#genres'))
     for (const select of [form.year, form.res]) fill(select, select.options[0])
   }
-  history.replaceState(null, '', urls.explore({ ...filters, type: filters.type === 'movie' ? '' : filters.type, sort: filters.sort === 'seeders' ? '' : filters.sort }))
-  form.elements.type.value = filters.type
-  form.year.value = filters.year
-  form.res.value = filters.res
+  if (push && filtersUrl() !== location.pathname + location.search) history.pushState(null, '', filtersUrl())
+  showFilters()
   load()
   if (typeChanged) loadLatest()
 }
 
-form.elements.type.value = filters.type
-form.elements.sort.value = filters.sort
-// The selects get their options from the first answer; until then, keep the URL's choice as a lone option
-for (const name of ['year', 'res']) if (filters[name]) form[name].append(new Option(filters[name], filters[name], true, true))
+/** Puts the filters into the form. The selects get their options from the facets; until then the choice is a lone option. */
+function showFilters () {
+  form.elements.type.value = filters.type
+  form.elements.sort.value = filters.sort
+  for (const name of ['year', 'res']) {
+    const select = form[name]
+    if (filters[name] && ![...select.options].some(o => o.value === filters[name])) select.append(new Option(filters[name], filters[name]))
+    select.value = filters[name]
+  }
+}
+
+// Back and Forward between filter entries: show what that URL asks for
+addEventListener('popstate', () => apply(filtersFrom(location.search), { push: false }))
+
+showFilters()
 for (const radio of form.elements.type) radio.addEventListener('change', () => apply({ type: radio.value }))
 for (const radio of form.elements.sort) radio.addEventListener('change', () => apply({ sort: radio.value }))
 form.year.addEventListener('change', () => apply({ year: form.year.value }))

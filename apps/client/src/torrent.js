@@ -1,7 +1,9 @@
 // The torrent page, /t/<infohash>: file list, downloads, external players and live activity.
 // /t?link=<id> opens a search result that only had a download link, then switches to /t/<infohash>.
+import './lib/topbar.ts'
 import { api } from './lib/api.ts'
-import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setStatus, sleep, timeAgo } from './lib/ui.ts'
+import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setError, setStatus, shortHash, sleep, timeAgo } from './lib/ui.ts'
+import { backTarget } from './lib/back.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 import { progressKey, resumePosition } from './lib/progress.ts'
 
@@ -9,11 +11,12 @@ const params = new URLSearchParams(location.search)
 const status = $('#status')
 let infoHash = location.pathname.split('/')[2] || null
 
-// Back to the results without searching again, when we came from them
-const back = $('#back')
-if (document.referrer.startsWith(`${location.origin}/?`)) {
-  back.href = document.referrer
-  back.addEventListener('click', e => { e.preventDefault(); history.back() })
+// Back to the results, Explore or title the user came from, without loading them again; no link after a direct visit
+const back = backTarget(document.referrer, location.origin)
+if (back) {
+  Object.assign($('#back'), { href: back.href, textContent: back.label })
+  $('#back').addEventListener('click', e => { e.preventDefault(); history.back() })
+  $('.back').hidden = false
 }
 
 function showName (name) {
@@ -22,7 +25,7 @@ function showName (name) {
 }
 
 async function load () {
-  showName(params.get('title') || infoHash || 'Torrent')
+  showName(params.get('title') || (infoHash ? `Torrent ${shortHash(infoHash)}` : 'Torrent'))
   const started = Date.now()
   const tick = () => setStatus(status, `Finding peers and the file list… ${Math.round((Date.now() - started) / 1000)} s`, 'busy')
   tick()
@@ -33,9 +36,7 @@ async function load () {
       ? await api('/api/torrents', { json: { linkId: params.get('link') } })
       : await api(`/api/torrents/${infoHash}`)
   } catch (err) {
-    setStatus(status, err.message, 'error')
-    fill($('#torrent'), el('p', { className: 'actions' },
-      el('button', { type: 'button', className: 'button', textContent: 'Try again', onclick: () => location.reload() })))
+    setError(status, err.message, load)
     return
   } finally {
     clearInterval(timer)
@@ -62,7 +63,7 @@ function renderSummary (t, videos) {
   const episodes = videos.filter(f => f.episode != null).length
   const count = episodes > 1 ? `${episodes} episodes` : videos.length > 1 ? `${videos.length} videos` : `${t.files.length} file${t.files.length > 1 ? 's' : ''}`
   return el('p', { className: 'meta' }, `${count} · ${formatBytes(total)} ·`,
-    copyButton(`ID ${t.infoHash.slice(0, 8)}…`, t.infoHash, `Copy the infohash ${t.infoHash}`))
+    copyButton(`ID ${shortHash(t.infoHash)}`, t.infoHash, `Copy the infohash ${t.infoHash}`))
 }
 
 /** The main action, plus everything that applies to the whole torrent in one menu. */
