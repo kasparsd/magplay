@@ -2,6 +2,7 @@
 import { captureConsole } from './logs.ts'
 import { loadConfig } from './config.ts'
 import { createApp } from './app.ts'
+import { installMdnsLookup } from './mdns.ts'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
@@ -27,6 +28,7 @@ const app = attempt(() => createApp({ config, logs }), err =>
   `Cannot create the cache directory ${config.current().cacheDir} (${reason(err)}). Set CACHE_DIR to a writable location, e.g. CACHE_DIR=./data`)
 
 app.startupChecks()
+if (installMdnsLookup()) console.log('Resolving .local names through the host’s avahi-daemon')
 await app.listen().catch((err: unknown) => fail(`Cannot listen on port ${config.current().port}: ${reason(err)}`))
 
 let stopping = false

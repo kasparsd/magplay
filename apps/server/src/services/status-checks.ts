@@ -51,7 +51,7 @@ export interface StatusChecksOptions {
 }
 
 export interface StatusChecks {
-  /** Re-runs the checks a saved setting affects, and notes the save in Recent. */
+  /** Re-runs the checks a saved setting affects. */
   settingsChanged: (changed: string[]) => void
   /** GET /api/debug: versions, what's busy, and the log tail. */
   debugInfo: () => Promise<DebugInfo>
@@ -156,14 +156,6 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
       if (changed.includes('explore.bitmagnetUrl')) status.invalidate('explore')
       if (changed.some(key => key.startsWith('tools.'))) status.invalidate('ffmpeg')
       if (changed.some(key => key.startsWith('cache.') || key === 'server.cacheDir')) status.invalidate('disk')
-      const describe = (key: string): string => {
-        const def = settingDef(key)
-        const value = settings.effective[key]
-        const label = def?.label.toLowerCase() ?? key
-        const unit = def && 'unit' in def && def.unit ? ` ${def.unit}` : ''
-        return def && ['number', 'text', 'url', 'select', 'segmented'].includes(def.type) ? `${label} ${String(value)}${unit}` : label
-      }
-      status.pushEvent({ checkId: 'settings', level: 'ok', message: `Settings saved: ${changed.map(describe).join(', ')}` })
     },
     async debugInfo () {
       const sessions = hls.summary()

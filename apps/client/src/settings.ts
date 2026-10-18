@@ -14,7 +14,6 @@ import './lib/topbar.ts'
 import { $, copy, el, fill, formatSpeed, setStatus, timeAgo } from './lib/ui.ts'
 import type { Child } from './lib/ui.ts'
 
-const nav = $('#settings-nav')
 const body = $('#settings-body')
 const saveBar = $('#savebar')
 
@@ -31,7 +30,6 @@ const readouts = new Map<string, HTMLElement>()
 const tested = new Map<string, StatusCheck>()
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
-const sectionFromHash = (): SectionId => SECTIONS.find(s => `#${s.id}` === location.hash)?.id ?? 'sources'
 
 // ---- Readouts and actions the schema names; everything else is generic ----
 
@@ -261,15 +259,23 @@ function cards (defs: SettingDef[]): HTMLElement[] {
   }
   return [...groups].map(([name, list]) => el('div', { className: 'card' },
     name && el('div', { className: 'card-head' },
-      el('h2', { textContent: name }),
+      el('h3', { textContent: name }),
       name === 'Needs a restart' && el('span', { className: 'muted', textContent: 'Saved changes apply after magplay restarts.' })),
     ...list.map(row)))
 }
 
+/**
+ * One section of the page, rendered from SECTIONS in order. Each is a self-contained <section> with its
+ * own id (the #sources deep link) and heading, so the list can later become top tabs without a rewrite.
+ */
 function renderSection (id: SectionId): HTMLElement {
   const section = SECTIONS.find(s => s.id === id)!
   const defs = SETTINGS.filter(d => d.section === id && !d.hidden)
-  const parts: Child[] = [el('h1', { textContent: section.label }), el('p', { className: 'intro', textContent: section.intro })]
+  const parts: Child[] = [
+    el('div', { className: 'section-head' },
+      el('h2', { id: `${id}-title` }, section.label, el('span', { className: 'section-status', id: `${id}-status` })),
+      el('p', { className: 'intro', textContent: section.intro })),
+  ]
   for (const scope of ['server', 'browser'] as const) {
     const scoped = defs.filter(d => d.scope === scope)
     if (!scoped.length) continue
@@ -280,7 +286,9 @@ function renderSection (id: SectionId): HTMLElement {
     }
     parts.push(...cards(scoped))
   }
-  return el('section', { id: `section-${id}`, className: 'settings-section', hidden: id !== sectionFromHash() }, ...parts)
+  const box = el('section', { id, className: 'settings-section' }, ...parts)
+  box.setAttribute('aria-labelledby', `${id}-title`)
+  return box
 }
 
 function sectionLevel (id: SectionId): StatusLevel | null {
@@ -288,35 +296,48 @@ function sectionLevel (id: SectionId): StatusLevel | null {
   return levels.includes('error') ? 'error' : levels.includes('warn') ? 'warn' : null
 }
 
-function renderNav (): void {
-  const active = sectionFromHash()
-  fill(nav, ...SECTIONS.map(s => {
+/** A dot next to the heading of a section with a failing check. */
+function renderSectionStatus (): void {
+  for (const s of SECTIONS) {
+    const slot = document.getElementById(`${s.id}-status`)
     const level = sectionLevel(s.id)
-    const link = el('a', { href: `#${s.id}` }, s.label, level && el('span', { className: `status-dot lvl-${level}`, title: level === 'error' ? 'Has a problem' : 'Needs attention' }))
-    if (s.id === active) link.setAttribute('aria-current', 'page')
-    return link
-  }))
+    if (slot) fill(slot, level && el('span', { className: `status-dot lvl-${level}`, title: level === 'error' ? 'Has a problem' : 'Needs attention' }))
+  }
 }
+
+/** "Saved: search timeout" for a few seconds after a save, in the same bar. */
+let savedNote: { text: string, timer: ReturnType<typeof setTimeout> } | null = null
 
 function renderSaveBar (): void {
   const n = Object.keys(draft).length
-  saveBar.hidden = n === 0
-  $('#savebar-count').textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`
+  if (n && savedNote) {
+    clearTimeout(savedNote.timer)
+    savedNote = null
+  }
+  saveBar.hidden = n === 0 && !savedNote
+  saveBar.classList.toggle('saved', !n && !!savedNote)
+  $('#savebar-count').textContent = savedNote && !n ? savedNote.text : `${n} unsaved ${n === 1 ? 'change' : 'changes'}`
+}
+
+function noteSaved (keys: string[]): void {
+  if (savedNote) clearTimeout(savedNote.timer)
+  const names = keys.map(key => SETTINGS.find(d => d.key === key)?.label.toLowerCase() ?? key)
+  savedNote = { text: `Saved: ${names.join(', ')}`, timer: setTimeout(() => { savedNote = null; renderSaveBar() }, 4000) }
 }
 
 function render (): void {
   errorSlots.clear()
   readouts.clear()
-  renderNav()
   fill(body, ...SECTIONS.map(s => renderSection(s.id)))
+  renderSectionStatus()
   renderSaveBar()
+  if (observer) watchLiveSections()
 }
 
-function show (): void {
-  const active = sectionFromHash()
-  for (const s of SECTIONS) $(`#section-${s.id}`).hidden = s.id !== active
-  renderNav()
-  if (active === 'debug' || active === 'server') loadDebug().catch(console.error)
+/** Scrolls to the section the hash names (#debug), once it has been rendered. */
+function scrollToHash (): void {
+  const target = location.hash && document.getElementById(location.hash.slice(1))
+  if (target) target.scrollIntoView()
 }
 
 async function save (): Promise<void> {
@@ -334,12 +355,12 @@ async function save (): Promise<void> {
       }
       // Show the first failing field
       const first = Object.keys(failed)[0]
-      const def = first && SETTINGS.find(d => d.key === first)
-      if (def && def.section !== sectionFromHash()) location.hash = def.section
+      if (first) errorSlots.get(first)?.closest('.row')?.scrollIntoView({ block: 'center' })
       setStatus($('#savebar-status'), 'error' in out ? out.error : `HTTP ${res.status}`, 'error')
       return
     }
     saved = out as SettingsResponse
+    noteSaved(Object.keys(draft))
     draft = {}
     tested.clear()
     setStatus($('#savebar-status'), '')
@@ -364,7 +385,9 @@ async function load (): Promise<void> {
     return
   }
   render()
-  show()
+  watchLiveSections()
+  scrollToHash()
+  loadDebug().catch(console.error)
 }
 
 $('#savebar-save').addEventListener('click', () => { save().catch(console.error) })
@@ -373,25 +396,39 @@ $('#savebar-discard').addEventListener('click', () => {
   setStatus($('#savebar-status'), '')
   render()
 })
-window.addEventListener('hashchange', show)
 window.addEventListener('beforeunload', e => { if (Object.keys(draft).length) e.preventDefault() })
 onStatus(next => {
   status = next
   tested.clear()
   if (!saved) return
-  renderNav()
+  renderSectionStatus()
   // Source badges follow the latest checks; re-render the list only when nothing is being edited there
-  if (!('sources' in draft) && !document.activeElement?.closest('#section-sources')) {
-    const section = $('#section-sources')
-    const fresh = renderSection('sources')
-    fresh.hidden = section.hidden
-    section.replaceWith(fresh)
+  const section = document.getElementById('sources')
+  if (section && !('sources' in draft) && !section.contains(document.activeElement)) {
+    section.replaceWith(renderSection('sources'))
+    renderSectionStatus()
   }
 })
-// The Debug and Server sections show live numbers while open
+
+// The Server and Debug sections show live numbers, refreshed while either is on screen
+const onScreen = new Set<string>()
+let observer: IntersectionObserver | null = null
+function watchLiveSections (): void {
+  observer?.disconnect()
+  onScreen.clear()
+  observer = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (e.isIntersecting) onScreen.add(e.target.id)
+      else onScreen.delete(e.target.id)
+    }
+  })
+  for (const id of ['server', 'debug']) {
+    const node = document.getElementById(id)
+    if (node) observer.observe(node)
+  }
+}
 setInterval(() => {
-  const active = sectionFromHash()
-  if (!document.hidden && (active === 'debug' || active === 'server')) loadDebug().catch(console.error)
+  if (!document.hidden && onScreen.size) loadDebug().catch(console.error)
 }, 5000)
 
 load().catch(console.error)
