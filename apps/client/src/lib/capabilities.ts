@@ -1,9 +1,9 @@
 import { CODEC_KEYS } from '@magplay/api-contract'
+import type { BrowserCapabilities, CodecKey } from '@magplay/api-contract'
 
 // One MIME probe per codec key the server's playback decision reads. These are
 // support hints, not guarantees about a file's profile, bit depth or hardware decoding.
-/** @type {Record<import('@magplay/api-contract').CodecKey, string>} */
-const TYPES = {
+const TYPES: Record<CodecKey, string> = {
   h264: 'video/mp4; codecs="avc1.640028"',
   hevc: 'video/mp4; codecs="hvc1.1.6.L120.90"',
   vp9: 'video/webm; codecs="vp9"',
@@ -15,20 +15,17 @@ const TYPES = {
   flac: 'audio/mp4; codecs="flac"',
 }
 
+interface TypeSupport { isTypeSupported?: (type: string) => boolean }
+export interface BrowserMedia { ManagedMediaSource?: TypeSupport, MediaSource?: TypeSupport }
+
 /**
  * Measure the same MSE/native support hints used by the player. The caller owns
  * the video element and browser objects; importing this module reads no globals.
  * ManagedMediaSource keeps its existing precedence over MediaSource. Native
  * fallback requires "probably", not "maybe". No user-agent or codec policy here.
- *
- * @param {{canPlayType: (type: string) => string}} video
- * @param {{ManagedMediaSource?: {isTypeSupported?: (type: string) => boolean}, MediaSource?: {isTypeSupported?: (type: string) => boolean}}} [browser]
- * @returns {import('@magplay/api-contract').BrowserCapabilities}
  */
-export function measureCaps (video, { ManagedMediaSource, MediaSource } = {}) {
+export function measureCaps (video: { canPlayType: (type: string) => string }, { ManagedMediaSource, MediaSource }: BrowserMedia = {}): BrowserCapabilities {
   const MS = ManagedMediaSource || MediaSource
-  return /** @type {import('@magplay/api-contract').BrowserCapabilities} */ (Object.fromEntries(
-    CODEC_KEYS.map(key =>
-      [key, !!(MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably')])
-  ))
+  return Object.fromEntries(CODEC_KEYS.map(key =>
+    [key, !!(MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably')])) as BrowserCapabilities
 }

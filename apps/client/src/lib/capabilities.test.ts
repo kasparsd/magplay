@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CODEC_KEYS } from '@magplay/api-contract'
-import { measureCaps } from './capabilities.js'
+import { measureCaps } from './capabilities.ts'
 
 // Exact MIME probes are a compatibility contract with the existing player.
 const types = {
@@ -15,7 +15,7 @@ const types = {
   opus: 'audio/webm; codecs="opus"',
   flac: 'audio/mp4; codecs="flac"',
 }
-const all = supported => Object.fromEntries(Object.keys(types).map(key => [key, supported]))
+const all = (supported: boolean) => Object.fromEntries(Object.keys(types).map(key => [key, supported]))
 
 test('capability helper imports without DOM/window and reports every server codec key', () => {
   assert.equal(typeof window, 'undefined')
@@ -25,9 +25,9 @@ test('capability helper imports without DOM/window and reports every server code
 })
 
 test('MSE receives the unchanged MIME probes and supported types need no native fallback', () => {
-  const calls = []
+  const calls: string[] = []
   const MediaSource = {
-    isTypeSupported (type) {
+    isTypeSupported (this: unknown, type: string) {
       assert.equal(this, MediaSource)
       calls.push(type)
       return true
@@ -40,29 +40,29 @@ test('MSE receives the unchanged MIME probes and supported types need no native 
 
 test('native playback is a fallback when MediaSource is absent or lacks its static API', () => {
   for (const browser of [{}, { MediaSource: {} }, { ManagedMediaSource: {} }]) {
-    const calls = []
-    const video = { canPlayType (type) { assert.equal(this, video); calls.push(type); return 'probably' } }
+    const calls: string[] = []
+    const video = { canPlayType (this: unknown, type: string) { assert.equal(this, video); calls.push(type); return 'probably' } }
     assert.deepEqual(measureCaps(video, browser), all(true))
     assert.deepEqual(calls, Object.values(types))
   }
 })
 
 test('native maybe/empty hints stay unsupported; only probably enables the codec', () => {
-  const video = { canPlayType: type => type === types.h264 ? 'probably' : type === types.hevc ? 'maybe' : '' }
+  const video = { canPlayType: (type: string) => type === types.h264 ? 'probably' : type === types.hevc ? 'maybe' : '' }
   assert.deepEqual(measureCaps(video), { ...all(false), h264: true })
 })
 
 test('mixed MSE and native support combines per codec without user-agent assumptions', () => {
   const mse = new Set([types.h264, types.aac])
-  const video = { canPlayType: type => type === types.opus ? 'probably' : 'maybe' }
-  const caps = measureCaps(video, { MediaSource: { isTypeSupported: type => mse.has(type) } })
+  const video = { canPlayType: (type: string) => type === types.opus ? 'probably' : 'maybe' }
+  const caps = measureCaps(video, { MediaSource: { isTypeSupported: (type: string) => mse.has(type) } })
   assert.deepEqual(caps, { ...all(false), h264: true, aac: true, opus: true })
   assert.ok(Object.values(caps).every(value => typeof value === 'boolean'))
 })
 
 test('ManagedMediaSource retains precedence even when MediaSource would support more codecs', () => {
   class ManagedMediaSource {
-    static isTypeSupported (type) { return type === types.hevc }
+    static isTypeSupported (type: string) { return type === types.hevc }
   }
   const MediaSource = { isTypeSupported: () => assert.fail('must not override ManagedMediaSource') }
   assert.deepEqual(measureCaps({ canPlayType: () => '' }, { ManagedMediaSource, MediaSource }), { ...all(false), hevc: true })

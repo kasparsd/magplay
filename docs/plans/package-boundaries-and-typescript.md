@@ -129,7 +129,7 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 
 Not a dedicated sweep. Each page entry is converted the next time it changes substantively; `player.js` is replaced by the TypeScript rewrite in [Player step 1](../user-interface.md#1-one-player-chrome-for-every-mode). `capabilities` converts with Phase 4, when it starts importing codec keys from `playback`.
 
-- [ ] Convert `capabilities`, then the `search`, `explore`, `title`, `torrent` and `player` entries as they are touched. The player keeps its imperative lifecycle ([lifetime rules](../lifecycle.md)); per-activation state objects are fine where they fall out naturally.
+- [ ] Convert `capabilities`, then the `search`, `explore`, `title`, `torrent` and `player` entries as they are touched. *`capabilities` and `player` converted 2026-10-18, with the player's pure parts split into `lib/player-*.ts` and `lib/format.ts`; `search`, `explore`, `title` and `torrent` remain `.js`.* The player keeps its imperative lifecycle ([lifetime rules](../lifecycle.md)); per-activation state objects are fine where they fall out naturally.
 - [ ] Add a typed `requireElement(selector, ctor)` helper instead of non-null assertions, with the first page conversion.
 - [ ] Remove `allowJs` from `apps/client` once the last page is converted.
 
