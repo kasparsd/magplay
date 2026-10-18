@@ -4,7 +4,7 @@
 
 magplay serves one person on a trusted LAN. Observability should help explain failed playback, slow startup/seek, source outages and resource pressure while leaving CPU, memory and disk available for watching. It supports the [roadmap](roadmap.md), [resource safeguards](resources.md) and [lifetime rules](lifecycle.md); it does not introduce a monitoring product or change those boundaries.
 
-This document owns the architecture and operating principles. The [implementation plan](plans/structured-logging.md) owns tasks and verification. Implemented on 2026-10-18: injected structured logging, independent application metrics, an optional private metrics listener and a bounded structured Debug tail. Console capture has been removed. Local verification is recorded in the plan and dated evidence; actual server/device measurements remain separate acceptance work.
+This document owns the architecture and operating principles. Implemented on 2026-10-18: injected structured logging, independent application metrics, an optional private metrics listener and a bounded structured Debug tail. Console capture has been removed. Local verification is recorded in [the logging checkpoint](checkpoints/2026-10-18-logging.md) and [the observability stack checkpoint](checkpoints/2026-10-18-observability-stack.md); actual server/device measurements remain separate acceptance work.
 
 ## Design principles
 
@@ -17,7 +17,7 @@ This document owns the architecture and operating principles. The [implementatio
 | Is the server overloaded or waiting for data? | Slot occupancy, resource rejection, free space, job durations and available conversion/torrent status; record uncertainty rather than infer CPU overload from low ffmpeg speed. |
 | What changed before a regression? | App version/run, startup and shutdown, and saved setting key names with a per-run configuration revision; never setting values. |
 
-Metrics summarize rates, outcomes, latency and saturation. Logs explain individual operations. The Player's existing Performance graph and browser acceptance provide viewing evidence. Server readiness is not browser first frame, and an HTTP 200 is not proof of successful playback. `/health` stays cheap; `/api/debug` stays a snapshot and recent tail rather than a time-series store. Reuse the [playback preparation/readiness signals](plans/playback-wait-explanations.md); do not build another buffering classifier.
+Metrics summarize rates, outcomes, latency and saturation. Logs explain individual operations. The Player's existing Performance graph and browser acceptance provide viewing evidence. Server readiness is not browser first frame, and an HTTP 200 is not proof of successful playback. `/health` stays cheap; `/api/debug` stays a snapshot and recent tail rather than a time-series store. Reuse the [playback preparation/readiness signals](user-interface.md#playback-wait-explanations); do not build another buffering classifier.
 
 ## Ownership and libraries
 
