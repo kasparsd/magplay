@@ -80,3 +80,23 @@ test('the title row names the release and episode; the file name moves into Deta
   await expect(page.locator('#facts dt:text-is("Container") + dd')).toHaveText('MP4')
   await expect(page.getByRole('button', { name: 'ⓘ Details' })).toHaveAttribute('aria-expanded', 'true')
 })
+
+test('the Player has the status button and Settings gear in its top bar, and the video still fits', async ({ page, app }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await openPlayer(page, app, direct)
+  const bar = page.locator('header.topbar')
+  const status = bar.locator('.status-button')
+  await expect(status).toHaveAttribute('aria-label', /^Status: (all good|not checked yet|checking|\d+ problems?)$/)
+  await expect(bar.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('href', '/settings')
+  // Once the checks are in, the stage still starts under the (possibly taller) top bar and fits the viewport
+  await expect(status).toHaveAttribute('aria-label', /^Status: (all good|\d+ problems?)$/)
+  await expect.poll(async () => {
+    const [topbar, stage] = await Promise.all([bar.boundingBox(), page.locator('#stage').boundingBox()])
+    return stage.y >= topbar.y + topbar.height - 0.5 && stage.y + stage.height <= 812.5
+  }).toBe(true)
+  await status.click()
+  await expect(page.locator('.status-panel .status-check', { hasText: 'ffmpeg' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.status-panel')).toBeHidden()
+  await expectPlaying(page)
+})
