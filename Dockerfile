@@ -22,6 +22,7 @@ COPY --from=manifests /app ./
 RUN npm ci
 COPY apps ./apps
 COPY packages ./packages
+COPY public ./public
 RUN npm run build
 
 FROM node:24-alpine

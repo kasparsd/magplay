@@ -30,12 +30,19 @@ try {
   }
   const metricsPort = (await docker('port', name, '9091/tcp')).split(':').at(-1)
   assert.equal(await docker('inspect', name, '--format', '{{.Config.User}}'), 'node')
-  assert.equal((await get('/player.js')).status, 200)
+  const page = await get('/')
+  assert.equal(page.headers.get('cache-control'), 'no-cache')
+  const script = /src="(\/assets\/search-[A-Z0-9]{8}\.js)"/.exec(await page.text())?.[1]
+  assert.ok(script, 'pages link content-hashed bundles')
+  const bundle = await get(script)
+  assert.equal(bundle.status, 200)
+  assert.equal(bundle.headers.get('cache-control'), 'public, max-age=31536000, immutable')
+  assert.equal((await get('/player.js')).status, 404)
   assert.equal((await get('/lib/progress.js')).status, 404)
   assert.equal((await get('/vendor/hls.min.js')).status, 404)
   const tests = await docker('exec', name, 'find', '/app/apps', '/app/packages', '/app/public', '/app/dist', '(', '-name', '*.test.js', '-o', '-name', '*.test.ts', ')')
   assert.equal(tests, '', 'production image must exclude colocated tests')
-  report.checks.push('health, non-root runtime, built client bundles and test-free image')
+  report.checks.push('health, non-root runtime, content-hashed client bundles and test-free image')
   await docker('cp', path.join(cache, 'torrents'), `${name}:/data/`)
   await docker('exec', '-u', 'root', name, 'chown', '-R', 'node:node', '/data/torrents')
   const directIdx = files['Playback.S01E01.mp4']

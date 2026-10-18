@@ -59,7 +59,7 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
   - `services/`: play (probe → decide → direct URL or HLS session), tabs (one session per player tab, and fencing for closed tabs; "tab" is a browser concept), Explore (cache, parameter checks), search (rebuilt when sources change; recognizes magnets before contacting sources, using torrent-engine parsing to return one release without fetching metadata), torrents (adding by private link id), playlists, subtitles, and the status registry and checks.
   - `http/`: routes typed against `api-contract`, request parsing from `unknown`, the error→status mapping, static and built-client serving, `/raw`/`/tar`, `/hls` and the speed test.
 - **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types and codec keys from `api-contract`.
-- **`public/`**: static HTML and CSS only.
+- **`public/`**: static HTML and CSS only; the server links the pages to the hashed builds as it serves them.
 
 ### Upstream requests and secrets
 
@@ -84,7 +84,7 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
 ## Build and tooling
 
 - **Server:** runs `.ts` directly with Node's built-in type stripping; no emit step. Only erasable TypeScript syntax is allowed (no `enum`, `namespace` or parameter properties).
-- **Client:** TypeScript requires a browser build, so esbuild bundles each page entry into gitignored `dist/client/`, with sourcemaps. `hls.js` becomes an npm import instead of the `/vendor/hls.min.js` global. `tsc` does type checking only.
+- **Client:** TypeScript requires a browser build, so esbuild bundles each page entry and the stylesheet into gitignored `dist/client/assets/` as `[name]-[hash]` files with sourcemaps, plus a metafile (`dist/client/meta.json`). The server reads the metafile (again after each rebuild) and rewrites the pages' `/search.js`-style links to the hashed URLs. `hls.js` becomes an npm import instead of the `/vendor/hls.min.js` global. `tsc` does type checking only.
 - **Node baseline:** 24 LTS.
 - **Linting:** ESLint (latest major, pinned, flat config) with typescript-eslint type-aware rules and neostandard for style. neostandard matches the existing code style (no semicolons, space before function parentheses), so no separate formatter is needed. Lint covers:
   - correctness the compiler misses, mainly floating or misused promises in the abort/lifecycle code and exhaustive `switch` over discriminated unions;
@@ -98,9 +98,9 @@ Requirements for the client build, kept from the earlier Vite criteria:
 - Preserve `/`, `/explore`, `/title/…`, `/t/…` and `/play/…`, ordinary links and reload/Back behavior. No SPA router or SSR.
 - Keep sources and generated output separate; never write into `public/`.
 - Update Node serving, Docker packaging and smoke tests together, and test the production artifact (deep links, `hls.js` loading, playback), not only a dev setup.
-- Revalidate HTML. Use immutable caching only for content-hashed assets if fingerprinting is added later. Preserve media Range/cancellation policies and non-cacheable live responses/errors.
+- Revalidate HTML (`no-cache` with a content ETag). Only content-hashed `/assets/…` files are `immutable`, so reverse proxies and browsers pick up a release on the next page revalidation. Preserve media Range/cancellation policies and non-cacheable live responses/errors.
 
-Vite remains an option if a dev server, fingerprinted assets or bundled browser-media/WASM dependencies become a need; the requirements above apply to it too. No build system makes decoding or server remuxing faster by itself.
+Vite remains an option if a dev server or bundled browser-media/WASM dependencies become a need; the requirements above apply to it too. No build system makes decoding or server remuxing faster by itself.
 
 ## Desktop distribution direction
 
