@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "restricted",
+  "baseBranch": "main",
+  "format": false,
+  "privatePackages": {
+    "version": true,
+    "tag": false
+  },
+  "ignore": [
+    "@magplay/api-contract",
+    "@magplay/client",
+    "@magplay/http-kit",
+    "@magplay/indexers",
+    "@magplay/observability",
+    "@magplay/playback",
+    "@magplay/release-info",
+    "@magplay/seekable-tar",
+    "@magplay/torrent-engine"
+  ],
+  "updateInternalDependencies": "patch"
+}

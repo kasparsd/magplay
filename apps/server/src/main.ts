@@ -1,12 +1,12 @@
 // The process owns bootstrap logging, listeners and the bounded shutdown deadline.
-import { readFileSync } from 'node:fs'
 import { createLogging } from '@magplay/observability'
 import { loadConfig, loggingConfig } from './config.ts'
 import { createApp } from './app.ts'
 import type { App } from './app.ts'
 import { installMdnsLookup } from './mdns.ts'
+import { readAppVersion } from './version.ts'
 
-const { version } = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }
+const version = readAppVersion()
 let logging = createLogging({ version })
 let app: App | undefined
 let uninstallMdns: (() => void) | undefined

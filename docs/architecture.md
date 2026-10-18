@@ -10,7 +10,7 @@ magplay stays a small Node service with multi-page browser clients for one perso
 - The browser↔server API and the codec keys shared by the capability probe and the playback decision are only aligned by JSDoc and comments. Shared types make mismatches compile errors.
 - Explicit factories with `close()` give tests and shutdown one owner per process, timer, port and directory, instead of module-level state.
 
-Packages are internal npm workspaces. Publishing any of them is a later, optional step, not a goal. The work is tracked in [the package boundaries and TypeScript plan](plans/package-boundaries-and-typescript.md).
+Packages are internal npm workspaces named `@magplay/*`. The application version is `@magplay/server`, because that process ships the bundled client. Publishing a workspace package is not a goal. The work is tracked in [the package boundaries and TypeScript plan](plans/package-boundaries-and-typescript.md).
 
 ## Findings that motivated the change
 

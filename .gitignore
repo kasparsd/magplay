@@ -8,3 +8,4 @@ test-results/
 dist/
 .tsbuild/
 .claude/worktrees/
+.release-version

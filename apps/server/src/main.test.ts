@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { readAppVersion } from './version.ts'
 
 const main = new URL('./main.ts', import.meta.url).pathname
 const keys = /^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS|MAX_|HLS_MAX_GB|MIN_FREE_GB|PORT|CACHE_DIR|LOG_LEVEL|METRICS_)/
@@ -48,6 +49,10 @@ test('SIGTERM shuts down gracefully: the port closes and the process exits 0', {
     if (proc.exitCode !== null || i > 200) assert.fail(`Server did not start: ${output}`)
     await new Promise(resolve => setTimeout(resolve, 50))
   }
+  const version = readAppVersion()
+  const debug = await fetch(`http://127.0.0.1:${port}/api/debug`).then(r => r.json()) as { version: string }
+  assert.equal(debug.version, version)
+  assert.match(output, new RegExp(`"version":"${version}"`))
   // An open download must not hold the shutdown
   const download = await fetch(`http://127.0.0.1:${port}/api/speedtest`)
   const exited = once(proc, 'exit')

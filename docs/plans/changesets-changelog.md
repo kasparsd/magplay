@@ -2,7 +2,7 @@
 
 ## Goal and status
 
-Created 2026-10-18. Planning is complete; implementation has not started. Capture user-facing changes alongside the code, then use Changesets to assemble one application changelog and calculate the next application version. Keep releases deliberate and reuse the existing Docker publishing workflow.
+Created 2026-10-18. The application version is `@magplay/server`, so Changesets can version it without a custom bump script. The changelog people read stays at the repository root; `apps/server/CHANGELOG.md` links to it. Other `@magplay/*` packages stay private and unpublished. Merging the version pull request tags `vX.Y.Z` and the container image on GitHub.
 
 ## Findings
 
@@ -15,6 +15,8 @@ The root `magplay` package is private, has version `0.1.0` and defines npm works
 `.github/workflows/publish-image.yml` publishes `edge` on pushes to `main` and versioned multi-platform images when a GitHub Release is published. It already accepts `vX.Y.Z` release tags and prereleases. `.github/workflows/test.yml` runs unit, peer, browser, type and lint checks. There are ongoing logging changes in the working tree; implementation must accommodate those edits, especially in bootstrap, app creation and manifests.
 
 ## Proposed decisions
+
+Superseded where they conflict with the implementation note above: the version stays in the root manifest, packages are `@kasparsd/*`, and publication is a GitHub tag plus container image.
 
 ### One application release
 
@@ -61,6 +63,14 @@ Add a separate read-only PR job with full Git history and the actual PR base ava
 
 Allow a release-preparation PR to consume notes without adding another note, but validate its diff: it must consume existing notes, advance the server version, update the generated changelog and synchronize the lockfile, with no unrelated source changes. Do not exempt a PR solely because its branch has a particular name. Check newly added workspaces against the single-versioned-package policy so they cannot silently become another release unit. Verify how `changeset status` handles empty notes before choosing the exact check; do not assume it enforces this policy by itself.
 
+## Implementation
+
+The root package is the release unit because later direction asked for one repo version, not a workspace version. `@changesets/cli` 3.0.3 does not version an npm workspace root, so `npm run release:version` applies notes itself. `changesets/action@v2.1.2` opens the version pull request and, after it merges, `npm run release:publish` creates the `vX.Y.Z` GitHub release. The same workflow tags the image, because a release created by the built-in token does not trigger `publish-image.yml`.
+
+Earlier user-facing work is recorded in `CHANGELOG.md` under “Recorded before release notes”. It was not turned into pending notes and was not published.
+
+Isolated check of `@changesets/cli` 3.0.3 and `npm run release:version`: a patch and a minor note become `0.2.0`, both summaries are kept, notes are consumed, and a second lockfile refresh is clean. An empty-only run consumes the note and does not change the version or changelog. `tsc -b` passed after the package rename.
+
 ## Implementation tasks
 
 ### 1. Prove the package model and install
@@ -74,7 +84,7 @@ Allow a release-preparation PR to consume notes without adding another note, but
 
 - [ ] Create canonical `docs/releases.md` with authoring examples, bump policy, empty-note policy, commands, release procedure and recovery from an uncommitted mistaken version run.
 - [ ] Link the generated changelog and release guide from the README. Add a short release-note requirement to `AGENTS.md`, referencing the guide rather than duplicating it.
-- [ ] Keep `.changeset/README.md` as a brief pointer to the canonical guide.
+- [x] Keep `.changeset/README.md` as a brief pointer to the canonical guide.
 - [ ] Add the read-only CI check and verify normal notes, empty notes, malformed notes, wrong targets, missing notes, unrelated existing notes and valid/invalid release-preparation diffs.
 - [ ] Add one patch changeset for the delivered changelog/release workflow; do not consume it or cut a release as part of setup.
 

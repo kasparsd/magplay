@@ -9,6 +9,7 @@ import type { FfmpegProcess } from '@magplay/playback'
 import { createApp } from './app.ts'
 import type { App, AppOptions } from './app.ts'
 import { loadConfig } from './config.ts'
+import { readAppVersion } from './version.ts'
 
 type Env = Record<string, string>
 
@@ -26,6 +27,12 @@ async function start (t: { after: (fn: () => Promise<void>) => void }, env: Env 
 }
 
 const errorBody = async (res: Response): Promise<unknown> => ((await res.json()) as { error?: unknown }).error
+
+test('debug reports the server manifest version', async t => {
+  const { origin } = await start(t)
+  const debug = await fetch(`${origin}/api/debug`).then(r => r.json()) as { version: string }
+  assert.equal(debug.version, readAppVersion())
+})
 
 test('HTTP server serves pages and modules, rejects bad routes and remains healthy', { timeout: 20_000 }, async t => {
   const { origin } = await start(t)

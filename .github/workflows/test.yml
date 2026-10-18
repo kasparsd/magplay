@@ -46,3 +46,22 @@ jobs:
           name: playback-test-results
           path: test-results/
           retention-days: 7
+
+  changesets:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch the pull request head and base
+        run: |
+          git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
+          git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/head"
+          git checkout --detach "${{ github.event.pull_request.head.sha }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx changeset status --since "${{ github.event.pull_request.base.sha }}"

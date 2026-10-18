@@ -1,7 +1,9 @@
 name: Publish container image
 
 # Every push to main moves the `edge` tag; older edge builds are deleted.
-# Publishing a GitHub release tagged vX.Y.Z publishes `X.Y.Z`, `X.Y` and `X` (`X` is skipped for 0.x).
+# A GitHub release tagged vX.Y.Z publishes `X.Y.Z`, `X.Y` and `X` (`X` is skipped for 0.x).
+# The release workflow also tags that image when a version pull request merges, because a
+# release created by the built-in token does not trigger this workflow.
 # A prerelease (marked as such, or tagged like vX.Y.Z-rc.1) publishes only its exact version.
 # No `latest` tag: deployments pin a version or follow `edge` explicitly.
 on:

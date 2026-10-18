@@ -10,6 +10,7 @@ import { prepareCachedMedia } from '../../tests/fixtures/media.js'
 const exec = promisify(execFile)
 const docker = async (...args) => (await exec('docker', args, { timeout: 120_000, maxBuffer: 1024 ** 2 })).stdout.trim()
 const image = process.argv[2] || 'magplay:local-acceptance'
+const expectedVersion = JSON.parse(await fs.readFile(new URL('../../apps/server/package.json', import.meta.url), 'utf8')).version
 const name = `magplay-check-${process.pid}`
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-docker-'))
 const report = { image, checks: [], timingsMs: {}, device: 'local Docker host; not the server' }
@@ -84,6 +85,7 @@ try {
   assert.match(metrics, /magplay_playback_ready_seconds/)
   assert.match(metrics, /process_resident_memory_bytes/)
   const debug = await get('/api/debug').then(r => r.json())
+  assert.equal(debug.version, expectedVersion)
   assert.equal(debug.logging.level, 'info')
   assert.doesNotMatch(JSON.stringify(debug.log), /docker-secret/)
   assert.ok(debug.log.some(line => line.event === 'playback.ready' && line.requestId && line.operationId))
@@ -93,7 +95,7 @@ try {
   const lines = (await docker('logs', name)).split('\n').filter(Boolean).map(line => JSON.parse(line))
   assert.ok(lines.some(line => line.event === 'server.stopped'))
   assert.ok(lines.some(line => line.event === 'hls.media.published'))
-  assert.ok(lines.every(line => line.time && line.level && line.runId && line.service === 'magplay'))
+  assert.ok(lines.every(line => line.time && line.level && line.runId && line.service === 'magplay' && line.version === expectedVersion))
   assert.doesNotMatch(JSON.stringify(lines), /docker-secret/)
   assert.equal(await docker('inspect', name, '--format', '{{.State.ExitCode}}'), '0')
   report.checks.push('rotated local logging driver, JSON stdout and graceful final flush')
