@@ -1,6 +1,6 @@
 # Targeted player lifecycle handling
 
-The player stays imperative in `public/player.js`; no controller/framework migration is required for these fixes.
+The player stays imperative in `apps/client/src/player.ts`; no controller/framework migration is required for these fixes.
 
 - Each page activation owns an AbortController for title/probe requests, playback requests and status polling. `pagehide` aborts them. A restored document starts one new polling loop with a fresh activation/tab ID.
 - Each playback attempt owns playlist waiting, HLS callbacks and autoplay results. Superseded attempts cannot update the replacement UI. Playback POSTs remain serialized while the page is active, rather than cancelling them on every audio change and creating out-of-order server mutations.

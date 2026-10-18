@@ -56,7 +56,7 @@ export function canSeekLocally (rel: number, seekable: Span[]): boolean {
   return rel >= from - 2 && rel < end - 2
 }
 
-/** What jumping to absolute time `t` does; mirrors seekTo() in player.js. */
+/** What jumping to absolute time `t` does; mirrors seekTo() in player.ts. */
 export function seekOutcome (t: number, ctx: SeekContext): SeekOutcome {
   const rel = t - ctx.offset
   if (inside(rel, ctx.buffered)) return 'buffered'
