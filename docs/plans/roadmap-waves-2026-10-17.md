@@ -7,8 +7,8 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
 ## Wave 1 (parallel)
 
 - [x] **1a. Settings page and status menu**, built from scratch from [the settings plan](settings-and-status-pin.md) on branch `claude/settings-status-b42d44`. The earlier `fix/settings-reliability` branch is not used or referenced. The Player reading its defaults is left to the Player session ([integration notes](settings-and-status-pin.md#player-integration)).
-- [ ] **1b. Dependency advisory triage** (roadmap item 2): reachability of the `ip` → `bittorrent-tracker` → `torrent-discovery` → `webtorrent` findings, then a compatible patch or a recorded mitigation.
-- [ ] **1c. UI cleanup P2–P4 outside the Player** (roadmap item 7): the open items in [the cleanup todo](../user-interface.md#cleanup-todo), except the ones fixed by the Player roadmap.
+- [x] **1b. Dependency advisory triage** (roadmap item 2): reachability of the `ip` → `bittorrent-tracker` → `torrent-discovery` → `webtorrent` findings, then a compatible patch or a recorded mitigation. Accepted as unreachable (branch `claude/advisory-triage-3bd1d0`, see the roadmap's verification notes).
+- [x] **1c. UI cleanup P2–P4 outside the Player** (roadmap item 7): the open items in [the cleanup todo](../user-interface.md#cleanup-todo), except the ones fixed by the Player roadmap. Branch `claude/ui-cleanup-e16272`; `containerLabel` in `lib/naming.ts` is ready for the Player's ⓘ Details.
 
 ## Wave 2
 
@@ -21,3 +21,4 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
 ## Log
 
 - 2026-10-17: plan approved; Wave 1 started.
+- 2026-10-18: Wave 1 merged to main (typecheck, lint, 153 unit and 38 e2e tests pass); Wave 2 started.
