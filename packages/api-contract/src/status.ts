@@ -51,6 +51,9 @@ export function overallLevel (checks: readonly StatusCheck[]): StatusLevel {
 export const problems = (checks: readonly StatusCheck[]): StatusCheck[] => checks.filter(c => c.level === 'warn' || c.level === 'error')
 
 /** GET /api/debug. */
+/** A busy-slot count or cache size on the Debug page; a limit of 0 means unbounded. */
+export interface DebugResource { id: string, label: string, used: number, limit: number, unit?: 'bytes' }
+
 export interface DebugInfo {
   version: string
   node: string
@@ -58,7 +61,7 @@ export interface DebugInfo {
   ffmpeg: string | null
   ffprobe: string | null
   /** Busy slots and limits for each kind of heavy work. */
-  resources: Array<{ id: string, label: string, used: number, limit: number, unit?: 'bytes' }>
+  resources: DebugResource[]
   disk: { free: number, size: number, cacheBytes: number, cacheMaxBytes: number } | null
   log: Array<{ at: number, level: 'debug' | 'info' | 'warn' | 'error', text: string }>
 }

@@ -35,6 +35,8 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 
 const GB = 1024 ** 3
 const gb = (n: number): string => `${(n / GB).toFixed(1)} GB`
+/** Sizes below a gigabyte read in MB, so a 64 MB cache isn't "0.1 GB". */
+const size = (n: number): string => n < GB ? `${Math.round(n / 1024 ** 2)} MB` : gb(n)
 function uptime (s: number): string {
   const d = Math.floor(s / 86400)
   const h = Math.floor(s / 3600) % 24
@@ -99,7 +101,7 @@ const READOUTS: Record<string, () => ReadoutValue> = {
     : 'Loading…',
   'debug.resources': () => debug
     ? grid(debug.resources.map(r => [r.label, r.unit === 'bytes'
-      ? { text: `${gb(r.used)} of ${gb(r.limit)}`, fraction: r.used / r.limit }
+      ? { text: `${size(r.used)} of ${size(r.limit)}`, fraction: r.used / r.limit }
       : r.limit ? { text: `${r.used} of ${r.limit}`, fraction: r.used / r.limit } : String(r.used)]))
     : 'Loading…',
   'debug.log': logView,

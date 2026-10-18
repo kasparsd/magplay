@@ -5,7 +5,7 @@ import { createBitmagnetBrowser, createSource } from '@magplay/indexers'
 import type { SourceConfig } from '@magplay/indexers'
 import type { HlsSessions, MediaTools } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
-import type { DebugInfo, StatusAction } from '@magplay/api-contract'
+import type { DebugInfo, DebugResource, StatusAction } from '@magplay/api-contract'
 import type { Config } from '../config.ts'
 import type { LogTail } from '../logs.ts'
 import type { SettingsStore } from '../settings-store.ts'
@@ -48,6 +48,8 @@ export interface StatusChecksOptions {
   hls: HlsSessions
   logs: LogTail
   version: string
+  /** In-memory caches (count used and limit), listed under Debug after the busy slots. */
+  caches?: () => DebugResource[]
 }
 
 export interface StatusChecks {
@@ -58,7 +60,7 @@ export interface StatusChecks {
 }
 
 /** Registers every check on `status`. */
-export function createStatusChecks ({ status, settings, config, engine, media, hls, logs, version }: StatusChecksOptions): StatusChecks {
+export function createStatusChecks ({ status, settings, config, engine, media, hls, logs, version, caches = () => [] }: StatusChecksOptions): StatusChecks {
   const started = Date.now()
   const versions: { ffmpeg: string | null, ffprobe: string | null } = { ffmpeg: null, ffprobe: null }
 
@@ -147,7 +149,7 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
     async debugInfo () {
       const sessions = hls.summary()
       const { loads, loaded } = engine.stats()
-      const { probes, subtitles } = media.stats()
+      const { probes, subtitles, probeCache } = media.stats()
       const { maxHlsSessions, hlsMaxBytes } = config()
       return {
         version,
@@ -162,6 +164,8 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
           { id: 'probes', label: 'Probes', ...probes },
           { id: 'subtitles', label: 'Subtitle jobs', ...subtitles },
           { id: 'hls', label: 'Conversion storage', used: sessions.bytes, limit: hlsMaxBytes, unit: 'bytes' },
+          { id: 'probeCache', label: 'Probe results cached', ...probeCache },
+          ...caches(),
         ],
         disk: await diskInfo(),
         log: logs(),

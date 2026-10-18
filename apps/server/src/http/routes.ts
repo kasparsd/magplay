@@ -51,7 +51,6 @@ const index = (value: string): number => Number(value)
 
 export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles, settings, status, checks }: RouteDeps): Route[] {
   return [
-    route('GET', '/health', ({ res }) => json(res, 200, { ok: true })),
 
     // Settings, status and debugging
     route('GET', '/api/status', async ({ res }) => json<StatusResponse>(res, 200, await status.snapshot())),

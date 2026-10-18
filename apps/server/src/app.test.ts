@@ -66,7 +66,7 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
   const redirect = await fetch(origin + '/player.html?ih=abc&idx=0', { redirect: 'manual' })
   assert.equal(redirect.status, 301)
   assert.equal(redirect.headers.get('cache-control'), 'no-store')
-  assert.deepEqual(await fetch(`${origin}/health`).then(r => r.json()), { ok: true })
+  assert.equal((await fetch(`${origin}/health`).then(r => r.json()) as { ok: boolean }).ok, true)
 })
 
 test('typed failures keep their statuses: unknown torrents, expired links, Retry-After on busy work', async t => {
@@ -133,4 +133,29 @@ test('graceful shutdown: close() ends open streams, stops ffmpeg, frees the port
   assert.deepEqual(signals, ['SIGSTOP', 'SIGCONT', 'SIGKILL'])
   assert.deepEqual(await fs.readdir(path.join(dir, 'hls')), [])
   assert.equal(await app.close(), undefined) // twice is fine
+})
+
+test('close() does not wait for a search stuck on a silent indexer or a torrent still looking for peers', { timeout: 20_000 }, async t => {
+  const http = await import('node:http')
+  // An indexer that accepts the connection and never answers
+  const silent = http.createServer(() => {})
+  await new Promise<void>(resolve => silent.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise<void>(resolve => { silent.closeAllConnections(); silent.close(() => resolve()) }))
+  const address = silent.address()
+  const indexer = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/api`
+  const { app, origin } = await start(t, { TORZNAB_URL: indexer, SEARCH_TIMEOUT_S: '60' })
+  t.mock.method(console, 'log', () => {})
+
+  const search = fetch(`${origin}/api/search?q=anything`).catch((err: unknown) => err)
+  const load = fetch(`${origin}/api/torrents`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ infoHash: '3'.repeat(40) }) }).catch((err: unknown) => err)
+  await new Promise(resolve => setTimeout(resolve, 200))
+  assert.equal((await fetch(`${origin}/health`)).status, 200)
+
+  const started = Date.now()
+  await app.close()
+  assert.ok(Date.now() - started < 5000, 'close() waited for in-flight work')
+  // Both requests end (their connections are closed) instead of hanging until their own timeouts
+  assert.ok(await search instanceof Error)
+  assert.ok(await load instanceof Error)
+  assert.equal(app.server.listening, false)
 })

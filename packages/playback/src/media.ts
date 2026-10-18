@@ -196,26 +196,33 @@ export interface MediaTools {
   probe: (input: string, fileName: string) => Promise<MediaInfo>
   /** subtitleToVtt(), bounded. */
   subtitleToVtt: (input: string, track: number | null) => Promise<string>
-  /** Busy slots, for the Debug page. */
-  stats: () => { probes: { used: number, limit: number }, subtitles: { used: number, limit: number } }
+  /** Busy slots and cached probe results, for the Debug page. */
+  stats: () => { probes: { used: number, limit: number }, subtitles: { used: number, limit: number }, probeCache: { used: number, limit: number } }
 }
 
+/** Probe results kept, most recently used first; a file's streams don't change, so only the count is bounded. */
+export const PROBE_CACHE_LIMIT = 256
+
 /** Probing and subtitle conversion with process limits; overload fails fast with PlaybackBusyError. */
-export function createMediaTools ({ live }: { live: () => MediaLive }): MediaTools {
+export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT }: { live: () => MediaLive, probeCacheLimit?: number }): MediaTools {
   const runProbe = createLimiter(() => live().maxProbes, () => new PlaybackBusyError('Media probing is busy. Try again shortly.'))
   const runSubtitle = createLimiter(() => live().maxSubtitleJobs, () => new PlaybackBusyError('Subtitle conversion is busy. Try again shortly.'))
   const probes = new Map<string, Promise<MediaInfo>>()
   return {
     probe (input, fileName) {
       let p = probes.get(input)
-      if (!p) {
+      if (p) {
+        probes.delete(input) // move to the most recently used end
+      } else {
         p = runProbe(() => probe(input, fileName, live()))
-        p.catch(() => probes.delete(input))
-        probes.set(input, p)
+        const job = p
+        job.catch(() => { if (probes.get(input) === job) probes.delete(input) })
       }
+      probes.set(input, p)
+      if (probes.size > probeCacheLimit) probes.delete(probes.keys().next().value!)
       return p
     },
     subtitleToVtt: (input, track) => runSubtitle(() => subtitleToVtt(input, track, live())),
-    stats: () => ({ probes: runProbe.stats(), subtitles: runSubtitle.stats() }),
+    stats: () => ({ probes: runProbe.stats(), subtitles: runSubtitle.stats(), probeCache: { used: probes.size, limit: probeCacheLimit } }),
   }
 }

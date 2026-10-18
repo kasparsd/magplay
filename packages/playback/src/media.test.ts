@@ -89,3 +89,28 @@ test('ffprobe JSON parses into tracks; junk is a media tool error', () => {
   assert.equal('video' in parseProbe({ streams: [] }, 'x.mp4'), false)
   for (const junk of [null, [], 'x', { streams: {} }]) assert.throws(() => parseProbe(junk, 'x'), MediaToolError)
 })
+
+test('probe results are cached per input, keeping only the most recently used', async t => {
+  const fs = await import('node:fs/promises')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const { createMediaTools } = await import('./media.ts')
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-probe-'))
+  t.after(() => fs.rm(dir, { recursive: true, force: true }))
+  // A stand-in ffprobe that counts its runs and reports one H.264 stream
+  const runs = path.join(dir, 'runs')
+  const ffprobe = path.join(dir, 'ffprobe')
+  await fs.writeFile(ffprobe, `#!/bin/sh\necho x >> "${runs}"\necho '{"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2","duration":"10"},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","codec_tag_string":"avc1","width":2,"height":2}]}'\n`, { mode: 0o755 })
+  const tools = createMediaTools({ live: () => ({ ffprobePath: ffprobe, ffmpegPath: 'ffmpeg', maxProbes: 2, maxSubtitleJobs: 1 }), probeCacheLimit: 2 })
+  const count = async (): Promise<number> => (await fs.readFile(runs, 'utf8')).split('\n').filter(Boolean).length
+  await tools.probe('a', 'a.mp4')
+  await tools.probe('b', 'b.mp4')
+  await tools.probe('a', 'a.mp4') // cached, and now the most recent
+  await tools.probe('c', 'c.mp4') // evicts b
+  assert.equal(await count(), 3)
+  assert.deepEqual(tools.stats().probeCache, { used: 2, limit: 2 })
+  await tools.probe('a', 'a.mp4')
+  assert.equal(await count(), 3)
+  await tools.probe('b', 'b.mp4')
+  assert.equal(await count(), 4)
+})

@@ -5,7 +5,7 @@ import type { TorrentEngine } from '@magplay/torrent-engine'
 import type { SearchResponse } from '@magplay/api-contract'
 import { HttpError } from '../http/errors.ts'
 
-export interface SearchService extends Pick<Search, 'linkFor'> {
+export interface SearchService extends Pick<Search, 'linkFor' | 'linkStats'> {
   search: (q: string | null, cat: string | null) => Promise<SearchResponse>
   rebuild: () => void
 }
@@ -25,6 +25,7 @@ export function createSearchService ({ sources, timeoutMs, engine }: { sources: 
       return { ...out, results }
     },
     linkFor: id => searcher.linkFor(id),
+    linkStats: () => searcher.linkStats(),
     rebuild () { searcher = build() },
   }
 }
