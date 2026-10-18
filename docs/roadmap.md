@@ -60,10 +60,11 @@ Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [
 | 2 | **P1** | Measure on the real server | A transcode that falls behind and ffmpeg CPU in the Performance graph (Linux only); remux startup/seek timings; cache sizes in Debug over a long session. Record the numbers here and tune limits only if they call for it. |
 | 3 | **P2** | Finish the Player checklists | The open manual checks in [Player steps 1–2](user-interface.md#player-roadmap) (layout at the listed sizes, 375 px portrait and landscape), `containerLabel` in ⓘ Details, and the remaining P4 Details item. |
 | 4 | **P2** | Player in TypeScript | `player.js` (and `capabilities.js`) become TypeScript now the redesign has landed, split into small modules; no behaviour change. |
-| 5 | **P3** | TypeScript Phase 7 review | The [plan](plans/package-boundaries-and-typescript.md)'s tighten-and-document pass; other client pages, tests and scripts still convert on touch. |
-| 6 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
-| 7 | **P3 / conditional** | Fingerprinted client assets | Only if revalidating unversioned bundles becomes a measured problem. |
-| 8 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
+| 5 | **P2** | Changesets and application changelog ([plan](plans/changesets-changelog.md)) | One application version and generated changelog owned by the server workspace; release notes alongside changes, explicit version preparation, and CI checks for missing/invalid notes. Manual GitHub Releases reuse existing versioned Docker publishing. Planned, not implemented. |
+| 6 | **P3** | TypeScript Phase 7 review | The [plan](plans/package-boundaries-and-typescript.md)'s tighten-and-document pass; other client pages, tests and scripts still convert on touch. |
+| 7 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
+| 8 | **P3 / conditional** | Fingerprinted client assets | Only if revalidating unversioned bundles becomes a measured problem. |
+| 9 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
 
 **Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Item 5 reshapes the player's chrome, not its lifecycle ([lifetime rules](lifecycle.md)). Phases 3–4 are the scheduled structural work, and they must not change behaviour.
 
