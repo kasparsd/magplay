@@ -61,6 +61,11 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
 - **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types and codec keys from `api-contract`.
 - **`public/`**: static HTML and CSS only.
 
+### Upstream requests and secrets
+
+- Indexer adapters fetch through `request()` in `packages/indexers/src/release.ts`. It follows redirects itself, only on the same server (an http → https upgrade included) and at most three times, so an `X-Api-Key` header or `apikey=` query never reaches another host. A redirect elsewhere is a `SourceError` asking for the new address. Bodies go through `readBytes`/`readText`/`readJson`, capped at 16 MiB by `Content-Length` and while streaming.
+- `redactSecrets()` in `api-contract` replaces API keys in query strings, URL passwords and `X-Api-Key` values. `captureConsole()` (`apps/server/src/logs.ts`) applies it to every console line before printing it and keeping it for Debug, and the client applies `redactDeep()` to copied diagnostics. Secret settings themselves leave the server only as `{ set }`.
+
 ### Settings and status
 
 - **Schema.** `packages/api-contract/src/settings.ts` lists every setting once: key, section, scope (`server` or `browser`), control type, label, default and env vars. It holds only what a person tunes on the page; other knobs (ports, job limits, timeouts, trackers, ffmpeg paths) are env-only, resolved in `config.ts` (`envOnlyConfig`) with the same validation. The server validates env values, `settings.json` and `PATCH` bodies with the same `validate()` the client uses for `localStorage` and before saving. A new setting is one entry; the page, validation and API pick it up.
