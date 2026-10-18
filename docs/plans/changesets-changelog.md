@@ -2,7 +2,7 @@
 
 ## Goal and status
 
-Created 2026-10-18. Planning is complete; implementation has not started. Capture user-facing changes alongside the code, then use Changesets to assemble one application changelog and calculate the next application version. Keep releases deliberate and reuse the existing Docker publishing workflow.
+Created 2026-10-18. Implemented 2026-10-18; operating decisions now live in [docs/releases.md](../releases.md), and this file keeps the tasks and evidence. Capture user-facing changes alongside the code, then use Changesets to assemble one application changelog and calculate the next application version. Keep releases deliberate and reuse the existing Docker publishing workflow.
 
 ## Findings
 
@@ -65,37 +65,37 @@ Allow a release-preparation PR to consume notes without adding another note, but
 
 ### 1. Prove the package model and install
 
-- [ ] In a temporary workspace fixture, verify the pinned CLI discovers only the server as releasable, supports the chosen private-package/ignore configuration and generates only the server changelog.
-- [ ] Pin the CLI, add configuration and root scripts, and update the lockfile.
-- [ ] Move the version baseline to the server and update bootstrap/app version readers together, accommodating current logging work.
-- [ ] Ensure the server manifest is available at the chosen relative path in the source checkout and production image; Docker already copies `apps/server/`.
+- [x] In a temporary workspace fixture, verify the pinned CLI discovers only the server as releasable, supports the chosen private-package/ignore configuration and generates only the server changelog.
+- [x] Pin the CLI, add configuration and root scripts, and update the lockfile.
+- [x] Move the version baseline to the server and update bootstrap/app version readers together, accommodating current logging work.
+- [x] Ensure the server manifest is available at the chosen relative path in the source checkout and production image; Docker already copies `apps/server/`.
 
 ### 2. Document and enforce contribution policy
 
-- [ ] Create canonical `docs/releases.md` with authoring examples, bump policy, empty-note policy, commands, release procedure and recovery from an uncommitted mistaken version run.
-- [ ] Link the generated changelog and release guide from the README. Add a short release-note requirement to `AGENTS.md`, referencing the guide rather than duplicating it.
-- [ ] Keep `.changeset/README.md` as a brief pointer to the canonical guide.
-- [ ] Add the read-only CI check and verify normal notes, empty notes, malformed notes, wrong targets, missing notes, unrelated existing notes and valid/invalid release-preparation diffs.
-- [ ] Add one patch changeset for the delivered changelog/release workflow; do not consume it or cut a release as part of setup.
+- [x] Create canonical `docs/releases.md` with authoring examples, bump policy, empty-note policy, commands, release procedure and recovery from an uncommitted mistaken version run.
+- [x] Link the generated changelog and release guide from the README. Add a short release-note requirement to `AGENTS.md`, referencing the guide rather than duplicating it.
+- [x] Keep `.changeset/README.md` as a brief pointer to the canonical guide.
+- [x] Add the read-only CI check and verify normal notes, empty notes, malformed notes, wrong targets, missing notes, unrelated existing notes and valid/invalid release-preparation diffs.
+- [x] Add one patch changeset for the delivered changelog/release workflow; do not consume it or cut a release as part of setup.
 
 ### 3. Verify the full versioning path
 
-- [ ] In an isolated copy, exercise patch and combined patch/minor notes: verify the calculated version, generated entries, note consumption and unchanged internal package versions.
-- [ ] Confirm an empty-only change produces no version bump/changelog entry and document the pinned CLI's behavior for that case.
-- [ ] Refresh the lockfile, run `npm ci` in the isolated copy and confirm a second lockfile refresh has no diff.
-- [ ] Verify startup logs and `/api/debug` report the server manifest version; use focused tests around the version source where useful.
-- [ ] Run `npm run typecheck`, `npm run lint` and `npm test`; use existing Docker acceptance tooling to confirm the production image starts and reports that same version. Add peer/browser checks if implementation touches behavior covered by those suites.
-- [ ] Review workflow triggers and image tag compatibility without publishing a release or pushing an image during local verification.
-- [ ] Update this plan's todos with actual validation results and leave delivered operating decisions in `docs/releases.md`.
+- [x] In an isolated copy, exercise patch and combined patch/minor notes: verify the calculated version, generated entries, note consumption and unchanged internal package versions.
+- [x] Confirm an empty-only change produces no version bump/changelog entry and document the pinned CLI's behavior for that case.
+- [x] Refresh the lockfile, run `npm ci` in the isolated copy and confirm a second lockfile refresh has no diff.
+- [x] Verify startup logs and `/api/debug` report the server manifest version; use focused tests around the version source where useful.
+- [ ] Run `npm run typecheck`, `npm run lint` and `npm test` *(done)*; use existing Docker acceptance tooling to confirm the production image starts and reports that same version *(not done: see the log)*. Add peer/browser checks if implementation touches behavior covered by those suites.
+- [x] Review workflow triggers and image tag compatibility without publishing a release or pushing an image during local verification.
+- [x] Update this plan's todos with actual validation results and leave delivered operating decisions in `docs/releases.md`.
 
 ## Acceptance
 
-- [ ] A contributor can add one note for any app change without learning the internal package graph.
-- [ ] One explicit command produces one application version and one changelog, preserving all summaries and choosing the highest requested bump.
-- [ ] The release version has one manifest source and agrees with startup/Debug output and the intended `vX.Y.Z` release tag.
-- [ ] PR checks accept intentional no-release work, reject missing or invalid notes, and permit validated release preparation.
-- [ ] All packages remain private; the existing `edge`/versioned-image workflow remains usable.
-- [ ] No release is published as a side effect of installing Changesets or adding a note.
+- [x] A contributor can add one note for any app change without learning the internal package graph.
+- [x] One explicit command produces one application version and one changelog, preserving all summaries and choosing the highest requested bump.
+- [x] The release version has one manifest source and agrees with startup/Debug output and the intended `vX.Y.Z` release tag. *(Source checkout verified; the production image not yet.)*
+- [x] PR checks accept intentional no-release work, reject missing or invalid notes, and permit validated release preparation.
+- [x] All packages remain private; the existing `edge`/versioned-image workflow remains usable.
+- [x] No release is published as a side effect of installing Changesets or adding a note.
 
 ## References
 
@@ -104,3 +104,15 @@ Allow a release-preparation PR to consume notes without adding another note, but
 - [CLI reference](https://changesets.dev/guide/cli): adding notes, status and explicit versioning.
 - [Current CLI package manifest](https://github.com/changesets/changesets/blob/main/packages/cli/package.json): version and engine requirements; recheck at implementation time.
 - [Current Changesets Action](https://github.com/changesets/action): generation compatibility and automation options, for a possible later phase.
+
+## Validation log
+
+2026-10-18, `@changesets/cli` 3.0.3 (latest; engines Node `^22.11 || ^24 || >=26`, npm `>=10.9`):
+
+- **Fixture** (root plus `@magplay/server` and one ignored private package, with this repository's config): `changeset -m … --patch @magplay/server` writes a note without prompting. `--patch` with an ignored package fails ("not found in the project"). `status` fails on an unknown package or an invalid bump, but **accepts a hand-written note for an ignored package**, which `check-changesets.mjs` rejects. `status --since=main` exits 0 when a branch has no notes, so it can't enforce "a note per PR"; the script compares the PR diff instead.
+- **Versioning:** a patch plus a minor note give `0.1.0` → `0.2.0`, a changelog with "Minor Changes" and "Patch Changes" sections (each entry prefixed with its commit), both notes consumed, and internal packages left at `0.0.0`. `format: false` leaves soft line breaks alone. An empty-only release deletes the note with no bump and no changelog file.
+- **Release dry run** in a clone of this branch: `npm run release:version` changed only the notes, `apps/server/package.json`, `apps/server/CHANGELOG.md` and `package-lock.json`. `check-changesets.mjs --base <pre-release commit>` accepted it, and rejected it once `apps/server/src/app.ts` was also changed. `npm ci` and a second `npm install --package-lock-only` left the lockfile unchanged.
+- **Checks:** unit tests for the rules in `tools/scripts/check-changesets.test.mjs` (now in `npm test`, 223 tests). Typecheck and lint pass. A source-checkout server reported `0.1.0` in all startup log lines and in `/api/debug`.
+- **Not done:** the Docker acceptance run. The daemon started in the session container, but `apk add ffmpeg` couldn't download through the session's network proxy. The runtime stage copies `apps/server/`, which holds the manifest `version.ts` reads; confirm with `node tools/scripts/check-docker.mjs` before the first versioned release.
+- **Workflows:** `publish-image.yml` is unchanged; `edge` still comes from `main` and versioned images from `v*` GitHub Releases. The new `changesets` job in `test.yml` only reads (checkout with full history, Node, the script).
+

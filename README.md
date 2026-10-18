@@ -22,6 +22,8 @@ VLC / IINA / Infuse ── /raw/… ───────┘
 
 See [docs/roadmap.md](docs/roadmap.md) for the current review, verification limits, architecture recommendations and prioritized next steps.
 
+Released changes are listed in [apps/server/CHANGELOG.md](apps/server/CHANGELOG.md), starting with the first release after `0.1.0`. [docs/releases.md](docs/releases.md) explains release notes and how a release is prepared.
+
 ## Indexer sources
 
 magplay searches every configured source in parallel, merges the results, and removes duplicates by infohash (keeping the highest seeder count and listing every source a result came from). A source that fails or takes longer than `SEARCH_TIMEOUT_S` doesn't block the rest: you get the other results and a note such as "Jackett timed out after 30 s".
@@ -342,6 +344,11 @@ npm run lint              # ESLint (neostandard + type-aware rules), no warnings
 ```
 
 ```bash
+npm run changeset         # add a release note for your change (see docs/releases.md)
+npm run changeset:check -- --base origin/main   # what CI checks on a pull request
+```
+
+```bash
 npm test                    # Fast Node regression tests
 npx playwright install chromium
 npm run test:e2e             # Generated local media + real Chromium playback
@@ -360,7 +367,7 @@ Node 24+, ES modules, npm workspaces. The code is moving into isolated packages 
 
 ### Test layout
 
-Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `packages/http-kit/src/router.test.ts` and `packages/seekable-tar/src/index.test.ts`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.ts`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
+Keep fast tests next to their modules as `*.test.js` or `*.test.ts`, for example `packages/http-kit/src/router.test.ts` and `packages/seekable-tar/src/index.test.ts`. `npm test` builds the client, then discovers these files under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, excluding helpers and browser integration tests. Run one file with `node --test apps/client/src/lib/api.test.ts`. Cross-application Playwright tests live in `tests/e2e/*.test.js` and are selected separately by `playwright.config.js`.
 
 Indexer adapters take `fetch` as a parameter and use recorded/synthetic responses in `packages/indexers/src/test-fixtures/`, with shared helpers in `packages/indexers/src/test-helpers.ts`. The fast suite covers source parsing/configuration/errors/timeouts, deduplication, download-link resolution, episodes/badges, tar/ranges, media decisions, session lifecycle, HTTP caching and API-client transport. The Chromium suite exercises cached-torrent playback, seeking, audio switching, subtitles, retries, navigation and media cache policies. [docs/checkpoints/2026-10-17-build-report.md](docs/checkpoints/2026-10-17-build-report.md) retains historical live-swarm and device acceptance checks.
 
