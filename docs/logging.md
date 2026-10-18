@@ -77,7 +77,9 @@ Expose metrics through an optional management listener: `METRICS_ENABLED=false`,
 
 The baseline is JSON stdout → Docker's `local` driver, with the volatile Debug tail in parallel. Document rotation using `max-size: "10m"`, `max-file: "5"` and non-blocking delivery with `max-buffer-size: "1m"`. This is a starting per-container rotation budget, not guaranteed time retention or a filesystem quota. Use `docker compose logs --since …` and parse application JSON; do not tail Docker's private storage files. Docker documents [local rotation](https://docs.docker.com/engine/logging/drivers/local/) and [delivery mode tradeoffs](https://docs.docker.com/engine/logging/configure/). Driver drops happen after the app writes and cannot be inferred from its drop counter. Never write application log files under the media cache.
 
-Existing infrastructure may scrape Prometheus metrics or collect stdout with Alloy/OpenTelemetry into Loki, Datadog or another backend. The app has no vendor credentials/export client and does not require a collector, database or dashboard to run. This feature documents the integration contract and one scrape example; it does not deploy a monitoring stack, durable queues or dashboards.
+Existing infrastructure may scrape Prometheus metrics or collect stdout with Alloy/OpenTelemetry into Loki, Datadog or another backend. The app has no vendor credentials/export client and does not require a collector, database or dashboard to run. The repository also provides an opt-in local Compose profile for development troubleshooting: Prometheus, Loki, Alloy and Grafana stay on an internal network, while Grafana alone is published on loopback. It is a disposable local stack, not a required server deployment or a remote monitoring integration.
+
+That profile keeps Prometheus data in a named volume with a 7-day or 1 GB TSDB limit, Loki data in a named volume with a 72-hour retention limit and modest ingestion/stream limits, and small CPU/memory limits on each backend. Alloy persists only its small local state volume and has finite retry backoff. The application remains responsible for bounded stdout delivery; neither app log drops nor Docker-driver drops can be reconstructed by the collector. Grafana provisions the metrics and log data sources plus a compact overview for playback outcomes/readiness, resources, telemetry drops and correlated JSON logs.
 
 If centralized collection is later configured, preserve app timestamp, service/environment/host, severity, event and correlation fields; parse one JSON record per line, retain bounded fallback handling for dependency output and avoid duplicate readers. Index only bounded labels such as service/environment/level; IDs remain JSON fields or structured metadata, per [Loki guidance](https://grafana.com/docs/loki/latest/get-started/labels/). Set finite queues/retries, retention and storage caps in that deployment, keep data separate from media eviction, and monitor collection failure. Replays/loss are possible; metrics, not log-line counts, own outcome totals. Docker API access grants substantial privileges even with a read-only socket mount; reuse a trusted host collector where available.
 
@@ -95,6 +97,24 @@ docker compose logs --since 10m --no-log-prefix magplay
 METRICS_ENABLED=true npm start
 curl http://127.0.0.1:9091/metrics
 ```
+
+To use the repository's optional local stack, start the profile from a trusted development checkout:
+
+```sh
+docker compose --profile observability up -d --build
+open http://127.0.0.1:3000
+```
+
+The Compose service enables the app's private metrics listener on its internal `observability` network. Prometheus scrapes it every 15 seconds; Alloy selects only the current Compose project's `magplay` container and sends its Docker JSON logs to Loki. Grafana is loopback-only and permits anonymous Viewer access, so do not change its binding or use the profile on a host shared with untrusted local users. The Alloy Docker socket mount is read-only but still grants powerful control-plane access; use it only on a trusted development host, prefer an existing trusted host collector in deployment, and remove the profile rather than mounting the socket on an untrusted server.
+
+Stop only the local backends while leaving magplay running with:
+
+```sh
+docker compose stop grafana alloy loki prometheus
+docker compose rm -f grafana alloy loki prometheus
+```
+
+Their named volumes preserve the bounded local history. `docker compose down --volumes` removes the entire development project, including magplay's cache volume, and is appropriate only when that data may be discarded. Run `npm run test:observability` to validate an isolated copy of the profile; it removes its containers and volumes automatically.
 
 For an existing host Prometheus collector, explicitly enable metrics on magplay and add a scrape job (use the application's reachable private address):
 

@@ -225,6 +225,12 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 
 Logs are structured JSON on stdout and in Settings → Debug, with linked request/playback/job IDs and secrets removed. The Debug filter changes display only; `LOG_LEVEL` controls capture. The bundled Compose service rotates local logs and uses bounded non-blocking delivery. Inspect with `docker compose logs --since 10m --no-log-prefix magplay`. Metrics are disabled by default and are never served on the browser port. See [logging and observability](docs/logging.md) for the metrics/scrape setup, limits and collection contract.
 
+### Optional local observability stack
+
+For local troubleshooting, the repository Compose file has an opt-in `observability` profile with Prometheus, Loki, Alloy and Grafana. It starts Grafana only on `127.0.0.1:3000`; metrics and backends remain on an internal Docker network. Start it with `docker compose --profile observability up -d --build`, then open `http://127.0.0.1:3000`. The dashboard combines playback/readiness and resource metrics with structured application logs.
+
+Alloy reads the Docker socket to discover this Compose project's magplay container. A read-only Docker socket is still highly privileged, so use this profile only on a trusted development machine; do not mount it on a shared/untrusted server. `docker compose stop grafana alloy loki prometheus` stops just the local backends. Their named volumes retain bounded history; `docker compose down --volumes` removes the whole development stack and its magplay cache. Full operating limits and the isolated-stack validation command are in [logging and observability](docs/logging.md#local-use).
+
 ## HTTP API
 
 | Method + path | Does |

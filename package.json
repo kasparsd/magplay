@@ -21,6 +21,7 @@
     "test": "npm run build && node --test '{apps,packages}/**/*.test.{js,ts}'",
     "test:e2e": "npm run build && playwright test",
     "test:peers": "node --test tests/integration/*.test.js",
+    "test:observability": "node tools/scripts/check-observability.mjs",
     "test:all": "npm test && npm run test:peers && npm run test:e2e",
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
