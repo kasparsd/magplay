@@ -361,6 +361,8 @@ main.settings > h1 { font-size: 26px; margin: 0 0 8px; }
 .section-head h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; margin: 0 0 4px; }
 .settings-section .intro { color: var(--muted); margin: 0 0 4px; max-width: 60ch; }
 .scope-note { margin: 18px 0 8px; font-size: 13px; color: var(--muted); }
+.section-head .scope-note { margin: 6px 0 0; }
+.section-head { margin-bottom: 14px; }
 .scope-note strong { color: var(--fg); }
 .card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
@@ -396,8 +398,6 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
 .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
 .list-extras { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .list-item .row { border-top: 0; }
-.list-row { display: flex; gap: 8px; align-items: center; }
-.list-row input { flex: 1; min-width: 0; }
 .button.add { margin-top: 2px; }
 .button.danger { color: var(--bad); border-color: var(--bad); }
 .badge.lvl-ok { color: var(--good); border-color: currentColor; }
@@ -428,6 +428,11 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
   main.settings > h1 { font-size: 22px; }
   .settings-section { padding-top: 20px; }
   .row { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
+  /* A switch stays on the right of its label, as on desktop */
+  .row:has(button.switch) { grid-template-columns: minmax(0, 1fr) auto; }
+  .row:has(button.switch) > .row-control { justify-self: end; }
+  .list-item .row { padding: 10px 12px; }
+  .row.wide { padding: 12px 10px; }
   .row-control { justify-self: start; }
   .row-control input[type="text"], .row-control input[type="url"], .row-control input[type="password"], .row-control select { width: 100%; }
   .row-control:has(> input, > select, > .secret) { justify-self: stretch; }

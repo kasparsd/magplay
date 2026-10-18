@@ -76,7 +76,7 @@ function grid (cells: Array<[string, ReadoutValue]>): HTMLElement {
 const READOUTS: Record<string, () => ReadoutValue> = {
   'connection.result': () => {
     const r = readConnection()
-    if (!r) return 'Not tested in this browser yet. The test downloads from the server for about 5 seconds.'
+    if (!r) return 'Not tested in this browser yet.'
     const level = connectionLevel(r)
     return el('div', { className: 'speed' },
       el('p', { className: 'speed-numbers' },
@@ -148,13 +148,10 @@ async function loadDebug (): Promise<void> {
 const metaOf = (key: string): SettingMeta | undefined => saved?.meta[key]
 const serverValue = (key: string): unknown => key in draft ? draft[key] : saved?.values[key]
 
+/** Only when an env var actually sets the value: then the field is read-only and names the variable. */
 function envNote (def: SettingDef, meta: SettingMeta | undefined): Child {
-  if (def.scope !== 'server' || !def.env?.length) return null
-  if (meta?.source === 'env' && def.type !== 'list') {
-    return el('p', { className: 'env-note' }, el('code', { textContent: meta.env ?? def.env[0]! }), ' Set in the environment, so it can’t be changed here.')
-  }
-  if (def.type === 'list' && meta?.locked?.length) return null // each locked item says so itself
-  return el('p', { className: 'env-note' }, el('code', { textContent: def.env[0]! }), ' Not set; managed here.')
+  if (def.scope !== 'server' || def.type === 'list' || meta?.source !== 'env') return null // locked list items say so themselves
+  return el('p', { className: 'env-note' }, 'Set by ', el('code', { textContent: meta.env ?? def.env?.[0] ?? '' }), ' in the environment, so it can’t be changed here.')
 }
 
 /** Source items get their live status and a Test button that checks the unsaved values. */
@@ -199,7 +196,10 @@ function row (def: SettingDef): HTMLElement {
   if (def.type === 'action') ctx.run = ACTIONS[def.key] ?? (() => Promise.resolve('Not available'))
   if (def.type === 'readout') ctx.readout = READOUTS[def.key] ?? (() => '')
   if (def.type === 'list' && meta?.locked) ctx.locked = meta.locked
-  if (def.key === 'sources') ctx.itemExtras = sourceExtras
+  if (def.key === 'sources') {
+    ctx.itemExtras = sourceExtras
+    ctx.startWithOne = true // with no sources, the form to add one is already open
+  }
   if (isValueDef(def)) {
     ctx.onChange = def.scope === 'server'
       ? (next, committed) => editServer(def, next, committed)
@@ -217,13 +217,12 @@ function row (def: SettingDef): HTMLElement {
 
   const wide = def.type === 'list' || (def.type === 'readout' && (def.key.startsWith('debug.') || def.key === 'connection.result'))
   const head = el('div', { className: 'row-text' },
-    // Buttons keep their own text as their name ("Test now"), so only value controls get a <label for>
-    def.type !== 'list' && !(wide && def.type === 'readout') && (isValueDef(def)
+    // Buttons and lists keep their own names ("Test now", each item's fields), so only single value controls get a <label for>
+    !(wide && def.type === 'readout') && (isValueDef(def) && def.type !== 'list'
       ? el('label', { className: 'row-label', htmlFor: id, textContent: def.label })
       : el('span', { className: 'row-label', textContent: def.label })),
     def.help && el('p', { className: 'help', textContent: def.help }),
-    envNote(def, meta),
-    meta?.pendingRestart && el('p', { className: 'env-note', textContent: 'Saved. Restart magplay to apply it.' }))
+    envNote(def, meta))
   return el('div', { className: `row${wide ? ' wide' : ''}`, id: `row-${id}` },
     head.childElementCount ? head : null,
     el('div', { className: 'row-control' }, control),
@@ -245,11 +244,8 @@ function editServer (def: ValueDef, next: unknown, committed: boolean): void {
 
 // ---- Sections ----
 
-function scopeNote (scope: 'server' | 'browser'): HTMLElement {
-  return scope === 'server'
-    ? el('p', { className: 'scope-note' }, 'Saved on the ', el('strong', { textContent: 'server' }), ' · applies to everyone')
-    : el('p', { className: 'scope-note' }, 'Saved in ', el('strong', { textContent: 'this browser' }), ' · applies as you change it')
-}
+const scopeNote = (scope: 'server' | 'browser'): HTMLElement => el('p', { className: 'scope-note' },
+  scope === 'server' ? 'Saved on the server, for everyone.' : 'Saved in this browser only, as you change it.')
 
 function cards (defs: SettingDef[]): HTMLElement[] {
   const groups = new Map<string, SettingDef[]>()
@@ -258,9 +254,7 @@ function cards (defs: SettingDef[]): HTMLElement[] {
     groups.set(name, [...(groups.get(name) ?? []), def])
   }
   return [...groups].map(([name, list]) => el('div', { className: 'card' },
-    name && el('div', { className: 'card-head' },
-      el('h3', { textContent: name }),
-      name === 'Needs a restart' && el('span', { className: 'muted', textContent: 'Saved changes apply after magplay restarts.' })),
+    name && el('div', { className: 'card-head' }, el('h3', { textContent: name })),
     ...list.map(row)))
 }
 
@@ -271,16 +265,18 @@ function cards (defs: SettingDef[]): HTMLElement[] {
 function renderSection (id: SectionId): HTMLElement {
   const section = SECTIONS.find(s => s.id === id)!
   const defs = SETTINGS.filter(d => d.section === id && !d.hidden)
-  const parts: Child[] = [
-    el('div', { className: 'section-head' },
-      el('h2', { id: `${id}-title` }, section.label, el('span', { className: 'section-status', id: `${id}-status` })),
-      el('p', { className: 'intro', textContent: section.intro })),
-  ]
+  // Where values are saved is a quiet line: under the intro when the whole section is one scope, else above each part
+  const scopes = (['server', 'browser'] as const).filter(scope => defs.some(d => d.scope === scope && isValueDef(d)))
+  const head = el('div', { className: 'section-head' },
+    el('h2', { id: `${id}-title` }, section.label, el('span', { className: 'section-status', id: `${id}-status` })),
+    el('p', { className: 'intro', textContent: section.intro }),
+    scopes.length === 1 && scopeNote(scopes[0]!))
+  const parts: Child[] = [head]
   for (const scope of ['server', 'browser'] as const) {
     const scoped = defs.filter(d => d.scope === scope)
     if (!scoped.length) continue
     const stored = scoped.filter(isValueDef)
-    if (stored.length) parts.push(scopeNote(scope))
+    if (scopes.length > 1 && stored.length) parts.push(scopeNote(scope))
     if (scope === 'server' && stored.length && stored.every(d => metaOf(d.key)?.source === 'env' && d.type !== 'list')) {
       parts.push(el('p', { className: 'muted', textContent: 'All of these are set in the environment, so they can’t be changed here.' }))
     }
@@ -422,7 +418,7 @@ function watchLiveSections (): void {
       else onScreen.delete(e.target.id)
     }
   })
-  for (const id of ['server', 'debug']) {
+  for (const id of ['storage', 'debug']) {
     const node = document.getElementById(id)
     if (node) observer.observe(node)
   }

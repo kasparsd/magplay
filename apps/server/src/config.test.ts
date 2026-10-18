@@ -20,19 +20,24 @@ test('invalid env values stop the server at startup, naming the variable', t => 
 
 test('saved settings feed config, and env vars win over them', t => {
   const dir = tempDir(t)
-  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ 'cache.maxGb': 80, 'limits.probes': 3 }))
-  const { current } = loadConfig({ CACHE_DIR: dir, MAX_PROBES: '5' })
-  assert.deepEqual([current().cacheMaxBytes, current().maxProbes], [80 * 1024 ** 3, 5])
+  // limits.probes isn't a page setting, so a saved value is ignored and the env var (or default) sets it
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ 'cache.maxGb': 80, 'cache.hlsMaxGb': 4, 'limits.probes': 3 }))
+  const { current } = loadConfig({ CACHE_DIR: dir, MAX_PROBES: '5', HLS_MAX_GB: '6' })
+  assert.deepEqual([current().cacheMaxBytes, current().hlsMaxBytes, current().maxProbes], [80 * 1024 ** 3, 6 * 1024 ** 3, 5])
+  assert.equal(loadConfig({ CACHE_DIR: dir }).current().maxProbes, 2)
 })
 
-test('saved live settings change current(); restart-only ones keep their startup value', t => {
-  const app = loadConfig({ CACHE_DIR: tempDir(t) })
+test('saved settings change current() at once; env-only knobs aren’t settings', t => {
+  const app = loadConfig({ CACHE_DIR: tempDir(t), PORT: '9000' })
   const seen: string[][] = []
-  app.onChange((config, changed) => seen.push([...changed, String(config.maxProbes)]))
-  app.settings.update({ 'limits.probes': 4, 'server.port': 9999 })
-  assert.equal(app.current().maxProbes, 4)
-  assert.equal(app.current().port, 8080)
-  assert.deepEqual(seen, [['limits.probes', 'server.port', '4']])
+  app.onChange((config, changed) => seen.push([...changed, String(config.searchTimeoutMs)]))
+  assert.equal(app.settings.update({ 'search.timeoutS': 45 }).ok, true)
+  assert.equal(app.current().searchTimeoutMs, 45_000)
+  assert.deepEqual(seen, [['search.timeoutS', '45000']])
+  assert.equal(app.current().port, 9000)
+  assert.equal(app.settings.update({ 'server.port': 9999 }).ok, false)
+  assert.deepEqual(app.current().extraTrackers.length, 5)
+  assert.deepEqual(loadConfig({ CACHE_DIR: tempDir(t), EXTRA_TRACKERS: '' }).current().extraTrackers, [])
 })
 
 test('starts without sources when nothing is configured', () => {

@@ -1,11 +1,9 @@
 // The settings schema: one declarative entry per setting, shared by the server (resolution,
 // validation, persistence) and the client (the /settings page renders one control per entry).
 
-export type SectionId = 'sources' | 'playback' | 'connection' | 'server' | 'debug'
+export type SectionId = 'sources' | 'playback' | 'connection' | 'storage' | 'debug'
 /** Server settings apply to everyone and are saved on the NAS; browser settings live in one browser's localStorage. */
 export type SettingScope = 'server' | 'browser'
-/** When a saved server setting takes effect. */
-export type SettingApply = 'live' | 'restart'
 
 export interface SectionDef {
   id: SectionId
@@ -14,10 +12,10 @@ export interface SectionDef {
 }
 
 export const SECTIONS: readonly SectionDef[] = [
-  { id: 'sources', label: 'Sources', intro: 'Where search and Explore get their results. Sources are searched in parallel.' },
-  { id: 'playback', label: 'Playback', intro: 'How files play. Server settings apply to everyone; your player defaults apply only here.' },
+  { id: 'sources', label: 'Sources', intro: 'Where search and Explore get their results.' },
+  { id: 'playback', label: 'Playback', intro: 'How files play, on the server and in this browser’s player.' },
   { id: 'connection', label: 'Connection', intro: 'The link between this device and the server: the part of playback nothing else measures.' },
-  { id: 'server', label: 'Server', intro: 'Storage, network and limits for the magplay service.' },
+  { id: 'storage', label: 'Storage', intro: 'How much of the NAS’s disk torrents and conversions may use.' },
   { id: 'debug', label: 'Debug', intro: 'What the server is doing right now, for working out why something is slow or broken.' },
 ]
 
@@ -30,8 +28,6 @@ interface Common {
   help?: string
   /** Env vars that set this server setting. When set they win, and the field is read-only. */
   env?: readonly string[]
-  /** Server scope only. Defaults to 'live'. */
-  apply?: SettingApply
   /** Cards within a section; settings with the same group render together. */
   group?: string
   /** Stored and validated but not rendered (state the player remembers, like volume). */
@@ -127,8 +123,6 @@ const LANGUAGES: readonly SettingOption[] = [
   { value: 'ja', label: 'Japanese' },
 ]
 
-const restart = { apply: 'restart', group: 'Needs a restart' } as const
-
 export const SETTINGS: readonly SettingDef[] = [
   // Sources
   {
@@ -136,7 +130,8 @@ export const SETTINGS: readonly SettingDef[] = [
     section: 'sources',
     scope: 'server',
     type: 'list',
-    label: 'Sources',
+    label: 'Indexers',
+    help: 'Torznab feeds, Jackett or Prowlarr. Every search asks them all at once.',
     itemLabel: 'source',
     titleField: 'name',
     env: ['TORZNAB_URL', 'JACKETT_URL', 'PROWLARR_URL'],
@@ -152,7 +147,7 @@ export const SETTINGS: readonly SettingDef[] = [
       { key: 'name', type: 'text', label: 'Name', default: '', optional: true, placeholder: 'From the address' },
       { key: 'url', type: 'url', label: 'Address', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
       { key: 'apiKey', type: 'secret', label: 'API key', default: '', placeholder: 'Paste the key' },
-      { key: 'indexer', type: 'text', label: 'Indexers', help: 'Jackett: an indexer id, all, or a filter. Prowlarr: comma-separated ids, -2 for all.', default: '', optional: true, placeholder: 'All' },
+      { key: 'indexer', type: 'text', label: 'Indexer filter', help: 'Jackett: an indexer id, all, or a filter. Prowlarr: comma-separated ids, -2 for all.', default: '', optional: true, placeholder: 'All' },
     ],
   },
   {
@@ -182,7 +177,6 @@ export const SETTINGS: readonly SettingDef[] = [
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
   },
-  { key: 'limits.hlsSessions', section: 'playback', scope: 'server', type: 'number', label: 'Simultaneous conversions', help: 'Remux and transcode sessions at once.', env: ['MAX_HLS_SESSIONS'], default: 2, min: 1, max: 16, integer: true },
 
   // Playback, this browser
   {
@@ -216,51 +210,18 @@ export const SETTINGS: readonly SettingDef[] = [
     default: 1,
     options: [0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value, label: `${value}×` })),
   },
-  { key: 'player.autoplayNext', section: 'playback', scope: 'browser', type: 'toggle', label: 'Play the next episode automatically', default: true },
   { key: 'player.volume', section: 'playback', scope: 'browser', type: 'number', label: 'Volume', default: 1, min: 0, max: 1, step: 0.05, hidden: true },
   { key: 'player.muted', section: 'playback', scope: 'browser', type: 'toggle', label: 'Muted', default: false, hidden: true },
 
   // Connection
   { key: 'connection.result', section: 'connection', scope: 'browser', type: 'readout', label: 'Last test' },
-  { key: 'connection.test', section: 'connection', scope: 'browser', type: 'action', label: 'Speed test', help: 'Downloads from the server for about 5 seconds.', button: 'Test now' },
+  { key: 'connection.test', section: 'connection', scope: 'browser', type: 'action', label: 'Speed test', help: 'Downloads from the server for about 5 seconds. The result stays in this browser.', button: 'Test now' },
 
-  // Server
-  { key: 'cache.usage', section: 'server', scope: 'server', type: 'readout', label: 'Disk', group: 'Storage' },
-  { key: 'cache.maxGb', section: 'server', scope: 'server', type: 'number', label: 'Torrent cache limit', help: 'Oldest torrents are removed past this.', env: ['CACHE_MAX_GB'], default: 50, unit: 'GB', min: 1, group: 'Storage' },
-  { key: 'cache.minFreeGb', section: 'server', scope: 'server', type: 'number', label: 'Keep free on disk', help: 'Conversions stop below this.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05, group: 'Storage' },
-  { key: 'cache.hlsMaxGb', section: 'server', scope: 'server', type: 'number', label: 'Conversion storage', help: 'Space for remux and transcode segments.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1, group: 'Storage' },
-  { key: 'torrents.idleMin', section: 'server', scope: 'server', type: 'number', label: 'Close idle torrents after', env: ['IDLE_TORRENT_MIN'], default: 30, unit: 'min', min: 1, integer: true, group: 'Torrents' },
-  { key: 'torrents.metadataTimeoutS', section: 'server', scope: 'server', type: 'number', label: 'Wait for torrent metadata', help: 'How long to look for peers before giving up.', env: ['METADATA_TIMEOUT_S'], default: 60, unit: 's', min: 1, group: 'Torrents' },
-  { key: 'torrents.checkTimeoutS', section: 'server', scope: 'server', type: 'number', label: 'Wait for a torrent check', help: 'Verifying data already on disk.', env: ['TORRENT_CHECK_TIMEOUT_S'], default: 7200, unit: 's', min: 1, group: 'Torrents' },
-  {
-    key: 'torrents.trackers',
-    section: 'server',
-    scope: 'server',
-    type: 'list',
-    label: 'Extra trackers',
-    help: 'Added to every torrent.',
-    itemLabel: 'tracker',
-    env: ['EXTRA_TRACKERS'],
-    group: 'Torrents',
-    default: [
-      'udp://tracker.opentrackr.org:1337/announce',
-      'udp://open.stealth.si:80/announce',
-      'udp://tracker.torrent.eu.org:451/announce',
-      'udp://explodie.org:6969/announce',
-      'udp://exodus.desync.com:6969/announce',
-    ].map((url, i) => ({ id: `default-${i}`, url })),
-    item: [{ key: 'url', type: 'text', label: 'Tracker', default: '', placeholder: 'udp://tracker.example:1337/announce' }],
-  },
-  { key: 'limits.torrentLoads', section: 'server', scope: 'server', type: 'number', label: 'Torrents loading at once', env: ['MAX_TORRENT_LOADS'], default: 4, min: 1, max: 64, integer: true, group: 'Limits' },
-  { key: 'limits.probes', section: 'server', scope: 'server', type: 'number', label: 'Files inspected at once', env: ['MAX_PROBES'], default: 2, min: 1, max: 16, integer: true, group: 'Limits' },
-  { key: 'limits.subtitleJobs', section: 'server', scope: 'server', type: 'number', label: 'Subtitle conversions at once', env: ['MAX_SUBTITLE_JOBS'], default: 1, min: 1, max: 16, integer: true, group: 'Limits' },
-  { key: 'tools.ffmpegPath', section: 'server', scope: 'server', type: 'text', label: 'ffmpeg', env: ['FFMPEG_PATH'], default: 'ffmpeg', group: 'Programs' },
-  { key: 'tools.ffprobePath', section: 'server', scope: 'server', type: 'text', label: 'ffprobe', env: ['FFPROBE_PATH'], default: 'ffprobe', group: 'Programs' },
-  { key: 'server.port', section: 'server', scope: 'server', type: 'number', label: 'Web port', env: ['PORT'], default: 8080, min: 1, max: 65535, integer: true, ...restart },
-  { key: 'torrents.port', section: 'server', scope: 'server', type: 'number', label: 'Torrent port', help: '0 picks a free port.', env: ['TORRENT_PORT'], default: 6881, min: 0, max: 65535, integer: true, ...restart },
-  { key: 'torrents.dht', section: 'server', scope: 'server', type: 'toggle', label: 'Find peers with DHT', env: ['DHT_ENABLED'], default: true, ...restart },
-  { key: 'torrents.lsd', section: 'server', scope: 'server', type: 'toggle', label: 'Find peers on the local network', env: ['LSD_ENABLED'], default: true, ...restart },
-  { key: 'server.cacheDir', section: 'server', scope: 'server', type: 'text', label: 'Cache folder', help: 'Settings stay in the folder CACHE_DIR names.', env: ['CACHE_DIR'], default: 'data', ...restart },
+  // Storage
+  { key: 'cache.usage', section: 'storage', scope: 'server', type: 'readout', label: 'Disk' },
+  { key: 'cache.maxGb', section: 'storage', scope: 'server', type: 'number', label: 'Torrent cache limit', help: 'Oldest torrents are removed past this.', env: ['CACHE_MAX_GB'], default: 50, unit: 'GB', min: 1 },
+  { key: 'cache.minFreeGb', section: 'storage', scope: 'server', type: 'number', label: 'Keep free on disk', help: 'Conversions stop below this.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05 },
+  { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion storage', help: 'Space for remux and transcode segments.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
 
   // Debug
   { key: 'debug.server', section: 'debug', scope: 'server', type: 'readout', label: 'Server', group: 'Server' },
@@ -268,8 +229,6 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: 'debug.diagnostics', section: 'debug', scope: 'server', type: 'action', label: 'Diagnostics', help: 'Versions, settings and status as JSON, with secrets removed.', button: 'Copy diagnostics', group: 'Server' },
   { key: 'debug.log', section: 'debug', scope: 'server', type: 'readout', label: 'Log', group: 'Log' },
   { key: 'debug.clearHls', section: 'debug', scope: 'server', type: 'action', label: 'Clear conversion cache', help: 'Stops conversions in progress and deletes their segments. Torrents stay.', button: 'Clear', confirm: true, danger: true, group: 'Maintenance' },
-  { key: 'debug.statsOverlay', section: 'debug', scope: 'browser', type: 'toggle', label: 'Show playback stats on the video', help: 'Mode, buffer, ffmpeg speed and dropped frames over the player.', default: false },
-  { key: 'debug.logRequests', section: 'debug', scope: 'browser', type: 'toggle', label: 'Log requests to the browser console', default: false },
 ]
 
 export const settingDef = (key: string): SettingDef | undefined => SETTINGS.find(d => d.key === key)
@@ -365,8 +324,6 @@ export interface SettingMeta {
   env?: string
   /** List settings: items from env vars, shown read-only before the editable ones. */
   locked?: ListItem[]
-  /** Saved, but waits for a restart to take effect. */
-  pendingRestart?: boolean
 }
 
 /** GET /api/settings and a successful PATCH. Secrets are masked. */

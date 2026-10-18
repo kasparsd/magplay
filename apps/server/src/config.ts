@@ -1,12 +1,12 @@
-// Runtime configuration, resolved from the settings schema: env vars, then data/settings.json, then defaults.
-// All env parsing lives here, including indexer source configs, so no package reads process.env.
-// `current()` is the configuration in use: live settings apply as soon as they're saved;
-// restart-only settings keep their startup value until the server restarts.
+// Runtime configuration. Settings the page edits resolve from env vars, then data/settings.json, then defaults,
+// and apply as soon as they're saved. Knobs the page doesn't show (ports, limits, timeouts, trackers, programs)
+// come from env vars only, validated the same way. All env parsing lives here, including indexer source configs,
+// so no package reads process.env.
 import path from 'node:path'
 import { SOURCE_TYPES } from '@magplay/indexers'
 import type { SourceConfig, SourceType } from '@magplay/indexers'
-import type { ListItem } from '@magplay/api-contract'
-import { createSettingsStore, serverDefs } from './settings-store.ts'
+import type { ListItem, ValueDef } from '@magplay/api-contract'
+import { createSettingsStore, resolve } from './settings-store.ts'
 import type { Env, EnvReaders, SettingsStore } from './settings-store.ts'
 
 export interface Config {
@@ -118,13 +118,39 @@ export function bitmagnetUrl (explicit: string | undefined, configs: readonly So
 }
 
 /** Settings whose env vars need more than "first non-empty variable". */
-const readers: EnvReaders = {
-  sources: sourceItemsFromEnv,
-  // Set but empty means "no extra trackers", which differs from unset (the defaults)
-  'torrents.trackers': e => e.EXTRA_TRACKERS === undefined
-    ? null
-    : splitList(e.EXTRA_TRACKERS).map((url, i) => ({ id: `env-${i}`, url })),
-}
+const readers: EnvReaders = { sources: sourceItemsFromEnv }
+
+const DEFAULT_TRACKERS = [
+  'udp://tracker.opentrackr.org:1337/announce',
+  'udp://open.stealth.si:80/announce',
+  'udp://tracker.torrent.eu.org:451/announce',
+  'udp://explodie.org:6969/announce',
+  'udp://exodus.desync.com:6969/announce',
+]
+
+const count = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max, integer: true })
+const seconds = (key: string, name: string, fallback: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1 })
+type EnvOnlyDef = Pick<ValueDef, 'key' | 'env' | 'type' | 'default'> & { min?: number, max?: number, integer?: boolean }
+/** Env-only knobs, in the settings schema's shape so they validate (and fail at startup) like page settings. */
+const ENV_ONLY: EnvOnlyDef[] = [
+  { key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true },
+  { key: 'torrentPort', env: ['TORRENT_PORT'], type: 'number', default: 6881, min: 0, max: 65535, integer: true },
+  { key: 'cacheDir', env: ['CACHE_DIR'], type: 'text', default: 'data' },
+  { key: 'ffmpegPath', env: ['FFMPEG_PATH'], type: 'text', default: 'ffmpeg' },
+  { key: 'ffprobePath', env: ['FFPROBE_PATH'], type: 'text', default: 'ffprobe' },
+  { key: 'dhtEnabled', env: ['DHT_ENABLED'], type: 'toggle', default: true },
+  { key: 'lsdEnabled', env: ['LSD_ENABLED'], type: 'toggle', default: true },
+  count('maxHlsSessions', 'MAX_HLS_SESSIONS', 2, 16),
+  count('maxTorrentLoads', 'MAX_TORRENT_LOADS', 4, 64),
+  count('maxProbes', 'MAX_PROBES', 2, 16),
+  count('maxSubtitleJobs', 'MAX_SUBTITLE_JOBS', 1, 16),
+  seconds('metadataTimeoutS', 'METADATA_TIMEOUT_S', 60),
+  seconds('checkTimeoutS', 'TORRENT_CHECK_TIMEOUT_S', 7200),
+  { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1 },
+]
+
+type EnvOnlyConfig = Pick<Config, 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'dhtEnabled' | 'lsdEnabled' |
+  'maxHlsSessions' | 'maxTorrentLoads' | 'maxProbes' | 'maxSubtitleJobs' | 'extraTrackers' | 'metadataTimeoutMs' | 'checkingTimeoutMs' | 'idleTorrentMs'>
 
 type Values = Readonly<Record<string, unknown>>
 const num = (v: Values, key: string): number => v[key] as number
@@ -133,31 +159,39 @@ const bool = (v: Values, key: string): boolean => v[key] as boolean
 const list = (v: Values, key: string): ListItem[] => v[key] as ListItem[]
 const GB = 1024 ** 3
 
-/** The typed configuration for settings values that already passed the schema's validate(). */
-export function deriveConfig (v: Values): Config {
+/** The env-only part of the configuration; an invalid value throws, naming the variable. */
+export function envOnlyConfig (env: Env): EnvOnlyConfig {
+  const v = resolve(env, {}, {}, ENV_ONLY as unknown as ValueDef[]).effective
+  return {
+    port: num(v, 'port'),
+    torrentPort: num(v, 'torrentPort'),
+    cacheDir: path.resolve(str(v, 'cacheDir')),
+    ffmpegPath: str(v, 'ffmpegPath'),
+    ffprobePath: str(v, 'ffprobePath'),
+    dhtEnabled: bool(v, 'dhtEnabled'),
+    lsdEnabled: bool(v, 'lsdEnabled'),
+    maxHlsSessions: num(v, 'maxHlsSessions'),
+    maxTorrentLoads: num(v, 'maxTorrentLoads'),
+    maxProbes: num(v, 'maxProbes'),
+    maxSubtitleJobs: num(v, 'maxSubtitleJobs'),
+    // Set but empty means "no extra trackers", which differs from unset (the defaults)
+    extraTrackers: env.EXTRA_TRACKERS === undefined ? DEFAULT_TRACKERS : splitList(env.EXTRA_TRACKERS),
+    metadataTimeoutMs: num(v, 'metadataTimeoutS') * 1000,
+    checkingTimeoutMs: num(v, 'checkTimeoutS') * 1000,
+    idleTorrentMs: num(v, 'idleTorrentMin') * 60_000,
+  }
+}
+
+/** The page's settings as configuration, for values that already passed the schema's validate(). */
+export function deriveSettings (v: Values): Omit<Config, keyof EnvOnlyConfig> {
   const sources = sourceConfigs(list(v, 'sources'))
   return {
-    port: num(v, 'server.port'),
     sources,
     bitmagnetUrl: bitmagnetUrl(str(v, 'explore.bitmagnetUrl'), sources),
     searchTimeoutMs: num(v, 'search.timeoutS') * 1000,
-    cacheDir: path.resolve(str(v, 'server.cacheDir')),
-    ffmpegPath: str(v, 'tools.ffmpegPath'),
-    ffprobePath: str(v, 'tools.ffprobePath'),
     cacheMaxBytes: num(v, 'cache.maxGb') * GB,
-    maxHlsSessions: num(v, 'limits.hlsSessions'),
-    maxTorrentLoads: num(v, 'limits.torrentLoads'),
-    maxProbes: num(v, 'limits.probes'),
-    maxSubtitleJobs: num(v, 'limits.subtitleJobs'),
     hlsMaxBytes: num(v, 'cache.hlsMaxGb') * GB,
     minFreeBytes: num(v, 'cache.minFreeGb') * GB,
-    torrentPort: num(v, 'torrents.port'),
-    dhtEnabled: bool(v, 'torrents.dht'),
-    lsdEnabled: bool(v, 'torrents.lsd'),
-    extraTrackers: list(v, 'torrents.trackers').map(t => field(t, 'url')),
-    metadataTimeoutMs: num(v, 'torrents.metadataTimeoutS') * 1000,
-    checkingTimeoutMs: num(v, 'torrents.checkTimeoutS') * 1000,
-    idleTorrentMs: num(v, 'torrents.idleMin') * 60_000,
     allowTranscode: bool(v, 'transcode.allow'),
     transcodeMaxHeight: num(v, 'transcode.maxHeight'),
   }
@@ -165,7 +199,7 @@ export function deriveConfig (v: Values): Config {
 
 export interface AppConfig {
   settings: SettingsStore
-  /** Where saved settings live: CACHE_DIR (or ./data) at startup, even if the cache folder setting moves the cache. */
+  /** Where saved settings live: the CACHE_DIR folder (./data by default). */
   settingsFile: string
   /** The configuration in use now. */
   current: () => Config
@@ -175,15 +209,13 @@ export interface AppConfig {
 
 /** Reads env and the settings file once; an invalid env value throws, naming the variable. */
 export function loadConfig (env: Env): AppConfig {
-  const settingsFile = path.resolve(env.CACHE_DIR || 'data', 'settings.json')
+  const fixed = envOnlyConfig(env)
+  const settingsFile = path.join(fixed.cacheDir, 'settings.json')
   const settings = createSettingsStore({ file: settingsFile, env, readers })
-  const restartKeys = serverDefs.filter(d => d.apply === 'restart').map(d => d.key)
-  const boot = structuredClone(settings.effective)
-  const inUse = (): Values => ({ ...settings.effective, ...Object.fromEntries(restartKeys.map(key => [key, boot[key]])) })
-  let config = deriveConfig(inUse())
+  let config: Config = { ...fixed, ...deriveSettings(settings.effective) }
   const listeners: Array<(config: Config, changed: string[]) => void> = []
   settings.on('changed', changed => {
-    config = deriveConfig(inUse())
+    config = { ...fixed, ...deriveSettings(settings.effective) }
     for (const listener of listeners) listener(config, changed)
   })
   return { settings, settingsFile, current: () => config, onChange: listener => { listeners.push(listener) } }

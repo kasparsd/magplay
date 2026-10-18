@@ -16,9 +16,6 @@ export const PREFERENCE = {
   speed: 'player.speed',
   audioLanguage: 'player.audioLanguage',
   subtitleLanguage: 'player.subtitleLanguage',
-  autoplayNext: 'player.autoplayNext',
-  statsOverlay: 'debug.statsOverlay',
-  logRequests: 'debug.logRequests',
 } as const
 
 /** The localStorage key for one browser setting: 'player.speed' → 'magplay:player:speed'. */
@@ -34,9 +31,6 @@ export interface Preferences {
   'player.audioLanguage': string
   /** A language code, 'off', or 'any' for whichever track there is. */
   'player.subtitleLanguage': string
-  'player.autoplayNext': boolean
-  'debug.statsOverlay': boolean
-  'debug.logRequests': boolean
 }
 export type PreferenceKey = keyof Preferences
 

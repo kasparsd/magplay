@@ -46,7 +46,7 @@ test('a broken source turns the dot red and its action deep-links to Sources', a
   await page.getByRole('button', { name: '+ Add source' }).click()
   await page.locator('#setting-sources-1-url').fill('http://127.0.0.1:9/torznab/api')
   await page.locator('#savebar-save').click()
-  await expect(page.locator('#savebar-count')).toHaveText('Saved: sources')
+  await expect(page.locator('#savebar-count')).toHaveText('Saved: indexers')
 
   await statusButton(page).click()
   await expect(statusButton(page).locator('.status-dot')).toHaveClass(/lvl-error/)
@@ -83,12 +83,17 @@ test('a live setting applies without a restart, and env-set values are read-only
   await timeout.fill('30')
   await save(page)
 
-  await page.goto(`${app.origin}/settings#server`)
-  await expect(page.locator('#setting-torrents-port')).toBeDisabled()
-  await expect(page.locator('#row-setting-torrents-port')).toContainText('TORRENT_PORT')
-  const locked = await page.request.patch(`${app.origin}/api/settings`, { headers: { Origin: app.origin }, data: { 'torrents.port': 7000 } })
+  await page.goto(`${app.origin}/settings#playback`)
+  await expect(page.locator('#setting-transcode-allow')).toBeDisabled()
+  await expect(page.locator('#row-setting-transcode-allow')).toContainText('Set by ALLOW_VIDEO_TRANSCODE in the environment')
+  // Values not set by env carry no env note
+  await expect(page.locator('#row-setting-transcode-maxHeight .env-note')).toHaveCount(0)
+  const locked = await page.request.patch(`${app.origin}/api/settings`, { headers: { Origin: app.origin }, data: { 'transcode.allow': true } })
   expect(locked.status()).toBe(400)
-  expect((await locked.json()).fields['torrents.port']).toMatch(/TORRENT_PORT/)
+  expect((await locked.json()).fields['transcode.allow']).toMatch(/ALLOW_VIDEO_TRANSCODE/)
+  // Env-only knobs aren't settings at all
+  const unknown = await page.request.patch(`${app.origin}/api/settings`, { headers: { Origin: app.origin }, data: { 'torrents.port': 7000 } })
+  expect(unknown.status()).toBe(400)
 })
 
 test('writes from another site are refused', async ({ page, app }) => {
@@ -123,21 +128,30 @@ test('browser preferences save at once, under the keys the Player reads', async 
   await expect(page.locator('#setting-player-audioLanguage')).toHaveValue('lav')
   await page.locator('#setting-player-speed').getByText('1.25×').click()
   await page.locator('#setting-player-subtitleLanguage').selectOption('en')
-  await page.locator('#setting-player-autoplayNext').click()
   await expect(page.locator('#savebar')).toBeHidden()
-  const stored = await page.evaluate(() => ['speed', 'subtitleLanguage', 'autoplayNext'].map(k => localStorage.getItem(`magplay:player:${k}`)))
-  expect(stored).toEqual(['1.25', '"en"', 'false'])
+  const stored = await page.evaluate(() => ['speed', 'subtitleLanguage'].map(k => localStorage.getItem(`magplay:player:${k}`)))
+  expect(stored).toEqual(['1.25', '"en"'])
 })
 
 test('Settings is one page with every section stacked in order, and #section links scroll to it', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings#debug`)
   const sections = page.locator('main.settings > #settings-body > section.settings-section')
   await expect(sections).toHaveCount(5)
-  expect(await sections.evaluateAll(list => list.map(s => s.id))).toEqual(['sources', 'playback', 'connection', 'server', 'debug'])
-  for (const id of ['sources', 'playback', 'connection', 'server', 'debug']) await expect(page.locator(`#${id}`)).toBeVisible()
+  expect(await sections.evaluateAll(list => list.map(s => s.id))).toEqual(['sources', 'playback', 'connection', 'storage', 'debug'])
+  for (const id of ['sources', 'playback', 'connection', 'storage', 'debug']) await expect(page.locator(`#${id}`)).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Debug' })).toBeInViewport()
   await expect(page.getByRole('heading', { level: 2, name: 'Sources' })).not.toBeInViewport()
   // A fix link from the status panel, on the same page, scrolls without leaving it
   await page.evaluate(() => { location.hash = 'sources' })
   await expect(page.getByRole('heading', { level: 2, name: 'Sources' })).toBeInViewport()
+})
+
+test('only the settings people tune are on the page, and Sources has a labelled list', async ({ page, app }) => {
+  await page.goto(`${app.origin}/settings`)
+  await expect(page.locator('#sources')).toBeVisible()
+  for (const gone of ['Extra trackers', 'Web port', 'Torrent port', 'Find peers with DHT', 'Cache folder', 'Simultaneous conversions', 'Close idle torrents after', 'Wait for torrent metadata', 'Needs a restart', 'Play the next episode automatically', 'Show playback stats on the video', 'Log requests to the browser console', 'Not set; managed here']) {
+    await expect(page.getByText(gone, { exact: false })).toHaveCount(0)
+  }
+  await expect(page.locator('#row-setting-sources > .row-text > .row-label')).toHaveText('Indexers')
+  await expect(page.locator('#row-setting-sources > .row-text > .help')).toBeVisible()
 })
