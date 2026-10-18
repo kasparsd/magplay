@@ -18,6 +18,8 @@ Missing: any history, ffmpeg CPU, ffmpeg `fps`/`bitrate` (in the `-progress` str
 
 On 2026-10-17 the chosen direction was F (one overlay chrome) with G (theater layout) as the default, followed by B (playback performance graph). The specification and implementation checklists now live in the [Player roadmap](../user-interface.md#player-roadmap); track progress there. Options C, D, E, H and I are listed there under "Later, if use calls for it".
 
+Progress (2026-10-17): all three steps are built. The server reports `fps` and `cpu` in `sessionStats` and the probe reports `sampleAspect`. The chrome, the theater layout and the Performance lanes are in `apps/client/src/player.js` with helpers in `apps/client/src/lib/` (`seek.ts`, `naming.ts`, `icons.ts`, `sparkline.ts`, `performance.ts`). Screenshots are in [the player redesign checkpoint](../checkpoints/2026-10-17-player-redesign/README.md). Still open: checking a transcode that falls behind on a real NAS, and CPU on Linux (macOS has no `/proc`, so CPU is `null` there).
+
 ## Open questions
 
 - Should the Performance lanes eventually replace the snapshot rows in ⓘ Details? For now they sit beside them.

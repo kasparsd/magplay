@@ -17,6 +17,14 @@ test('one chrome in direct and HLS modes, hiding while playing and back on point
     await expect(page.locator('#stage')).toHaveClass(/idle/, { timeout: 5000 })
     await page.locator('#stage').hover()
     await expect(page.locator('#stage')).not.toHaveClass(/idle/)
+    // Once faded, a click where the controls were brings them back instead of pausing
+    const bar = await page.locator('#chrome .controls').boundingBox()
+    await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2)
+    await expect(page.locator('#stage')).toHaveClass(/idle/, { timeout: 5000 })
+    await page.mouse.down()
+    await page.mouse.up()
+    await expect(page.locator('#stage')).not.toHaveClass(/idle/)
+    expect(await page.locator('#video').evaluate(v => v.paused)).toBe(false)
     // The played layer follows the playhead
     await expect.poll(() => page.locator('#layer-played').evaluate(n => parseFloat(n.style.width))).toBeGreaterThan(0)
   }

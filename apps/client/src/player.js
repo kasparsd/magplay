@@ -5,6 +5,7 @@ import { api } from './lib/api.ts'
 import { measureCaps } from './lib/capabilities.js'
 import { icon } from './lib/icons.ts'
 import { audioFormat, languageFromName, languageName, pickByLanguage, releaseName } from './lib/naming.ts'
+import { performanceView, record } from './lib/performance.ts'
 import { parseVtt } from './lib/subtitles.ts'
 import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
 import { canSeekLocally, layerBackground, seekHint, seekOutcome, spans } from './lib/seek.ts'
@@ -38,6 +39,9 @@ let file = null // this file's entry from the torrent's file list
 let next = null // the next video in the torrent, if any
 /** @type {import('@magplay/api-contract').TorrentStatus | null} */
 let lastStatus = null // the latest /status poll, for the details panel and the seek bar
+const history = [] // the last 3 minutes of status polls, for the Performance lanes
+let stalled = false // waiting for data right now
+let stallSeen = false // waited at some point since the last sample
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
 
 // Remembered choices, in localStorage through recall()/remember() (stored as "magplay:<key>"):
@@ -75,7 +79,7 @@ function refusalActions () {
 
 /** A file number this torrent doesn't have: retrying can't help, so offer only the way back and hide the empty controls. */
 function missingFile (err) {
-  for (const sel of ['#title-actions', '#details', '#chrome']) $(sel).hidden = true
+  for (const sel of ['#title-actions', '#details', '#performance', '#chrome']) $(sel).hidden = true
   return notify(err.message, 'error', [linkButton('Back to files', urls.torrent(ih), true)])
 }
 
@@ -513,11 +517,26 @@ async function pollStatus (signal = pageLife.signal) {
       cur.complete = !s.running
       const nowSlow = s.running && !s.paused && s.speed && s.speed < 1 && s.produced - video.currentTime < 30
       if (s.failed) notify(`ffmpeg failed: ${s.error}`, 'error', [button('Try again', () => start(position()), true)])
-      else if (nowSlow) notify(`The NAS converts at ${s.speed.toFixed(1)}x, slower than playback, so this will stall. Try another release.`, 'warn')
-      else if (slow) notify('')
+      else if (nowSlow) {
+        notify(`The NAS converts at ${s.speed.toFixed(1)}x, slower than playback, so this will stall. Try another release.`, 'warn',
+          [el('button', { type: 'button', className: 'link', textContent: 'Performance', onclick: showPerformance })])
+      } else if (slow) notify('')
       slow = nowSlow
     }
+    record(history, {
+      download: st.downloadSpeed,
+      peers: st.peers.length,
+      speed: s?.speed ?? null,
+      fps: s?.fps ?? null,
+      cpu: s?.cpu ?? null,
+      paused: !!s?.paused,
+      ahead: s ? Math.max(0, s.produced - video.currentTime) : null,
+      buffer: bufferedAhead(),
+      stalled: stalled || stallSeen,
+    })
+    stallSeen = false
     if (!$('#details').hidden) renderFacts()
+    if (!$('#performance').hidden) renderPerformance()
     drawSeekbar()
   }
 }
@@ -616,10 +635,11 @@ $('#chrome').addEventListener('toggle', wake, true)
 $('#chrome').addEventListener('focusin', wake)
 
 const togglePlay = () => video.paused ? video.play() : video.pause()
-// A tap on the video shows hidden chrome first; with the chrome showing, a tap or click plays or pauses
+// A tap on faded chrome shows it first; with the chrome showing, a tap or click plays or pauses
 let tapWoke = false
 video.addEventListener('pointerdown', e => {
-  tapWoke = e.pointerType === 'touch' && stage.classList.contains('idle')
+  // While faded, a touch anywhere, or a click where the controls were, only brings the chrome back
+  tapWoke = stage.classList.contains('idle') && (e.pointerType === 'touch' || e.clientY >= $('#chrome').getBoundingClientRect().top)
   wake()
 })
 video.addEventListener('click', () => {
@@ -760,10 +780,15 @@ video.addEventListener('durationchange', updateTimeline)
 video.addEventListener('play', () => { renderPlayButton(); wake() })
 video.addEventListener('pause', () => { renderPlayButton(); wake(); persistProgress(true) })
 video.addEventListener('seeked', () => persistProgress(true))
-video.addEventListener('waiting', () => cur && notify(starting || 'Buffering…', 'busy'))
+video.addEventListener('waiting', () => {
+  if (!cur) return
+  stalled = stallSeen = true
+  notify(starting || 'Buffering…', 'busy')
+})
 video.addEventListener('playing', () => {
   if (pageLife.signal.aborted) return
   starting = ''
+  stalled = false
   persistProgress(true)
   if ($('#overlay .toast.busy')) notify('')
   // For "Continue" on the torrent page and the home page
@@ -786,6 +811,19 @@ function disclosure (toggle, panel, onOpen) {
   })
 }
 disclosure($('#details-toggle'), $('#details'), renderFacts)
+disclosure($('#perf-toggle'), $('#performance'), renderPerformance)
+
+/** Redrawn on each poll, only while the disclosure is open. */
+function renderPerformance () {
+  fill($('#performance'), ...performanceView(history, { direct: cur?.mode === 'direct' }))
+}
+
+/** From the "converts slower than playback" warning: open the graph and bring it into view. */
+function showPerformance () {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+  if ($('#performance').hidden) $('#perf-toggle').click()
+  $('#performance').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
 
 // Theater layout: the stage takes the largest box that fits the band's width and the viewport height
 // left by the top bar and the title row (see #stage in style.css). Phones in landscape give the video
