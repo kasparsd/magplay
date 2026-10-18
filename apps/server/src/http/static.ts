@@ -1,18 +1,48 @@
-// Pages from public/ and the page bundles esbuild builds from apps/client into dist/client (see `npm run build`).
+// Pages from public/, linked to the content-hashed bundles and stylesheet esbuild builds into dist/client/assets (see `npm run build`).
+import fs from 'node:fs/promises'
 import path from 'node:path'
-import { route, serveFile } from '@magplay/http-kit'
+import { FileNotFoundError, route, sendCached, serveFile } from '@magplay/http-kit'
 import type { Handler, Route } from '@magplay/http-kit'
 
-const CONTENT_TYPES: Readonly<Record<string, string>> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json' }
-const BUNDLES = ['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js', 'settings.js']
+const CONTENT_TYPES: Readonly<Record<string, string>> = { '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json' }
+/** Bundles, the stylesheet and their source maps, named by esbuild's `[name]-[hash]`; never client sources or tests. */
+const ASSET = /^[\w-]+-[A-Z0-9]{8}\.(?:js|css)(?:\.map)?$/
+/** A hashed URL never changes content, so any cache may keep it for good. */
+const IMMUTABLE = 'public, max-age=31536000, immutable'
 
-/** Serves a front-end file. Pages and scripts revalidate on every load, so a deploy shows up on reload. */
-const file = (target: string): Handler<unknown> => ({ req, res }) =>
-  serveFile(req, res, target, `${CONTENT_TYPES[path.extname(target)] ?? 'application/octet-stream'}; charset=utf-8`)
+interface Metafile { outputs: Record<string, { entryPoint?: string }> }
+
+/** '/search.js' (as the pages link it) → '/assets/search-HASH.js', from esbuild's metafile; re-read after a rebuild. */
+function assetLinks (metafilePath: string): () => Promise<Map<string, string>> {
+  let cached: { mtimeMs: number, links: Map<string, string> } | null = null
+  return async () => {
+    const { mtimeMs } = await fs.stat(metafilePath)
+    if (cached?.mtimeMs === mtimeMs) return cached.links
+    const { outputs } = JSON.parse(await fs.readFile(metafilePath, 'utf8')) as Metafile
+    const links = new Map<string, string>()
+    for (const [output, { entryPoint }] of Object.entries(outputs)) {
+      if (entryPoint) links.set('/' + path.basename(entryPoint).replace(/\.ts$/, '.js'), '/assets/' + path.basename(output))
+    }
+    cached = { mtimeMs, links }
+    return links
+  }
+}
 
 export function staticRoutes ({ publicDir, distDir }: { publicDir: string, distDir: string }): Route[] {
-  const page = (name: string): Handler<unknown> => file(path.join(publicDir, name))
-  const asset = (name: string): Handler<unknown> => file(path.join(distDir, name))
+  const links = assetLinks(path.join(distDir, 'meta.json'))
+  /**
+   * Pages revalidate on every load, so a deploy shows up on reload. The ETag hashes the linked page (not file
+   * metadata), so a cache revalidating through a reverse proxy gets the new page and with it the new asset URLs.
+   */
+  const page = (name: string): Handler<unknown> => async ({ req, res }) => {
+    const [html, urls] = await Promise.all([fs.readFile(path.join(publicDir, name), 'utf8'), links()])
+    const linked = html.replace(/(src|href)="(\/[\w-]+\.(?:js|css))"/g, (_, attribute: string, url: string) => {
+      const hashed = urls.get(url)
+      if (!hashed) throw new Error(`${name} links ${url}, which the client build does not produce`)
+      return `${attribute}="${hashed}"`
+    })
+    sendCached(req, res, linked, { 'Content-Type': 'text/html; charset=utf-8' }, 'no-cache')
+  }
   return [
     route('GET', '/', page('index.html')),
     route('GET', '/t/:ih?', page('torrent.html')),
@@ -24,8 +54,10 @@ export function staticRoutes ({ publicDir, distDir }: { publicDir: string, distD
       res.writeHead(301, { Location: `/play/${query.get('ih')}/${query.get('idx')}` })
       res.end()
     }),
-    route('GET', '/style.css', page('style.css')),
-    // Only the bundles and their source maps, never client sources or tests
-    ...BUNDLES.flatMap(name => [route('GET', `/${name}`, asset(name)), route('GET', `/${name}.map`, asset(`${name}.map`))]),
+    route('GET', '/assets/:name', ({ req, res, params }) => {
+      if (!ASSET.test(params.name)) throw new FileNotFoundError('Not found')
+      const type = CONTENT_TYPES[path.extname(params.name)] ?? 'application/octet-stream'
+      return serveFile(req, res, path.join(distDir, 'assets', params.name), `${type}; charset=utf-8`, IMMUTABLE)
+    }),
   ]
 }
