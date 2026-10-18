@@ -12,7 +12,7 @@ import { createLimiter } from './limits.js'
 import { waitForTorrent } from './torrent-ready.js'
 import { tarLayout, tarBytes } from '@magplay/seekable-tar'
 
-const runTorrentLoad = createLimiter(config.maxTorrentLoads, 'Torrent initialization')
+export const runTorrentLoad = createLimiter(() => config.maxTorrentLoads, 'Torrent initialization')
 
 const torrentsDir = path.join(config.cacheDir, 'torrents')
 const client = new WebTorrent({
@@ -311,3 +311,14 @@ setInterval(() => {
   housekeepingRunning = true
   housekeeping().catch(err => console.error('[cache]', err.message)).finally(() => { housekeepingRunning = false })
 }, 60_000).unref()
+
+/** Torrents loaded in the client right now, for the Debug page. */
+export const loadedTorrents = () => client.torrents.length
+
+/** Bytes the torrent cache holds on disk. */
+export async function cacheBytes () {
+  const names = await fs.readdir(torrentsDir).catch(() => [])
+  let total = 0
+  for (const name of names) total += await dirBytes(path.join(torrentsDir, name))
+  return total
+}

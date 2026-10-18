@@ -44,7 +44,7 @@ apps/server ──► indexers ──────► release-info
 | `seekable-tar` | PAX tar layout computed from file sizes, any byte range produced on demand | Sizes, a `read(range)` callback | Torrents, Node streams |
 | `playback` | `probe(input)`, `decide(info, caps, policy)`, ffmpeg arguments, subtitle→VTT, `createHlsSessions(options)` with process limits and HLS disk budget, codec key list | An input URL or path, policy, ffmpeg paths | Tabs, routes, the app's port |
 | `http-kit` | Router, Range parsing, conditional caching, `serveFile`, JSON helpers | Requests/responses | Core logic; only apps use it |
-| `api-contract` | Types for the server JSON API (replaces `api-types.js`) | — | Runtime code |
+| `api-contract` | Types for the server JSON API (replaces `api-types.js`), plus the settings schema with `validate()` and the status level helpers, which run on both sides | — | Node or DOM APIs |
 
 Each package throws its own typed errors (busy, timeout, not found, cancelled, invalid input). `apps/server` maps them to HTTP statuses in one place.
 
@@ -55,8 +55,16 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
   - `main.ts`: creates the engine, indexers and HLS sessions in order, runs startup checks and owns graceful shutdown.
   - Services that coordinate packages: play (probe → decide → direct URL or HLS session, tab fencing), Explore (cache, parameter validation), playlists, subtitle jobs. Tab fencing stays here because "tab" is a browser concept.
   - `http/`: routes, request parsing from `unknown`, the error→status mapping, static and built-client serving.
-- **`apps/client`**: page entry points (search, explore, title, torrent, player) and UI helpers. Imports API types from `api-contract` and codec keys from `playback`.
+- **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types from `api-contract` and codec keys from `playback`.
 - **`public/`**: static HTML and CSS only.
+
+### Settings and status
+
+- **Schema.** `packages/api-contract/src/settings.ts` lists every setting once: key, section, scope (`server` or `browser`), control type, label, default, env vars and whether it applies live or after a restart. The server validates env values, `settings.json` and `PATCH` bodies with the same `validate()` the client uses for `localStorage` and before saving. A new setting is one entry; the page, validation and API pick it up.
+- **Server resolution.** `apps/server/src/settings-store.ts` resolves env, then `<CACHE_DIR>/settings.json`, then the default, records where each value came from, and writes the file atomically (temp file and rename). An invalid env value stops startup naming the variable; an invalid saved value is ignored with a warning. `config.js` derives the shape callers already used and updates it in place on the store's `changed` event, so live settings apply on the next use (limits are read per job, search and Explore are rebuilt); restart-only settings keep their startup value and raise the restart check.
+- **Status registry.** `apps/server/src/status.ts` holds checks (`id`, `label`, `ttl`, `required`, `run`), runs stale ones when `/api/status` is asked (waiting up to 4 s, then reporting `unknown`), turns a throw into `error`, and keeps a 50-entry ring buffer of level changes and "Settings saved" events. `status-checks.js` registers the checks: one per source, Explore, ffmpeg/ffprobe, disk, restart needed. The client merges browser checks (the connection test) and computes the overall level with the same `overallLevel()`.
+- **Writes** (`PATCH /api/settings`, `POST /api/settings/test`, `POST /api/debug/clear-hls`) require `Sec-Fetch-Site: same-origin` or a matching `Origin` (`isSameOrigin` in `http-kit`), since there is no login.
+- **Browser preferences** live in `localStorage`, one JSON value per setting under `magplay:<key with : for .>` (`magplay:player:speed`), the same keys the Player's `recall()`/`remember()` use. `apps/client/src/lib/preferences.ts` exports the keys (`PREFERENCE`, `STORAGE_KEYS`) and parses values against the schema on read.
 
 ### Rules
 

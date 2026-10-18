@@ -1,4 +1,5 @@
 // The search page, /?q=…&cat=…: results from every source, each linking to its torrent page.
+import './lib/topbar.ts'
 import { api } from './lib/api.ts'
 import { $, el, fill, formatBytes, recall, releaseRow, remember, rememberSearch, setError, setStatus, timeAgo } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'

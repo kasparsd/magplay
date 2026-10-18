@@ -6,12 +6,14 @@ How the browser client should look and behave, the Player roadmap, and the open 
 
 ### Who it is for
 
-One person (or a household) on a trusted local network, on a laptop, phone or TV-adjacent device. There is no login, no account state and nothing to configure in the browser. The interface should feel like a quiet utility: find something, see whether it will play here, play it.
+One person (or a household) on a trusted local network, on a laptop, phone or TV-adjacent device. There is no login and no account state. Configuration is optional: everything works from env vars, and Settings (`/settings`) edits the same values in the browser, with env vars taking precedence. The interface should feel like a quiet utility: find something, see whether it will play here, play it.
 
 ### Pages and URLs
 
-- Five pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`) and Player (`/play/<infohash>/<file>`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters, selected file) lives in the URL, not only in memory.
-- Every page shares the same top bar: the `magplay` home link, Explore, and a search box. The search box keeps the last query in this tab (`sessionStorage`), except on the home page.
+- Six pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`), Player (`/play/<infohash>/<file>`) and Settings (`/settings#<section>`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters, selected file) lives in the URL, not only in memory.
+- Every page shares the same top bar: the `magplay` home link, Explore, and a search box on the left, and the status menu on the right. The search box keeps the last query in this tab (`sessionStorage`), except on the home page.
+- The status menu is one button: a status dot (green, amber, red, or a hollow ring while required checks haven't run), a problem count (hidden at 375 px) and a gear. Its accessible name carries the state ("Status: 2 problems. Settings"). It opens a panel with a headline, every check worst first (each problem with a plain message and one link to the setting that fixes it), recent status changes (unread ones, newer than this browser last looked, in bold) and links to Settings and Debug. It never claims health it hasn't measured, and it polls only while the tab is visible. Page scripts add it by importing `lib/topbar.ts`.
+- Settings says where each value is saved ("on the server, applies to everyone" or "in this browser"). Server edits collect in a save bar and are saved together, with errors inline under their field; browser preferences apply at once. A value set by an env var is read-only and names the variable.
 - Back links name where they go ("← Gladiator", "← Results", "← Explore") and only appear when that destination is the real previous step (`lib/back.ts`). After a direct visit the torrent page has none; the title page falls back to Explore.
 - History is intentional: a new search and each Explore filter change (type, sort, genre, year, quality) is its own entry, so Back steps back through them before leaving the page. Switching a search's category replaces the entry, and "Show more" adds none.
 - Malformed URLs fall back to defaults (for example an unknown Explore `type` becomes `movie`) instead of showing a validation error.

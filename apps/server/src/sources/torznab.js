@@ -33,6 +33,18 @@ export function createTorznabSource ({ name, url, apiKey }, { fetch: fetchImpl =
       if (!res.ok && !body.includes('<error')) throw statusError(res.status)
       return parseFeed(body, name)
     },
+    /** A cheap request for the status menu: the feed's capabilities. Throws a SourceError when it fails. */
+    async check ({ signal } = {}) {
+      const u = new URL(url)
+      u.searchParams.set('t', 'caps')
+      if (apiKey) u.searchParams.set('apikey', apiKey)
+      const res = await request(fetchImpl, u, { signal }, { acceptErrors: true })
+      if (res.status === 401 || res.status === 403) throw statusError(res.status)
+      const doc = parser.parse(await res.text())
+      if (doc.error) throw new SourceError(`indexer error: ${doc.error.description || doc.error.code}`)
+      if (!res.ok) throw statusError(res.status)
+      if (!doc.caps) throw new SourceError('not a Torznab feed')
+    },
   }
 }
 

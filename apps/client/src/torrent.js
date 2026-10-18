@@ -1,5 +1,6 @@
 // The torrent page, /t/<infohash>: file list, downloads, external players and live activity.
 // /t?link=<id> opens a search result that only had a download link, then switches to /t/<infohash>.
+import './lib/topbar.ts'
 import { api } from './lib/api.ts'
 import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setError, setStatus, shortHash, sleep, timeAgo } from './lib/ui.ts'
 import { backTarget } from './lib/back.ts'

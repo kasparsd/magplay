@@ -1,17 +1,21 @@
+import { logTail } from './logs.ts' // first, so it captures every log line
 import http from 'node:http'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import config from './config.js'
+import config, { settings } from './config.js'
 import { HttpError, toHttpError } from './errors.ts'
-import { createRouter, route, sendCached, serveFile } from '@magplay/http-kit'
+import { createRouter, isSameOrigin, route, sendCached, serveFile } from '@magplay/http-kit'
 import { SourceError } from './sources/release.js'
 import { createSearch } from './search.js'
 import { createSources } from './sources/index.js'
 import { createBitmagnetBrowser, TYPES } from './sources/bitmagnet.js'
 import { addTorrent, describe, getFile, getTorrent, knownWarning, recent, serveRaw, serveTar, status } from './torrents.js'
 import { probe, decide, subtitleToVtt } from './media.js'
-import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls } from './sessions.js'
+import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls, stopAllSessions } from './sessions.js'
+import { checkSource, debugInfo, status as statusChecks } from './status-checks.js'
+import { serveSpeedtest } from './speedtest.ts'
+import { sourceConfigs } from './sources/index.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(root, '../../..')
@@ -42,18 +46,19 @@ async function readJson (req) {
   return parsed
 }
 
-const searcher = createSearch(createSources(config.sources), { timeoutMs: config.searchTimeoutMs })
+const buildSearch = () => createSearch(createSources(config.sources), { timeoutMs: config.searchTimeoutMs })
+let searcher = buildSearch()
 
 // Fail loudly at startup, not mid-playback: check the external binaries, and note missing indexers
 if (!config.sources.length) {
-  console.warn('No indexers configured: search and browse will be empty. Set TORZNAB_URL, JACKETT_URL or PROWLARR_URL (see README).')
+  console.warn('No sources configured: search will be empty. Add one in Settings → Sources, or set TORZNAB_URL, JACKETT_URL or PROWLARR_URL (see README).')
 }
 for (const [bin, varName] of [[config.ffprobePath, 'FFPROBE_PATH'], [config.ffmpegPath, 'FFMPEG_PATH']]) {
   execFile(bin, ['-version'], err => {
     if (err) console.warn(`"${bin}" not found: playback needs ffmpeg and ffprobe. Install them, or point ${varName} at the binary.`)
   })
 }
-const browser = config.bitmagnetUrl ? createBitmagnetBrowser({ url: config.bitmagnetUrl }) : null
+let browser = config.bitmagnetUrl ? createBitmagnetBrowser({ url: config.bitmagnetUrl }) : null
 
 // Explore answers are cached briefly: browsing goes back and forth over the same filters
 const exploreCache = new Map()
@@ -73,7 +78,7 @@ function cached (key, load, ttl = 60_000) {
 
 /** Explore's query parameters, checked: type, genre, year, res, sort, page. */
 function exploreParams (query) {
-  if (!browser) throw new HttpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
+  if (!browser) throw new HttpError(404, 'Explore needs BitMagnet. Set its address in Settings → Sources.')
   const type = query.get('type') || 'movie'
   if (!TYPES.includes(type)) throw new HttpError(400, 'type must be movie or tv_show')
   const genre = query.get('genre') || undefined
@@ -89,7 +94,18 @@ const exploreTimeout = (ms = config.searchTimeoutMs) => ({ signal: AbortSignal.t
 const FACETS_TTL = 15 * 60_000
 const loadFacets = p => cached(`facets:${JSON.stringify(p)}`, () => browser.facets(p, exploreTimeout(120_000)), FACETS_TTL)
 // Counts for the unfiltered tabs take a while on a big index, so start them now
-if (browser) for (const type of TYPES) loadFacets({ type }).catch(err => console.log(`[explore] warming ${type} counts: ${err.message}`))
+const warmFacets = () => { if (browser) for (const type of TYPES) loadFacets({ type }).catch(err => console.log(`[explore] warming ${type} counts: ${err.message}`)) }
+warmFacets()
+
+// Saved settings apply without a restart: rebuild what was built from them
+settings.on('changed', changed => {
+  if (changed.includes('sources') || changed.includes('search.timeoutS')) searcher = buildSearch()
+  if (changed.includes('sources') || changed.includes('explore.bitmagnetUrl')) {
+    browser = config.bitmagnetUrl ? createBitmagnetBrowser({ url: config.bitmagnetUrl }) : null
+    exploreCache.clear()
+    warmFacets()
+  }
+})
 const subtitleCache = new Map()
 
 async function play (body, cancelled) {
@@ -199,6 +215,27 @@ function statusRoute ({ res, params, query }) {
   json(res, 200, { ...out, session: s ? sessionStats(s) : null })
 }
 
+/** Writes change the server for everyone, so only this site's own pages may make them. */
+function sameOriginOnly (req) {
+  if (!isSameOrigin(req)) throw new HttpError(403, 'Settings can only be changed from magplay’s own pages.')
+}
+
+async function patchSettings ({ req, res }) {
+  sameOriginOnly(req)
+  const result = settings.update(await readJson(req))
+  if (!result.ok) return json(res, 400, { error: 'Some settings aren’t valid.', fields: result.fields })
+  json(res, 200, settings.response())
+}
+
+async function testSetting ({ req, res }) {
+  sameOriginOnly(req)
+  const { key, item } = await readJson(req)
+  if (key !== 'sources' || !item || typeof item !== 'object') throw new HttpError(400, 'Only sources can be tested')
+  const checked = settings.unsavedItem(key, item)
+  if (!checked.ok) return json(res, 200, { level: 'error', value: 'Invalid', message: checked.error })
+  json(res, 200, await checkSource(sourceConfigs([checked.item])[0]))
+}
+
 const match = createRouter([
   // Pages
   route('GET', '/', page('index.html')),
@@ -206,15 +243,28 @@ const match = createRouter([
   route('GET', '/play/:ih/:idx', page('player.html')),
   route('GET', '/explore', page('explore.html')),
   route('GET', '/title/:type/:source/:id', page('title.html')),
+  route('GET', '/settings', page('settings.html')),
   route('GET', '/player.html', ({ res, query }) => { // links from before /play existed
     res.writeHead(301, { Location: `/play/${query.get('ih')}/${query.get('idx')}` })
     res.end()
   }),
   route('GET', '/style.css', page('style.css')),
-  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js'].flatMap(name => [route('GET', `/${name}`, asset(name)), route('GET', `/${name}.map`, asset(`${name}.map`))]),
+  ...['search.js', 'torrent.js', 'player.js', 'explore.js', 'title.js', 'settings.js'].flatMap(name => [route('GET', `/${name}`, asset(name)), route('GET', `/${name}.map`, asset(`${name}.map`))]),
   route('GET', '/health', ({ res }) => json(res, 200, { ok: true })),
 
   // API
+  route('GET', '/api/status', async ({ res }) => json(res, 200, await statusChecks.snapshot())),
+  route('GET', '/api/settings', ({ res }) => json(res, 200, settings.response())),
+  route('PATCH', '/api/settings', patchSettings),
+  route('POST', '/api/settings/test', testSetting),
+  route('GET', '/api/debug', async ({ res }) => json(res, 200, await debugInfo(logTail()))),
+  route('POST', '/api/debug/clear-hls', ({ req, res }) => {
+    sameOriginOnly(req)
+    const stopped = stopAllSessions()
+    console.log(`[debug] cleared the conversion cache, stopped ${stopped} session(s)`)
+    json(res, 200, { stopped })
+  }),
+  route('GET', '/api/speedtest', ({ req, res }) => serveSpeedtest(req, res)),
   route('GET', '/api/search', searchRoute),
   route('GET', '/api/recent', async ({ res }) => json(res, 200, await recent())),
   route('GET', '/api/explore', async ({ res, query }) => {
@@ -230,7 +280,7 @@ const match = createRouter([
     json(res, 200, await cached(`latest:${type}`, () => browser.latest({ type }, exploreTimeout())))
   }),
   route('GET', '/api/title/:type/:source/:id', async ({ res, params, query }) => {
-    if (!browser) throw new HttpError(404, 'Explore needs BitMagnet. Set BITMAGNET_URL to its address.')
+    if (!browser) throw new HttpError(404, 'Explore needs BitMagnet. Set its address in Settings → Sources.')
     if (!TYPES.includes(params.type)) throw new HttpError(400, 'type must be movie or tv_show')
     const t = await cached(`title:${params.type}:${params.source}:${params.id}`, () =>
       browser.title({ ...params, title: query.get('title'), year: query.get('year') }, exploreTimeout()))

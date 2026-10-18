@@ -42,6 +42,10 @@ async function startApp () {
     await exec('ffprobe', ['-version'])
     const { ih, cache, files, length } = await prepareCachedMedia(dir)
     indexer = http.createServer((req, res) => {
+      if (new URL(req.url, 'http://x').searchParams.get('t') === 'caps') { // the status check
+        res.writeHead(200, { 'Content-Type': 'application/xml' })
+        return res.end('<?xml version="1.0"?><caps><searching><search available="yes"/></searching></caps>')
+      }
       res.writeHead(200, { 'Content-Type': 'application/rss+xml' })
       res.end(`<?xml version="1.0"?><rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><title>Local fixtures</title><item><title>Playback fixtures</title><guid>${ih}</guid><link>magnet:?xt=urn:btih:${ih}</link><size>${length}</size><torznab:attr name="infohash" value="${ih}"/><torznab:attr name="seeders" value="1"/></item></channel></rss>`)
     })

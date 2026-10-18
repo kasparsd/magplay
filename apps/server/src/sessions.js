@@ -279,3 +279,16 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     process.exit(0)
   })
 }
+
+/** Conversions running and their segment bytes, for the Debug page. */
+export function sessionSummary () {
+  const live = [...sessions.values()].filter(s => !s.failure)
+  return { active: live.length, bytes: live.reduce((sum, s) => sum + (s.bytes || 0), 0) }
+}
+
+/** Debug: Clear conversion cache. Stops every session and deletes its segments; torrents stay. */
+export function stopAllSessions () {
+  const count = sessions.size
+  for (const id of [...sessions.keys()]) stopSession(id)
+  return count
+}

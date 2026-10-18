@@ -41,7 +41,7 @@ export function sourcesFromEnv (env) {
   return out
 }
 
-function hostName (url) {
+export function hostName (url) {
   let u
   try {
     u = new URL(url)
@@ -50,9 +50,28 @@ function hostName (url) {
   return u.hostname.split('.')[0]
 }
 
+/**
+ * Source configs from the `sources` setting's items ({ id, type, name, url, apiKey, indexer }).
+ * `indexer` is Jackett's indexer id or filter, or Prowlarr's comma-separated indexer ids.
+ */
+export function sourceConfigs (items) {
+  return items.map(({ id, type, name, url, apiKey, indexer }) => {
+    const base = { id, type, url, apiKey }
+    if (type === 'jackett') return { ...base, name: name || 'Jackett', indexer: indexer || 'all' }
+    if (type === 'prowlarr') return { ...base, name: name || 'Prowlarr', indexerIds: (indexer || '-2').split(',').map(s => s.trim()).filter(Boolean) }
+    return { ...base, name: name || hostName(url) }
+  })
+}
+
+/** Source items for the settings page from env vars (null when none is set), locked there. */
+export function sourceItemsFromEnv (env) {
+  const list = sourcesFromEnv(env)
+  return list.length ? list.map((s, i) => ({ id: `env-${i}`, type: s.type, name: s.name, url: s.url, apiKey: s.apiKey, indexer: s.indexer ?? s.indexerIds?.join(',') ?? '' })) : null
+}
+
 /** Builds adapters from configs; `deps` (e.g. a mock fetch) is passed to every adapter. */
 export function createSources (configs, deps) {
-  return configs.map(({ type, ...opts }) => {
+  return configs.map(({ type, id, ...opts }) => {
     if (!ADAPTERS[type]) throw new Error(`Unknown source type: ${type}`)
     return ADAPTERS[type](opts, deps)
   })
