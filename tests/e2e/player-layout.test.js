@@ -75,5 +75,7 @@ test('the title row names the release and episode; the file name moves into Deta
   await expect(page.locator('#back')).toHaveText('← Playback fixtures')
   await page.getByRole('button', { name: 'ⓘ Details' }).click()
   await expect(page.locator('#facts')).toContainText('Playback.S01E01.mp4')
+  // A readable container name, not ffprobe's "mov,mp4,m4a,3gp,3g2,mj2"
+  await expect(page.locator('#facts dt:text-is("Container") + dd')).toHaveText('MP4')
   await expect(page.getByRole('button', { name: 'ⓘ Details' })).toHaveAttribute('aria-expanded', 'true')
 })
