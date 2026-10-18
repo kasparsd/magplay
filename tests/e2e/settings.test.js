@@ -7,21 +7,35 @@ async function save (page) {
   const response = page.waitForResponse(r => r.url().endsWith('/api/settings') && r.request().method() === 'PATCH')
   await page.locator('#savebar-save').click()
   expect((await response).status()).toBe(200)
-  await expect(page.locator('#savebar')).toBeHidden()
+  await expect(page.locator('#savebar-count')).toHaveText(/^Saved: /)
+  await expect(page.locator('#savebar')).toBeHidden({ timeout: 8000 })
 }
 
-test('the status menu lists checks, closes with Escape and links to Settings', async ({ page, app }) => {
+test('the top bar has a status button with a panel of checks, and a gear that links to Settings', async ({ page, app }) => {
   await page.goto(app.origin)
-  await expect(statusButton(page)).toHaveAttribute('aria-label', /^Status: .*\. Settings$/)
+  await expect(statusButton(page)).toHaveAttribute('aria-label', /^Status: (all good|not checked yet|checking|\d+ problems?)$/)
+  const gear = page.locator('header.topbar').getByRole('link', { name: 'Settings', exact: true })
+  await expect(gear).toHaveAttribute('href', '/settings')
+  for (const control of [statusButton(page), gear]) {
+    const box = await control.boundingBox()
+    expect(box.width).toBeGreaterThanOrEqual(40)
+    expect(box.height).toBeGreaterThanOrEqual(40)
+  }
   await statusButton(page).click()
   const panel = page.locator('.status-panel')
   await expect(panel.locator('.status-check', { hasText: 'ffmpeg' })).toHaveClass(/lvl-ok/)
   await expect(panel.locator('.status-check', { hasText: 'Disk' })).toHaveClass(/lvl-ok/)
   // The fixture indexer answers the caps request, so its source is healthy
   await expect(panel.locator('.status-check', { hasText: '127' })).toHaveClass(/lvl-ok/)
-  await expect(panel.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+  // Problems and fixes only: no history of past changes, and Settings is the gear's job
+  await expect(panel.getByText('Recent')).toHaveCount(0)
+  await expect(panel.getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0)
+  await expect(panel.getByRole('link', { name: 'Debug details' })).toHaveAttribute('href', '/settings#debug')
   await page.keyboard.press('Escape')
   await expect(panel).toBeHidden()
+  await gear.click()
+  await expect(page).toHaveURL(`${app.origin}/settings`)
+  await expect(gear).toHaveAttribute('aria-current', 'page')
 })
 
 test('a broken source turns the dot red and its action deep-links to Sources', async ({ page, app }) => {
@@ -31,14 +45,14 @@ test('a broken source turns the dot red and its action deep-links to Sources', a
   await expect(page.locator('#setting-sources-0-url')).toBeDisabled()
   await page.getByRole('button', { name: '+ Add source' }).click()
   await page.locator('#setting-sources-1-url').fill('http://127.0.0.1:9/torznab/api')
-  await save(page)
+  await page.locator('#savebar-save').click()
+  await expect(page.locator('#savebar-count')).toHaveText('Saved: sources')
 
   await statusButton(page).click()
   await expect(statusButton(page).locator('.status-dot')).toHaveClass(/lvl-error/)
   const failing = page.locator('.status-check.lvl-error')
   await expect(failing).toContainText(/can.t reach/i)
   await expect(failing.getByRole('link')).toHaveAttribute('href', '/settings#sources')
-  await expect(page.locator('.status-events')).toContainText('Settings saved: sources')
   await expect(page.locator('.settings-nav a[href="#sources"] .status-dot')).toHaveClass(/lvl-error/)
 
   await page.keyboard.press('Escape')

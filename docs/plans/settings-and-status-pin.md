@@ -1,6 +1,6 @@
 # Settings page and status menu
 
-A status menu at the right of every page's top bar, and a settings page at `/settings`. The menu is one button that shows overall health (green, amber, red, or a hollow ring while unchecked), lists the checks and recent status changes, and links to Settings. The settings page edits what `.env` sets today, holds this browser's preferences, and has a Debug section. Both are driven by small declarative registries (status checks, settings schema) with one generic renderer per control type, so a new check or setting is one entry and no new UI.
+A status button and a Settings gear at the right of every page's top bar, and a settings page at `/settings`. The status button shows overall health (green, amber, red, or a hollow ring while unchecked) and opens a panel listing the checks; the gear links straight to Settings. The settings page edits what `.env` sets today, holds this browser's preferences, and has a Debug section. Both are driven by small declarative registries (status checks, settings schema) with one generic renderer per control type, so a new check or setting is one entry and no new UI.
 
 Mockup and proposal: [magplay Settings and Status](https://claude.ai/artifact/VGDQJ8ue6DFgcH7Mni2tuB) (clickable: switch between the all good, needs attention, problem and not checked yet states, and walk through each settings section).
 
@@ -41,13 +41,14 @@ Status: built 2026-10-17 on branch `claude/settings-status-b42d44` (roadmap wave
 
 ### Status menu (top bar, right side)
 
-- **Button:** a status dot, a problem count when there are problems, and a gear icon, as one `<button>` with an accessible name that carries the state ("Status: 2 problems. Settings"). At 375 px the count hides and only the dot and gear remain. It replaces nothing: the right side of the top bar is empty today.
+- **Two controls** (changed 2026-10-18 at the owner's request; the mockup shows one combined button): a **status button** with a status dot and a problem count when there are problems, whose accessible name carries the state ("Status: 2 problems"), and a **gear** that is a plain link to `/settings` named "Settings", with no menu. Both are at least 40 px square. At 375 px the count hides and only the dot and gear remain.
 - **Levels:** each check is `ok | warn | error | unknown`. The overall level is the worst result. Green appears only when the required checks (indexers, ffmpeg, disk) have run and passed. Until then the dot is a hollow ring, so the menu never claims health it hasn't measured.
 - **Panel** (shared `menu()` component, keyboard and Escape as today):
   1. A headline ("All good", "Needs attention", "Something isn't working") with a one-line summary.
   2. **Status:** every check, worst first, each with a short value ("84 ms", "41.8 GB free"). Problems add a plain message and one action link to the field that fixes it (`/settings#sources`, for example).
-  3. **Recent:** the last few status changes ("Prowlarr returned 401", "Transcode fell behind playback (0.8×)", "Settings saved: web port 8090"). Unread ones are those newer than a per-browser `lastSeen` timestamp in `localStorage`.
-  4. A footer with links to Settings and Debug.
+  3. A footer with a Debug details link. Settings is the gear's job.
+
+  The panel shows what is wrong now. The earlier "Recent" section (past status changes with unread tracking) was removed on 2026-10-18 at the owner's request, together with the server's event buffer; "Settings saved" feedback is shown in the settings page's save bar instead.
 - **Data:** the client polls `GET /api/status` every 30 s while the tab is visible, and on focus. Client-side checks (the connection test, later hls.js `bandwidthEstimate`) merge into the same list.
 
 ### Status checks (server)
@@ -63,7 +64,7 @@ Initial checks:
 - Restart needed: raised when a restart-only setting is saved.
 - Later: transcode below realtime (from `sessions.js`), cache pressure.
 
-**Events.** When a check's level changes, the server pushes `{ at, checkId, level, message }` onto an in-memory ring buffer (50 entries), along with "Settings saved: …" entries. `/api/status` returns the buffer. It is lost on restart, which is fine for status history.
+**Events** (removed 2026-10-18): the first build kept a 50-entry ring buffer of level changes for a Recent section; the panel no longer has one, so `/api/status` returns only the checks.
 
 ### Settings schema
 
@@ -125,7 +126,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/status` | `{ level, checks[], events[] }` |
+| `GET /api/status` | `{ level, checks[] }` |
 | `GET /api/settings` | resolved server values plus `meta[key] = { source: 'env' \| 'file' \| 'default', env? }` |
 | `PATCH /api/settings` | validated partial update, atomic write (temp file + rename), emits `settings:changed` |
 | `POST /api/settings/test` | run one setting's test against unsaved values, returns a check result |
@@ -145,14 +146,14 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 - [x] `SettingDef` schema and the initial entries in `packages/api-contract/src/settings.ts`, with a `validate(def, value)` used by both sides. Status types and `overallLevel()` are in `status.ts` next to it.
 - [x] `config.js` on top of `apps/server/src/settings-store.ts` (`resolve(env, file, readers)`), `<CACHE_DIR>/settings.json` read/atomic write, and a `changed` event. Sources, Explore, limits and timeouts rebuild on change. Unit tests for precedence, locking, masking, atomic saves and restart tracking (`settings-store.test.ts`, `settings-schema.test.ts`, `config.test.js`).
 - [x] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with secret masking and the same-origin write guard (`isSameOrigin` in `http-kit`).
-- [x] `status.ts` check registry with TTL cache, the initial checks (`status-checks.js`), the event ring buffer, and `GET /api/status`. Unit tests with fake checks and clocks (`status.test.ts`).
+- [x] `status.ts` check registry with TTL cache, the initial checks (`status-checks.js`), and `GET /api/status` (the event ring buffer was built, then removed with the Recent section). Unit tests with fake checks and clocks (`status.test.ts`).
 - [x] `GET /api/debug` with a log ring buffer (`logs.ts` copies console output) and redacted diagnostics (Copy diagnostics).
 - [x] `GET /api/speedtest` faucet (`speedtest.ts`) and `lib/speedtest.ts`, with unit tests.
 - [x] `lib/controls.ts` renderers for every type, with keyboard and accessible names.
-- [x] Status button and panel in `lib/status-menu.ts` (built on the shared `menu()`, whose label may now be a node), mounted by `lib/topbar.ts`, which every page script imports. Client-check merging and unread tracking. Checked at 375 px. The Player page gets it once `player.js` imports `lib/topbar.ts`.
+- [x] Status button and panel in `lib/status-menu.ts` (built on the shared `menu()`), and a separate Settings gear link, mounted by `lib/topbar.ts`, which every page script imports. Client-check merging. Checked at desktop and 375 px. The Player page gets it once `player.js` imports `lib/topbar.ts`.
 - [x] `/settings` page (`public/settings.html`, `apps/client/src/settings.ts`) with sections, hash navigation, the save bar, inline field errors and env-locked rows.
 - [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings. Volume, mute, speed and languages are shared already (same keys); autoplay next, the stats overlay and the status menu import are left to the Player chrome session, which owns `player.js`; see [Player integration](#player-integration).
-- [x] e2e (`tests/e2e/settings.test.js`): a broken source turns the dot red and its action deep-links to Sources. Saving a live setting applies without a restart. An env-set value is read-only. Cross-origin writes are refused. The speed test runs, and a slow result produces a warning on another page. Browser preferences save at once.
+- [x] e2e (`tests/e2e/settings.test.js`): a broken source turns the dot red and its action deep-links to Sources. Saving a live setting applies without a restart, and the save bar says what was saved. An env-set value is read-only. Cross-origin writes are refused. The speed test runs, and a slow result produces a warning on another page. Browser preferences save at once.
 - [x] On ship: updated [user-interface.md](../user-interface.md) (six pages, the top bar's right side, the configuration wording), the README configuration section and API table (UI first, env as override), and [architecture.md](../architecture.md) (settings resolution and the status registry).
 
 ## As built
@@ -172,11 +173,11 @@ Decisions made while building, where they differ from or add to the design above
 
 The Player chrome session owns `apps/client/src/player.js` and `public/player.html`. Its step 1 (merged as `66b29cf`) already remembers volume, mute, speed, and audio and subtitle language with `recall()`/`remember()` under `magplay:player:volume`, `magplay:player:muted`, `magplay:player:speed`, `magplay:player:audioLanguage` and `magplay:player:subtitleLanguage`. Browser settings use those same keys (`preferenceStorageKey('player.speed')` is `magplay:player:speed`), so Settings and the Player read and change the same values: Settings shows a language code the Player remembered from a file ("lav") as that language, accepts `'off'` and `'any'` for subtitles, stores `null` for "first track" audio, and offers the Player's speeds (0.5× to 2×). To finish this feature in the Player:
 
-1. Add `import './lib/topbar.ts'` to `player.js`, which puts the status menu in the Player's top bar.
+1. Add `import './lib/topbar.ts'` to `player.js`, which puts the status button and Settings gear in the Player's top bar.
 2. Honour `getPreference(PREFERENCE.autoplayNext)` from `lib/preferences.ts` before counting down to the next episode (stored as `magplay:player:autoplayNext`, default on).
 3. Show the playback stats overlay when `getPreference(PREFERENCE.statsOverlay)` is true (`magplay:debug:statsOverlay`). "Log requests to the browser console" already works on every page through `lib/topbar.ts`.
 
-The connection test result is `magplay:connection` and the menu's last-seen time is `magplay:status-seen` (`STORAGE_KEYS` in `lib/preferences.ts`).
+The connection test result is `magplay:connection` (`STORAGE_KEYS` in `lib/preferences.ts`).
 
 ## Open questions
 

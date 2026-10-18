@@ -298,10 +298,24 @@ function renderNav (): void {
   }))
 }
 
+/** "Saved: search timeout" for a few seconds after a save, in the same bar. */
+let savedNote: { text: string, timer: ReturnType<typeof setTimeout> } | null = null
+
 function renderSaveBar (): void {
   const n = Object.keys(draft).length
-  saveBar.hidden = n === 0
-  $('#savebar-count').textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`
+  if (n && savedNote) {
+    clearTimeout(savedNote.timer)
+    savedNote = null
+  }
+  saveBar.hidden = n === 0 && !savedNote
+  saveBar.classList.toggle('saved', !n && !!savedNote)
+  $('#savebar-count').textContent = savedNote && !n ? savedNote.text : `${n} unsaved ${n === 1 ? 'change' : 'changes'}`
+}
+
+function noteSaved (keys: string[]): void {
+  if (savedNote) clearTimeout(savedNote.timer)
+  const names = keys.map(key => SETTINGS.find(d => d.key === key)?.label.toLowerCase() ?? key)
+  savedNote = { text: `Saved: ${names.join(', ')}`, timer: setTimeout(() => { savedNote = null; renderSaveBar() }, 4000) }
 }
 
 function render (): void {
@@ -340,6 +354,7 @@ async function save (): Promise<void> {
       return
     }
     saved = out as SettingsResponse
+    noteSaved(Object.keys(draft))
     draft = {}
     tested.clear()
     setStatus($('#savebar-status'), '')

@@ -1,12 +1,12 @@
-// The status menu at the right of every page's top bar: one button showing overall health, and a panel
-// listing the checks, recent status changes and links to Settings. Server checks come from GET /api/status
-// (polled every 30 s while the tab is visible); browser checks (the connection test) are merged in here.
+// The right side of every page's top bar: a status button showing overall health, whose panel lists
+// the checks worst first with their fixes, and a gear that links to Settings.
+// Server checks come from GET /api/status (polled every 30 s while the tab is visible); browser checks (the connection test) are merged in here.
 import { byLevel, overallLevel, problems } from '@magplay/api-contract'
-import type { StatusCheck, StatusEvent, StatusLevel, StatusResponse } from '@magplay/api-contract'
+import type { StatusCheck, StatusLevel, StatusResponse } from '@magplay/api-contract'
 import { api } from './api.ts'
 import { STORAGE_KEYS } from './preferences.ts'
 import { connectionLevel, readConnection } from './speedtest.ts'
-import { el, fill, formatSpeed, menu, timeAgo } from './ui.ts'
+import { el, fill, formatSpeed, menu } from './ui.ts'
 
 const POLL_MS = 30_000
 
@@ -38,7 +38,7 @@ const listeners = new Set<(status: MergedStatus) => void>()
 function merge (server: StatusResponse | null): MergedStatus {
   const checks = [...(server?.checks ?? []), connectionCheck()]
   if (!server) checks.unshift({ id: 'server', label: 'magplay server', required: true, level: 'error', message: 'The server didn’t answer. Is it running?' })
-  return { level: overallLevel(checks), checks: checks.sort(byLevel), events: server?.events ?? [], reachable: !!server }
+  return { level: overallLevel(checks), checks: checks.sort(byLevel), reachable: !!server }
 }
 
 let inflight: Promise<MergedStatus> | null = null
@@ -67,14 +67,6 @@ export function onStatus (listener: (status: MergedStatus) => void): void {
   if (current) listener(current)
 }
 
-function lastSeen (): number {
-  try { return Number(localStorage.getItem(STORAGE_KEYS.statusSeen)) || 0 } catch { return 0 }
-}
-function markSeen (events: StatusEvent[]): void {
-  const newest = Math.max(0, ...events.map(e => e.at))
-  try { if (newest > lastSeen()) localStorage.setItem(STORAGE_KEYS.statusSeen, String(newest)) } catch {}
-}
-
 const HEADLINES: Record<StatusLevel, string> = { ok: 'All good', warn: 'Needs attention', error: 'Something isn’t working', unknown: 'Not checked yet' }
 const LEVEL_NAMES: Record<StatusLevel, string> = { ok: 'OK', warn: 'Warning', error: 'Problem', unknown: 'Not checked' }
 
@@ -90,12 +82,12 @@ function summary (status: MergedStatus): string {
   return 'Every check passed'
 }
 
-/** The button's accessible name carries the state: "Status: 2 problems. Settings". */
+/** The status button's accessible name carries the state: "Status: 2 problems". */
 function buttonLabel (status: MergedStatus | null): string {
-  if (!status) return 'Status: checking. Settings'
+  if (!status) return 'Status: checking'
   const n = problems(status.checks).length
-  if (n) return `Status: ${n} ${n === 1 ? 'problem' : 'problems'}. Settings`
-  return `Status: ${status.level === 'ok' ? 'all good' : 'not checked yet'}. Settings`
+  if (n) return `Status: ${n} ${n === 1 ? 'problem' : 'problems'}`
+  return `Status: ${status.level === 'ok' ? 'all good' : 'not checked yet'}`
 }
 
 const GEAR = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>'
@@ -118,9 +110,6 @@ function renderPanel (panel: HTMLElement, status: MergedStatus | null): void {
     fill(panel, el('p', { className: 'status busy', textContent: 'Checking…' }))
     return
   }
-  const seen = lastSeen()
-  const recent = [...status.events].reverse().slice(0, 6)
-  const unread = status.events.filter(e => e.at > seen).length
   fill(panel,
     el('div', { className: 'status-head' },
       dot(status.level, 'large'),
@@ -130,34 +119,35 @@ function renderPanel (panel: HTMLElement, status: MergedStatus | null): void {
     el('div', { className: 'status-section' },
       el('div', { className: 'menu-heading', textContent: 'Status' }),
       el('ul', { className: 'status-checks' }, ...status.checks.map(checkRow))),
-    recent.length > 0 && el('div', { className: 'status-section' },
-      el('div', { className: 'menu-heading status-recent-heading' }, 'Recent', unread > 0 && el('span', { textContent: `${unread} new` })),
-      el('ul', { className: 'status-events' }, ...recent.map(e => el('li', { className: e.at > seen ? 'unread' : '' },
-        el('span', { textContent: e.message }),
-        el('time', { dateTime: new Date(e.at).toISOString(), textContent: timeAgo(e.at) }))))),
     el('div', { className: 'status-foot' },
-      el('a', { href: '/settings', textContent: 'Settings' }),
-      el('a', { href: '/settings#debug', textContent: 'Debug' })))
+      el('a', { href: '/settings#debug', textContent: 'Debug details' })))
 }
 
 function renderButton (summaryEl: HTMLElement, status: MergedStatus | null): void {
   const level = status?.level ?? 'unknown'
   const n = status ? problems(status.checks).length : 0
-  const gear = el('span', { className: 'status-gear' })
-  gear.innerHTML = GEAR
-  fill(summaryEl, dot(level), n > 0 && el('span', { className: 'status-count', textContent: String(n) }), gear)
+  fill(summaryEl, dot(level), n > 0 && el('span', { className: 'status-count', textContent: String(n) }))
   summaryEl.setAttribute('aria-label', buttonLabel(status))
-  summaryEl.title = buttonLabel(status).replace(/\. Settings$/, '')
+  summaryEl.title = buttonLabel(status)
 }
 
-/** Adds the status menu to the page's top bar, once, and starts polling. */
+/** A plain link to Settings, next to the status button. */
+function settingsLink (): HTMLAnchorElement {
+  const link = el('a', { href: '/settings', className: 'settings-link', title: 'Settings' })
+  link.setAttribute('aria-label', 'Settings')
+  if (location.pathname === '/settings') link.setAttribute('aria-current', 'page')
+  link.innerHTML = GEAR
+  return link
+}
+
+/** Adds the status button (with its panel) and the Settings gear to the page's top bar, once, and starts polling. */
 export function mountStatusMenu (bar: Element | null = document.querySelector('header.topbar')): HTMLDetailsElement | null {
   if (!bar || bar.querySelector('.status-menu')) return null
   const panel = el('div', { className: 'status-panel' })
   const box = menu(el('span'), [panel], { className: 'status-menu' })
   const summaryEl = box.querySelector('summary')!
   summaryEl.className = 'status-button'
-  bar.append(box)
+  bar.append(el('div', { className: 'topbar-end' }, box, settingsLink()))
   const render = (status: MergedStatus | null): void => {
     renderButton(summaryEl, status)
     renderPanel(panel, status)
@@ -165,9 +155,7 @@ export function mountStatusMenu (bar: Element | null = document.querySelector('h
   render(null)
   listeners.add(render)
   box.addEventListener('toggle', () => {
-    if (!box.open) return
-    // Show what's new now, then count it as seen for next time
-    refreshStatus().then(status => markSeen(status.events), console.error)
+    if (box.open) refreshStatus().catch(console.error)
   })
 
   let lastRefresh = 0

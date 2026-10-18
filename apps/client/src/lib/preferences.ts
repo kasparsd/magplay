@@ -7,8 +7,6 @@ import { SETTINGS, isValueDef, validate } from '@magplay/api-contract'
 export const STORAGE_KEYS = {
   /** The last connection test: { at, downBytesPerSec, latencyMs }. */
   connection: 'magplay:connection',
-  /** Status events up to this time (ms) have been seen in the status menu. */
-  statusSeen: 'magplay:status-seen',
 } as const
 
 /** Browser-scope setting keys, by what they are. */

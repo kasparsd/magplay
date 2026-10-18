@@ -125,19 +125,12 @@ status.registerCheck({
 
 registerSourceChecks()
 
-/** Re-runs the checks a saved setting affects, and notes the save in Recent. */
+/** Re-runs the checks a saved setting affects. */
 settings.on('changed', changed => {
   if (changed.includes('sources')) registerSourceChecks()
   if (changed.includes('explore.bitmagnetUrl')) status.invalidate('explore')
   if (changed.some(key => key.startsWith('tools.'))) status.invalidate('ffmpeg')
   if (changed.some(key => key.startsWith('cache.') || key === 'server.cacheDir')) status.invalidate('disk')
-  const describe = key => {
-    const def = settingDef(key)
-    const value = settings.effective[key]
-    const label = def?.label.toLowerCase() ?? key
-    return def && ['number', 'text', 'url', 'select', 'segmented'].includes(def.type) ? `${label} ${value}${def.unit ? ` ${def.unit}` : ''}` : label
-  }
-  status.pushEvent({ checkId: 'settings', level: 'ok', message: `Settings saved: ${changed.map(describe).join(', ')}` })
 })
 
 const started = Date.now()

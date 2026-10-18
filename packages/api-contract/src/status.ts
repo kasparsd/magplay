@@ -1,4 +1,4 @@
-// Status checks and events: GET /api/status, merged in the client with browser-side checks.
+// Status checks: GET /api/status, merged in the client with browser-side checks.
 
 export type StatusLevel = 'ok' | 'warn' | 'error' | 'unknown'
 
@@ -24,19 +24,10 @@ export interface StatusCheck {
   at?: number
 }
 
-/** A status change or a notable action ("Settings saved: …"). */
-export interface StatusEvent {
-  at: number
-  checkId: string
-  level: StatusLevel
-  message: string
-}
-
 /** GET /api/status. */
 export interface StatusResponse {
   level: StatusLevel
   checks: StatusCheck[]
-  events: StatusEvent[]
 }
 
 const SEVERITY: Record<StatusLevel, number> = { error: 3, warn: 2, unknown: 1, ok: 0 }

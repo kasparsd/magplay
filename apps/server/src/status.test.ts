@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createStatus, EVENT_LIMIT } from './status.ts'
+import { createStatus } from './status.ts'
 import type { CheckResult } from './status.ts'
 
 function clock () {
@@ -44,19 +44,16 @@ test('the overall level is unknown until required checks have run, and slow chec
   assert.equal((await status.snapshot()).level, 'ok')
 })
 
-test('level changes become events; a first ok is not news; the buffer is capped', async () => {
-  const time = clock()
-  const status = createStatus({ now: time.now })
-  let level: CheckResult['level'] = 'ok'
-  status.registerCheck({ id: 'p', label: 'Prowlarr', ttl: 0, run: () => ({ level, message: 'refused the API key' }) })
-  await status.snapshot()
-  assert.deepEqual(status.events(), [])
-  level = 'error'
-  await status.snapshot()
-  level = 'ok'
-  await status.snapshot()
-  assert.deepEqual(status.events().map(e => [e.level, e.message]), [['error', 'Prowlarr: refused the API key'], ['ok', 'Prowlarr is working again']])
-  for (let i = 0; i < EVENT_LIMIT + 5; i++) status.pushEvent({ checkId: 'settings', level: 'ok', message: `Saved ${i}` })
-  assert.equal(status.events().length, EVENT_LIMIT)
-  assert.equal(status.events().at(-1)?.message, `Saved ${EVENT_LIMIT + 4}`)
+test('a result from before invalidate() is dropped, so a slow run can’t overwrite a newer one', async () => {
+  const status = createStatus({ now: clock().now })
+  const finishers: Array<(r: CheckResult) => void> = []
+  status.registerCheck({ id: 'a', label: 'A', ttl: 60_000, run: () => new Promise<CheckResult>(resolve => { finishers.push(resolve) }) })
+  await status.snapshot({ wait: 0 })
+  status.invalidate('a')
+  await status.snapshot({ wait: 0 })
+  finishers[1]?.({ level: 'ok', value: 'new' })
+  finishers[0]?.({ level: 'error', value: 'old' })
+  await new Promise(resolve => setImmediate(resolve))
+  const { checks } = await status.snapshot({ wait: 0 })
+  assert.deepEqual(checks.map(c => [c.level, c.value]), [['ok', 'new']])
 })
