@@ -7,7 +7,7 @@ docker build -t magplay:local-acceptance .
 node tools/scripts/check-docker.mjs
 ```
 
-The script generates original small media, starts an isolated non-root container on an ephemeral loopback port, installs only its fixture cache, and checks health, torrent verification, ffprobe, a 1 KB byte range, direct MP4 selection, AC3/MKV HLS remux, a restart at 30 seconds and session deletion. It removes its container and temporary files even on failure. It does not alter the Compose stack or existing media cache.
+The script also verifies structured correlated playback logs, sanitized Debug, the private metrics listener, the bounded local Docker logging driver and final JSON records after graceful SIGTERM. It generates original small media, starts an isolated non-root container on an ephemeral loopback port, installs only its fixture cache, and checks health, torrent verification, ffprobe, a 1 KB byte range, direct MP4 selection, AC3/MKV HLS remux, a restart at 30 seconds and session deletion. It removes its container and temporary files even on failure. It does not alter the Compose stack or existing media cache.
 
 ## Recorded local results
 

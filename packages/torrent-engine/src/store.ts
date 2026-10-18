@@ -1,3 +1,5 @@
+import { noopLogger } from '@magplay/observability'
+import type { Logger } from '@magplay/observability'
 // The torrent cache on disk: one folder per info hash with the data and a saved meta.torrent.
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -44,7 +46,7 @@ export async function listCached (dir: string, limit: number, lastUsed: (infoHas
 }
 
 /** Deletes least-recently-used folders until the cache fits in `maxBytes`, skipping those `inUse`. */
-export async function evict (dir: string, maxBytes: number, inUse: (name: string) => boolean): Promise<void> {
+export async function evict (dir: string, maxBytes: number, inUse: (name: string) => boolean, logger: Logger = noopLogger): Promise<void> {
   const names = await fs.readdir(dir).catch(() => [])
   const dirs = await Promise.all(names.map(async name => {
     const folder = path.join(dir, name)
@@ -55,7 +57,7 @@ export async function evict (dir: string, maxBytes: number, inUse: (name: string
   for (const d of dirs.sort((a, b) => a.mtime - b.mtime)) {
     if (total <= maxBytes) break
     if (inUse(d.name)) continue
-    console.log(`[cache] evicting ${d.name} (${(d.bytes / 1024 ** 3).toFixed(1)} GB)`)
+    logger.info('cache.evicted', { torrentId: /^[a-f0-9]{40}$/.test(d.name) ? d.name : undefined, bytes: d.bytes })
     await fs.rm(d.folder, { recursive: true, force: true })
     total -= d.bytes
   }

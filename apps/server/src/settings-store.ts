@@ -1,6 +1,8 @@
 // Server settings: env vars win, then data/settings.json, then the schema default.
 // The file is written atomically and only ever holds what was saved in the browser; .env is never written.
 import fs from 'node:fs'
+import { noopLogger } from '@magplay/observability'
+import type { Logger } from '@magplay/observability'
 import path from 'node:path'
 import { EventEmitter } from 'node:events'
 import { SETTINGS, isMaskedSecret, isValueDef, validate } from '@magplay/api-contract'
@@ -42,7 +44,7 @@ function fromEnv (def: ValueDef, env: Env, readers: EnvReaders): { value: unknow
  * Resolves every server setting. An invalid env value throws (startup fails loudly, naming the
  * variable); an invalid value in the file is ignored with a warning, so a hand edit can't brick the server.
  */
-export function resolve (env: Env, file: Record<string, unknown>, readers: EnvReaders = {}, defs: readonly ValueDef[] = serverDefs): Resolved {
+export function resolve (env: Env, file: Record<string, unknown>, readers: EnvReaders = {}, defs: readonly ValueDef[] = serverDefs, logger: Logger = noopLogger): Resolved {
   const out: Resolved = { values: {}, meta: {}, effective: {} }
   for (const def of defs) {
     const envHit = fromEnv(def, env, readers)
@@ -60,7 +62,7 @@ export function resolve (env: Env, file: Record<string, unknown>, readers: EnvRe
         fileValue = result.value
         fromFile = true
       } else {
-        console.warn(`[settings] ignoring saved ${def.key}: ${result.error}`)
+        logger.warn('settings.saved.invalid', { changed: [def.key] })
       }
     }
     if (def.type === 'list') {
@@ -102,7 +104,7 @@ export function mask (resolved: Pick<Resolved, 'values' | 'meta'>): SettingsResp
   return { values, meta }
 }
 
-export function readSettingsFile (file: string): Record<string, unknown> {
+export function readSettingsFile (file: string, logger: Logger = noopLogger): Record<string, unknown> {
   let text: string
   try {
     text = fs.readFileSync(file, 'utf8')
@@ -114,7 +116,7 @@ export function readSettingsFile (file: string): Record<string, unknown> {
     const data: unknown = JSON.parse(text)
     if (data && typeof data === 'object' && !Array.isArray(data)) return data as Record<string, unknown>
   } catch {}
-  console.warn(`[settings] ${file} is not a JSON object; using defaults`)
+  logger.warn('settings.file.invalid', {}, 'Saved settings are not a JSON object; using defaults')
   return {}
 }
 
@@ -140,9 +142,9 @@ export interface SettingsStore {
   on: (event: 'changed', listener: (changed: string[]) => void) => void
 }
 
-export function createSettingsStore ({ file, env, readers = {} }: { file: string, env: Env, readers?: EnvReaders }): SettingsStore {
-  let saved = readSettingsFile(file)
-  let resolved = resolve(env, saved, readers)
+export function createSettingsStore ({ file, env, readers = {}, logger = noopLogger }: { file: string, env: Env, readers?: EnvReaders, logger?: Logger }): SettingsStore {
+  let saved = readSettingsFile(file, logger)
+  let resolved = resolve(env, saved, readers, serverDefs, logger)
   const emitter = new EventEmitter()
 
   /** Puts saved secrets back where the browser sent `{ set: true }` (unchanged). */
@@ -184,8 +186,11 @@ export function createSettingsStore ({ file, env, readers = {} }: { file: string
       }
       if (Object.keys(fields).length) return { ok: false, fields }
       const data = { ...saved, ...next }
-      const after = resolve(env, data, readers)
-      writeSettingsFile(file, data)
+      const after = resolve(env, data, readers, serverDefs, logger)
+      try { writeSettingsFile(file, data) } catch (err) {
+        logger.error('settings.save.failed', { err })
+        throw err
+      }
       const changed = serverDefs.filter(d => !same(after.effective[d.key], resolved.effective[d.key])).map(d => d.key)
       saved = data
       resolved = after

@@ -1,0 +1,14 @@
+{
+  "name": "@magplay/observability",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "pino": "10.4.0",
+    "@prometheus-io/client": "0.16.1",
+    "@magplay/api-contract": "*"
+  }
+}

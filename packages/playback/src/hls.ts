@@ -1,3 +1,5 @@
+import { noopLogger, noopMetrics } from '@magplay/observability'
+import type { Logger, Metrics, OperationContext } from '@magplay/observability'
 // HLS sessions: one ffmpeg per player writing fMP4 segments into its own folder, throttled ahead of playback,
 // reaped when idle and bounded by a session limit and a disk budget. Created by createHlsSessions(); close() stops all.
 import { spawn } from 'node:child_process'
@@ -75,6 +77,8 @@ export interface HlsLive {
 export const DEFAULT_HLS_LIVE: HlsLive = { ffmpegPath: 'ffmpeg', maxSessions: 2, hlsMaxBytes: 8 * 1024 ** 3, minFreeBytes: 256 * 1024 ** 2, transcodeMaxHeight: 720 }
 
 export interface HlsSessionsOptions {
+  logger?: Logger
+  metrics?: Metrics
   /** Session folders go here. It is emptied at creation: leftovers from a previous run are never reused. */
   dir: string
   live?: () => HlsLive
@@ -89,6 +93,8 @@ export interface HlsSessionsOptions {
 }
 
 export interface StartOptions extends Pick<FfmpegArgsOptions, 'input' | 'info' | 'audio' | 'start' | 'mode'> {
+  context?: OperationContext
+  onReady?: () => void
   /** A session this one replaces: it doesn't count against the limit and is stopped once this one is admitted. */
   replaces?: string | undefined
 }
@@ -120,7 +126,7 @@ export interface HlsSessions {
   /** Marks a session as alive; `position` is the player's time within the session output. */
   touch: (id: string, position?: number) => HlsSession | null
   stats: (session: HlsSession, now?: number) => SessionStats
-  stop: (id: string) => void
+  stop: (id: string, reason?: 'closed' | 'replaced' | 'idle' | 'shutdown' | 'cleared') => void
   /** Stops every session and deletes its output; returns how many there were. */
   stopAll: () => number
   /** Sessions running and their segment bytes, for the Debug page. */
@@ -150,6 +156,12 @@ interface Session {
   sizes: Map<string, number>
   cpuSample: { at: number, seconds: number }
   cpu: number | null
+  log: Logger
+  started: number
+  ready: boolean
+  stopReason: string | null
+  terminal: boolean
+  onReady: (() => void) | undefined
 }
 
 const spawnFfmpeg: SpawnProcess = (command, args, options) => spawn(command, args, options) as FfmpegProcess
@@ -162,6 +174,8 @@ export function createHlsSessions ({
   cores = os.availableParallelism(),
   idleMs = 45_000,
   onStop = () => {},
+  logger = noopLogger,
+  metrics = noopMetrics,
 }: HlsSessionsOptions): HlsSessions {
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
@@ -171,7 +185,7 @@ export function createHlsSessions ({
 
   function removeDir (folder: string): void {
     const removal: Promise<void> = fs.promises.rm(folder, { recursive: true, force: true })
-      .catch(() => {})
+      .catch((err: unknown) => logger.error('hls.cleanup.failed', { err }))
       .then(() => { removals.delete(removal) })
     removals.add(removal)
   }
@@ -189,10 +203,12 @@ export function createHlsSessions ({
     s.proc.kill('SIGKILL')
   }
 
-  function stop (id: string): void {
+  function stop (id: string, reason: 'closed' | 'replaced' | 'idle' | 'shutdown' | 'cleared' = 'closed'): void {
     const s = sessions.get(id)
     if (!s) return
     sessions.delete(id)
+    s.stopReason = reason
+    s.log.info('hls.stopped', { stopReason: reason, durationMs: performance.now() - s.started, bytes: s.bytes })
     kill(s)
     removeDir(s.dir)
     onStop(id)
@@ -202,6 +218,7 @@ export function createHlsSessions ({
     const s = sessions.get(id)
     if (!s) return null
     s.lastSeen = Date.now()
+    checkReady(s)
     if (position !== undefined && Number.isFinite(position) && position >= 0) s.position = Math.min(position, s.outTime)
     throttle(s)
     return s
@@ -223,17 +240,27 @@ export function createHlsSessions ({
     return s.cpu
   }
 
-  function start ({ input, info, audio, start: at, mode, replaces }: StartOptions): Session {
+  function start ({ input, info, audio, start: at, mode, replaces, context, onReady }: StartOptions): Session {
     const { maxSessions, minFreeBytes, hlsMaxBytes, ffmpegPath, transcodeMaxHeight } = live()
     const admitted = [...sessions.values()].filter(s => !s.failure && s.id !== replaces)
     if (admitted.length >= maxSessions) {
+      metrics.reject('hls', 'capacity')
+      logger.warn('resource.rejected', { resource: 'hls', reason: 'capacity', used: admitted.length, limit: maxSessions })
       throw new PlaybackBusyError('Too many HLS players. Close another player or use an external player.')
     }
     const disk = fs.statfsSync(dir)
-    if (disk.bavail * disk.bsize < minFreeBytes) throw new PlaybackBusyError('Not enough free disk space for HLS playback. Free space or use an external player.')
+    if (disk.bavail * disk.bsize < minFreeBytes) {
+      metrics.reject('disk', 'free-space')
+      logger.warn('resource.rejected', { resource: 'disk', reason: 'free-space', freeBytes: disk.bavail * disk.bsize, limit: minFreeBytes })
+      throw new PlaybackBusyError('Not enough free disk space for HLS playback. Free space or use an external player.')
+    }
     const used = [...sessions.values()].reduce((sum, s) => sum + s.bytes, 0)
-    if (used >= hlsMaxBytes) throw new PlaybackBusyError('HLS storage is full. Close another player or use an external player.')
-    if (replaces) stop(replaces)
+    if (used >= hlsMaxBytes) {
+      metrics.reject('disk', 'storage')
+      logger.warn('resource.rejected', { resource: 'disk', reason: 'storage', used, limit: hlsMaxBytes })
+      throw new PlaybackBusyError('HLS storage is full. Close another player or use an external player.')
+    }
+    if (replaces) stop(replaces, 'replaced')
     const id = randomBytes(8).toString('hex')
     const folder = path.join(dir, id)
     fs.mkdirSync(folder)
@@ -259,12 +286,19 @@ export function createHlsSessions ({
       sizes: new Map(),
       cpuSample: { at: Date.now(), seconds: 0 },
       cpu: null,
+      log: (context?.logger ?? logger).child({ component: 'hls', sessionId: id, mode }),
+      started: performance.now(),
+      ready: false,
+      stopReason: null,
+      terminal: false,
+      onReady,
     }
     sessions.set(id, s)
+    s.log.info('hls.created', { replacesSessionId: replaces, startSeconds: at })
 
     let buf = ''
     proc.stdout.on('data', (chunk: Buffer | string) => {
-      buf += String(chunk)
+      buf = (buf + String(chunk)).slice(-16384)
       const lines = buf.split('\n')
       buf = lines.pop() ?? ''
       for (const line of lines) {
@@ -272,24 +306,39 @@ export function createHlsSessions ({
         if ((key === 'out_time_us' || key === 'out_time_ms') && Number(value) >= 0) s.outTime = Number(value) / 1e6
         if (key === 'speed' && parseFloat(value)) s.speed = parseFloat(value)
         if (key === 'fps' && Number.isFinite(parseFloat(value))) s.fps = parseFloat(value)
-        if (key === 'progress') throttle(s)
+        if (key === 'progress') { throttle(s); checkReady(s) }
       }
     })
     proc.stderr.on('data', (chunk: Buffer | string) => {
-      s.stderr.push(...String(chunk).trim().split('\n'))
+      s.stderr.push(...String(chunk).slice(-8192).trim().split('\n').slice(-20).map(line => line.slice(0, 1024)))
       s.stderr.splice(0, s.stderr.length - 20)
     })
     proc.on('error', (err: Error) => {
       s.exitCode = 'spawn-error'
       s.stderr.push(`Could not start ffmpeg: ${err.message}`)
-      console.error(`[ffmpeg] ${id}: ${s.stderr.at(-1)}`)
+      s.terminal = true
+      metrics.job('conversion', 'failure', (performance.now() - s.started) / 1000)
+      s.log.error('ffmpeg.spawn.failed', { err, durationMs: performance.now() - s.started })
     })
     proc.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
       if (s.exitCode === null) s.exitCode = code ?? signal
-      console.log(`[ffmpeg] ${id} ${mode} exited ${code ?? signal}, speed ${s.speed ?? '?'}x, produced ${s.outTime.toFixed(0)} s` +
-        (code ? `: ${s.stderr.at(-1) ?? ''}` : ''))
+      if (s.terminal) return
+      s.terminal = true
+      metrics.job('conversion', s.stopReason ? s.stopReason === 'resource-limit' ? 'rejected' : 'cancelled' : code === 0 ? 'success' : 'failure', (performance.now() - s.started) / 1000)
+      checkReady(s)
+      s.log[!s.stopReason && s.exitCode !== 0 ? 'error' : 'info']('ffmpeg.exited', { code: code ?? signal, stopReason: s.stopReason, speed: s.speed, fps: s.fps, outputSeconds: s.outTime, durationMs: performance.now() - s.started, ...(!s.stopReason && code !== 0 ? { stderr: s.stderr.slice(-3).join('\n') } : {}) })
     })
     return s
+  }
+
+  function checkReady (s: Session): void {
+    if (s.ready || s.stopReason) return
+    const seconds = publishedSeconds(s.dir)
+    if (seconds <= 0) return
+    s.ready = true
+    s.log.info('hls.media.published', { durationMs: performance.now() - s.started, outputSeconds: seconds })
+    s.onReady?.()
+    s.onReady = undefined
   }
 
   async function sessionBytes (s: Session): Promise<number> {
@@ -318,7 +367,7 @@ export function createHlsSessions ({
     resourceCheck ??= (async () => {
       const all = [...sessions.values()].filter(s => !s.failure)
       if (!all.length) return
-      await Promise.all(all.map(async s => { s.bytes = await sessionBytes(s) }))
+      await Promise.all(all.map(async s => { s.bytes = await sessionBytes(s); checkReady(s) }))
       const disk = await fs.promises.statfs(dir)
       const total = all.reduce((sum, s) => sum + s.bytes, 0)
       const { hlsMaxBytes, minFreeBytes } = live()
@@ -329,6 +378,8 @@ export function createHlsSessions ({
       for (const s of all.sort((a, b) => b.bytes - a.bytes)) {
         if (reclaim <= 0) break
         if (!sessions.has(s.id)) continue
+        s.stopReason = 'resource-limit'
+        s.log.warn('hls.resource.stopped', { reason: 'storage', bytes: s.bytes })
         kill(s)
         s.failure = 'HLS disk limit reached. Free space or use an external player, then retry.'
         s.exitCode = 'resource-limit'
@@ -343,17 +394,17 @@ export function createHlsSessions ({
   }
 
   const reaper = setInterval(() => {
-    for (const s of sessions.values()) if (Date.now() - s.lastSeen > idleMs) stop(s.id)
+    for (const s of sessions.values()) if (Date.now() - s.lastSeen > idleMs) stop(s.id, 'idle')
   }, 10_000)
   reaper.unref()
   const checker = setInterval(() => {
-    checkResources().catch((err: unknown) => console.error('[hls] resource check:', err instanceof Error ? err.message : err))
+    checkResources().catch((err: unknown) => logger.error('hls.resource.check.failed', { err }))
   }, 2000)
   checker.unref()
 
-  function stopAll (): number {
+  function stopAll (reason: 'cleared' | 'shutdown' = 'cleared'): number {
     const count = sessions.size
-    for (const id of [...sessions.keys()]) stop(id)
+    for (const id of [...sessions.keys()]) stop(id, reason)
     return count
   }
 
@@ -364,6 +415,7 @@ export function createHlsSessions ({
     stats (session, now = Date.now()) {
       // Every HlsSession is a Session; a stopped one still reports its last state
       const s = session as Session
+      checkReady(s)
       return {
         id: s.id,
         mode: s.mode,
@@ -379,7 +431,7 @@ export function createHlsSessions ({
       }
     },
     stop,
-    stopAll,
+    stopAll: () => stopAll(),
     summary () {
       const running = [...sessions.values()].filter(s => !s.failure)
       return { active: running.length, bytes: running.reduce((sum, s) => sum + s.bytes, 0) }
@@ -388,7 +440,7 @@ export function createHlsSessions ({
     async close () {
       clearInterval(reaper)
       clearInterval(checker)
-      stopAll()
+      stopAll('shutdown')
       await resourceCheck?.catch(() => {})
       await Promise.all(removals)
     },

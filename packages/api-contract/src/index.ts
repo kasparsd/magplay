@@ -179,3 +179,4 @@ export type TorrentStatus = { preparation: PlaybackPreparation | null } & ({
   peers: PeerStats[]
   file?: { idx: number, progress: number, ranges: Array<[number, number]> }
 })
+export type { LogRecord, LogLevel } from './logging.ts'

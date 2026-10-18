@@ -1,5 +1,6 @@
 # Local stack for trying magplay with Jackett and Prowlarr next to it.
 #   docker compose up -d --build
+#   docker compose --profile observability up -d --build   # Grafana: http://localhost:3000
 #   node tools/scripts/setup-indexers.mjs     # adds public indexers, writes their API keys to .env, restarts magplay
 # BitMagnet isn't included: point BITMAGNET_URL at yours (an IP address, or a .local name when the host runs avahi-daemon).
 
@@ -7,6 +8,13 @@ services:
   magplay:
     build: .
     restart: unless-stopped
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+        mode: non-blocking
+        max-buffer-size: "1m"
     ports:
       - "${MAGPLAY_PORT:-3382}:8080"
       - "${TORRENT_PORT:-6881}:6881/tcp"
@@ -19,11 +27,15 @@ services:
       PROWLARR_URL: "http://prowlarr:9696"
       PROWLARR_APIKEY: "${PROWLARR_APIKEY:-}"
       CACHE_MAX_GB: "${CACHE_MAX_GB:-20}"
+      # Internal only: the optional local Prometheus service scrapes this port.
+      METRICS_ENABLED: "true"
+      METRICS_HOST: "0.0.0.0"
     volumes:
       - magplay_data:/data
       # The host's avahi-daemon resolves .local (mDNS) names in source URLs; harmless where avahi isn't installed
       - /run/avahi-daemon:/run/avahi-daemon:ro
     depends_on: [jackett, prowlarr]
+    networks: [default, observability]
 
   jackett:
     image: lscr.io/linuxserver/jackett:v0.24.2663-ls38
@@ -50,10 +62,84 @@ services:
     volumes:
       - ./tools/docker/prowlarr/config:/config
 
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    profiles: [observability]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./tools/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [observability]
+    mem_limit: 256m
+    cpus: 0.5
+
+  loki:
+    image: grafana/loki:3.7.8
+    profiles: [observability]
+    restart: unless-stopped
+    command: [-config.file=/etc/loki/local.yml]
+    volumes:
+      - ./tools/observability/loki.yml:/etc/loki/local.yml:ro
+      - loki_data:/loki
+    networks: [observability]
+    mem_limit: 384m
+    cpus: 1.0
+
+  alloy:
+    image: grafana/alloy:v1.20.1
+    profiles: [observability]
+    restart: unless-stopped
+    command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
+    environment:
+      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME}"
+    volumes:
+      - ./tools/observability/config.alloy:/etc/alloy/config.alloy:ro
+      # Read-only mount still grants powerful Docker API access; local dev only.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy
+    depends_on: [loki]
+    networks: [observability]
+    mem_limit: 128m
+    cpus: 0.5
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    profiles: [observability]
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/magplay.json
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./tools/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./tools/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on: [prometheus, loki]
+    networks: [observability]
+    mem_limit: 256m
+    cpus: 0.5
+
 volumes:
   magplay_data:
+  prometheus_data:
+  loki_data:
+  alloy_data:
+  grafana_data:
 
 networks:
+  observability:
+    internal: true
   default:
     ipam:
       # Docker fell back to 172.30.0.0/24 on a host with many networks, which hid the LAN (and BitMagnet); pin a rarely used range

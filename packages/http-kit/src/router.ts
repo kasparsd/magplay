@@ -12,6 +12,7 @@ type SegmentParam<Segment extends string> =
       : unknown
 
 export interface Context<Params = Record<string, string>> {
+  requestId?: string
   req: IncomingMessage
   res: ServerResponse
   params: Params
@@ -28,6 +29,7 @@ export interface Route {
 }
 
 export interface Match {
+  pattern: string
   handler: Handler
   params: Record<string, string>
 }
@@ -48,10 +50,10 @@ export function createRouter (routes: readonly Route[]): (method: string, pathna
       keys.push(param[1]!)
       return param[2] ? '(?:/([^/]+))?' : '/([^/]+)'
     }).join('')
-    return { methods: methods.split('|'), re: new RegExp(`^${source}/?$`), keys, handler }
+    return { pattern, methods: methods.split('|'), re: new RegExp(`^${source}/?$`), keys, handler }
   })
   return function match (method, pathname) {
-    for (const { methods, re, keys, handler } of compiled) {
+    for (const { pattern, methods, re, keys, handler } of compiled) {
       if (!methods.includes(method)) continue
       const m = re.exec(pathname)
       if (!m) continue
@@ -64,7 +66,7 @@ export function createRouter (routes: readonly Route[]): (method: string, pathna
       } catch {
         throw new MalformedPathError('Malformed URL encoding')
       }
-      return { handler, params }
+      return { pattern, handler, params }
     }
     return null
   }

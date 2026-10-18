@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@magplay/release-info": "*",
-    "fast-xml-parser": "5.11.2"
+    "fast-xml-parser": "5.11.2",
+    "@magplay/observability": "*"
   }
 }

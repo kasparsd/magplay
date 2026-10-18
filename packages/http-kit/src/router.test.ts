@@ -19,11 +19,11 @@ const match = createRouter([
 ])
 
 test('matches methods, required and optional params', () => {
-  assert.deepEqual(match('GET', '/'), { handler: home, params: {} })
-  assert.deepEqual(match('GET', '/t'), { handler: torrent, params: {} })
-  assert.deepEqual(match('GET', '/t/abc'), { handler: torrent, params: { ih: 'abc' } })
-  assert.deepEqual(match('HEAD', '/raw/abc/2'), { handler: raw, params: { ih: 'abc', idx: '2' } })
-  assert.deepEqual(match('GET', '/raw/abc/2/Show%20S01E01.mkv'), { handler: raw, params: { ih: 'abc', idx: '2', name: 'Show S01E01.mkv' } })
+  assert.deepEqual(match('GET', '/'), { pattern: '/', handler: home, params: {} })
+  assert.deepEqual(match('GET', '/t'), { pattern: '/t/:ih?', handler: torrent, params: {} })
+  assert.deepEqual(match('GET', '/t/abc'), { pattern: '/t/:ih?', handler: torrent, params: { ih: 'abc' } })
+  assert.deepEqual(match('HEAD', '/raw/abc/2'), { pattern: '/raw/:ih/:idx/:name?', handler: raw, params: { ih: 'abc', idx: '2' } })
+  assert.deepEqual(match('GET', '/raw/abc/2/Show%20S01E01.mkv'), { pattern: '/raw/:ih/:idx/:name?', handler: raw, params: { ih: 'abc', idx: '2', name: 'Show S01E01.mkv' } })
   assert.equal(match('POST', '/api/play/s1')?.handler, stop)
 })
 
@@ -45,7 +45,7 @@ test('malformed percent encoding is a typed error', () => {
 })
 
 test('a trailing slash is accepted', () => {
-  assert.deepEqual(match('GET', '/t/abc/'), { handler: torrent, params: { ih: 'abc' } })
+  assert.deepEqual(match('GET', '/t/abc/'), { pattern: '/t/:ih?', handler: torrent, params: { ih: 'abc' } })
 })
 
 test('handlers see params typed from the pattern', () => {

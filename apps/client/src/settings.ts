@@ -53,18 +53,18 @@ function logView (): HTMLElement {
   filter.setAttribute('aria-label', 'Lowest log level shown')
   for (const level of LOG_ORDER) {
     const input = el('input', { type: 'radio', name: 'log-level', value: level, checked: level === logLevel })
-    input.addEventListener('change', () => { logLevel = level; refreshReadout('debug.log') })
+    input.addEventListener('change', () => { logLevel = level; refreshReadout('debug.log', true) })
     filter.append(el('label', {}, input, el('span', { textContent: level })))
   }
   const lines = (debug?.log ?? []).filter(l => LOG_ORDER.indexOf(l.level) >= LOG_ORDER.indexOf(logLevel)).slice(-200)
   const pre = el('div', { className: 'log', tabIndex: 0 },
     ...(lines.length
       ? lines.map(l => el('div', { className: `log-line lvl-${l.level}` },
-        el('time', { textContent: new Date(l.at).toLocaleTimeString([], { hour12: false }) }),
+        el('time', { textContent: new Date(l.time).toLocaleTimeString([], { hour12: false }) }),
         el('span', { className: 'log-level', textContent: l.level }),
-        el('span', { textContent: l.text })))
+        el('details', {}, el('summary', { textContent: `${l.component} · ${l.event}: ${l.msg}` }), el('pre', { textContent: JSON.stringify(l, null, 2) }))))
       : [el('span', { className: 'muted', textContent: debug ? 'Nothing at this level yet.' : 'Loading…' })]))
-  return el('div', {}, filter, pre)
+  return el('div', {}, el('p', { className: 'muted', textContent: `Server capture: ${debug?.logging.level ?? '…'} · Dropped: ${debug?.logging.dropped ?? 0}. The filter only changes what is shown.` }), filter, pre)
 }
 
 function grid (cells: Array<[string, ReadoutValue]>): HTMLElement {
@@ -130,9 +130,11 @@ const ACTIONS: Record<string, () => Promise<string | undefined>> = {
   },
 }
 
-function refreshReadout (key: string): void {
+function refreshReadout (key: string, force = false): void {
   const box = readouts.get(key)
   const read = READOUTS[key]
+  // Keep an investigation readable while the normal background poll continues.
+  if (!force && key === 'debug.log' && box?.querySelector('details[open]')) return
   if (box && read) fillReadout(box, read())
 }
 

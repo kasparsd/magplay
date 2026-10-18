@@ -7,7 +7,7 @@ import type { HlsSessions, MediaTools } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
 import type { DebugInfo, DebugResource, StatusAction } from '@magplay/api-contract'
 import type { Config } from '../config.ts'
-import type { LogTail } from '../logs.ts'
+import type { LogRecord, LogLevel } from '@magplay/api-contract'
 import type { SettingsStore } from '../settings-store.ts'
 import type { CheckResult, StatusRegistry } from './status.ts'
 
@@ -46,7 +46,8 @@ export interface StatusChecksOptions {
   engine: TorrentEngine
   media: MediaTools
   hls: HlsSessions
-  logs: LogTail
+  logs: () => LogRecord[]
+  loggingStatus?: () => { level: LogLevel | 'silent', dropped: number }
   version: string
   /** In-memory caches (count used and limit), listed under Debug after the busy slots. */
   caches?: () => DebugResource[]
@@ -57,10 +58,13 @@ export interface StatusChecks {
   settingsChanged: (changed: string[]) => void
   /** GET /api/debug: versions, what's busy, and the log tail. */
   debugInfo: () => Promise<DebugInfo>
+  close: () => Promise<void>
+  refreshDisk: () => Promise<void>
+  diskSnapshot: () => (NonNullable<DebugInfo['disk']> & { at: number }) | null
 }
 
 /** Registers every check on `status`. */
-export function createStatusChecks ({ status, settings, config, engine, media, hls, logs, version, caches = () => [] }: StatusChecksOptions): StatusChecks {
+export function createStatusChecks ({ status, settings, config, engine, media, hls, logs, loggingStatus = () => ({ level: 'info', dropped: 0 }), version, caches = () => [] }: StatusChecksOptions): StatusChecks {
   const started = Date.now()
   const versions: { ffmpeg: string | null, ffprobe: string | null } = { ffmpeg: null, ffprobe: null }
 
@@ -109,17 +113,25 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
   })
 
   let cacheUsage = { at: 0, bytes: 0 }
+  let latestDisk: (NonNullable<DebugInfo['disk']> & { at: number }) | null = null
+  let measuring: Promise<DebugInfo['disk']> | null = null
   /** Torrent cache bytes, measured at most every 30 s: it walks every file. */
   async function cachedCacheBytes (): Promise<number> {
     if (Date.now() - cacheUsage.at > 30_000) cacheUsage = { at: Date.now(), bytes: await engine.cacheBytes() }
     return cacheUsage.bytes
   }
 
-  async function diskInfo (): Promise<DebugInfo['disk']> {
+  async function measureDisk (): Promise<DebugInfo['disk']> {
     const { cacheDir, cacheMaxBytes } = config()
     const stat = await fs.statfs(cacheDir).catch(() => null)
     if (!stat) return null
-    return { free: stat.bavail * stat.bsize, size: stat.blocks * stat.bsize, cacheBytes: await cachedCacheBytes(), cacheMaxBytes }
+    latestDisk = { free: stat.bavail * stat.bsize, size: stat.blocks * stat.bsize, cacheBytes: await cachedCacheBytes(), cacheMaxBytes, at: Date.now() }
+    return latestDisk
+  }
+
+  function diskInfo (): Promise<DebugInfo['disk']> {
+    measuring ??= measureDisk().finally(() => { measuring = null })
+    return measuring
   }
 
   status.registerCheck({
@@ -141,6 +153,9 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
   registerSourceChecks()
 
   return {
+    close: async () => { await measuring?.catch(() => {}) },
+    refreshDisk: async () => { await diskInfo() },
+    diskSnapshot: () => latestDisk,
     settingsChanged (changed) {
       if (changed.includes('sources')) registerSourceChecks()
       if (changed.includes('explore.bitmagnetUrl')) status.invalidate('explore')
@@ -169,6 +184,7 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
         ],
         disk: await diskInfo(),
         log: logs(),
+        logging: loggingStatus(),
       }
     },
   }

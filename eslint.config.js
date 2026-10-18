@@ -15,7 +15,7 @@ const nodeBuiltins = {
   message: 'This code runs without Node: no Node built-ins.',
 }
 const serverOnly = {
-  group: ['@magplay/http-kit', '@magplay/seekable-tar', '@magplay/indexers', '@magplay/torrent-engine', '@magplay/playback', '@magplay/server'],
+  group: ['@magplay/observability', '@magplay/http-kit', '@magplay/seekable-tar', '@magplay/indexers', '@magplay/torrent-engine', '@magplay/playback', '@magplay/server'],
   message: 'The client may only use api-contract (wire types, settings schema and codec keys).',
 }
 const restrictImports = (...patterns) => ({ 'no-restricted-imports': ['error', { patterns }] })
@@ -27,7 +27,7 @@ export default defineConfig(
   { files: ['apps/client/**', 'tests/e2e/**'], languageOptions: { globals: globals.browser } },
   { rules: restrictImports(deepImports) },
   // Tests run under node:test, so they may import Node built-ins
-  { files: ['packages/api-contract/**', 'packages/release-info/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins) },
+  { files: ['packages/api-contract/**', 'packages/release-info/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins, serverOnly) },
   { files: ['apps/client/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins, serverOnly) },
   { files: ['apps/client/**/*.test.{js,ts}'], rules: restrictImports(deepImports, serverOnly) },
   {

@@ -1,3 +1,5 @@
+import { noopLogger, noopMetrics, observeJob } from '@magplay/observability'
+import type { Logger, Metrics, OperationContext } from '@magplay/observability'
 // Searches every configured source in parallel and merges the results.
 import { createHash } from 'node:crypto'
 import { LinkExpired, NoSourcesError, SourceError, errorMessage, isAbort } from './errors.ts'
@@ -28,7 +30,7 @@ export interface SearchResponse {
 
 export interface Search {
   /** Throws NoSourcesError with no sources, and a SourceError naming each source when all of them fail. */
-  search: (q: string, cat?: string | null) => Promise<SearchResponse>
+  search: (q: string, cat?: string | null, context?: OperationContext) => Promise<SearchResponse>
   /** The download link behind a result's `linkId`; throws LinkExpired when it's no longer known. */
   linkFor: (id: string) => string
   /** Remembered download links, for the Debug page. */
@@ -36,7 +38,7 @@ export interface Search {
   names: string[]
 }
 
-export function createSearch (sources: readonly Source[], { timeoutMs = 30_000 }: { timeoutMs?: number } = {}): Search {
+export function createSearch (sources: readonly Source[], { timeoutMs = 30_000, logger = noopLogger, metrics = noopMetrics, sourceIds = [] }: { timeoutMs?: number, logger?: Logger, metrics?: Metrics, sourceIds?: readonly string[] } = {}): Search {
   // Download links can carry an indexer's API key, so they stay here and the browser gets an opaque id
   const links = new Map<string, string>()
   const remember = (link: string): string => {
@@ -47,18 +49,16 @@ export function createSearch (sources: readonly Source[], { timeoutMs = 30_000 }
     return id
   }
 
-  async function search (q: string, cat?: string | null): Promise<SearchResponse> {
+  async function search (q: string, cat?: string | null, context?: OperationContext): Promise<SearchResponse> {
     if (!sources.length) throw new NoSourcesError('No search sources are configured. Set TORZNAB_URL, JACKETT_URL or PROWLARR_URL (see the README).')
-    const settled = await Promise.all(sources.map(async source => {
+    const settled = await Promise.all(sources.map(async (source, index) => {
       const started = Date.now()
       try {
-        const items = await source.search(q, { cat: cat ?? undefined, signal: AbortSignal.timeout(timeoutMs) })
+        const items = await observeJob(logger, metrics, 'source', async () => await source.search(q, { cat: cat ?? undefined, signal: AbortSignal.timeout(timeoutMs) }), { sourceId: sourceIds[index] ?? `source-${index}` }, context)
         return { report: { name: source.name, ok: true as const, count: items.length, ms: Date.now() - started }, items }
       } catch (err) {
         const timedOut = isAbort(err)
         const error = timedOut ? `timed out after ${timeoutMs / 1000} s` : err instanceof SourceError ? err.message : `failed: ${errorMessage(err)}`
-        if (timedOut || err instanceof SourceError) console.log(`[search] ${source.name} ${error}`)
-        else console.error(`[search] ${source.name}:`, err) // a bug, not an indexer problem
         return { report: { name: source.name, ok: false as const, error, ms: Date.now() - started }, items: [] }
       }
     }))

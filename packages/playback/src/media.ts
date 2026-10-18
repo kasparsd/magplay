@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto'
+import { noopLogger, noopMetrics, observeJob } from '@magplay/observability'
+import type { Logger, Metrics, OperationContext } from '@magplay/observability'
 // What a file holds (ffprobe), how this browser should play it, and the ffmpeg work behind it.
 // Inputs are URLs or paths; the app passes its /raw loopback URL.
 import { execFile } from 'node:child_process'
@@ -193,7 +196,7 @@ export interface MediaLive {
 
 export interface MediaTools {
   /** probe(), bounded and cached per input; a failed probe is forgotten so the next call retries. */
-  probe: (input: string, fileName: string) => Promise<MediaInfo>
+  probe: (input: string, fileName: string, context?: OperationContext) => Promise<MediaInfo>
   /** subtitleToVtt(), bounded. */
   subtitleToVtt: (input: string, track: number | null) => Promise<string>
   /** Busy slots and cached probe results, for the Debug page. */
@@ -204,25 +207,32 @@ export interface MediaTools {
 export const PROBE_CACHE_LIMIT = 256
 
 /** Probing and subtitle conversion with process limits; overload fails fast with PlaybackBusyError. */
-export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT }: { live: () => MediaLive, probeCacheLimit?: number }): MediaTools {
-  const runProbe = createLimiter(() => live().maxProbes, () => new PlaybackBusyError('Media probing is busy. Try again shortly.'))
-  const runSubtitle = createLimiter(() => live().maxSubtitleJobs, () => new PlaybackBusyError('Subtitle conversion is busy. Try again shortly.'))
+export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, logger = noopLogger, metrics = noopMetrics }: { live: () => MediaLive, probeCacheLimit?: number, logger?: Logger, metrics?: Metrics }): MediaTools {
+  const runProbe = createLimiter(() => live().maxProbes, () => { metrics.reject('probe', 'capacity'); logger.warn('resource.rejected', { resource: 'probe', reason: 'capacity' }); return new PlaybackBusyError('Media probing is busy. Try again shortly.') })
+  const runSubtitle = createLimiter(() => live().maxSubtitleJobs, () => { metrics.reject('subtitle', 'capacity'); logger.warn('resource.rejected', { resource: 'subtitle', reason: 'capacity' }); return new PlaybackBusyError('Subtitle conversion is busy. Try again shortly.') })
   const probes = new Map<string, Promise<MediaInfo>>()
+  const ids = new Map<string, string>()
   return {
-    probe (input, fileName) {
+    probe (input, fileName, context) {
       let p = probes.get(input)
       if (p) {
+        context?.logger.info('probe.cache.joined', { jobId: ids.get(input) })
         probes.delete(input) // move to the most recently used end
       } else {
-        p = runProbe(() => probe(input, fileName, live()))
+        const jobId = randomUUID()
+        ids.set(input, jobId)
+        p = observeJob(logger, metrics, 'probe', async () => await runProbe(() => probe(input, fileName, live())), { jobId }, context)
         const job = p
-        job.catch(() => { if (probes.get(input) === job) probes.delete(input) })
+        job.catch(() => { if (probes.get(input) === job) { probes.delete(input); ids.delete(input) } })
       }
       probes.set(input, p)
-      if (probes.size > probeCacheLimit) probes.delete(probes.keys().next().value!)
+      if (probes.size > probeCacheLimit) {
+        const oldest = probes.keys().next().value!
+        probes.delete(oldest); ids.delete(oldest)
+      }
       return p
     },
-    subtitleToVtt: (input, track) => runSubtitle(() => subtitleToVtt(input, track, live())),
+    subtitleToVtt: (input, track) => observeJob(logger, metrics, 'subtitle', async () => await runSubtitle(() => subtitleToVtt(input, track, live()))),
     stats: () => ({ probes: runProbe.stats(), subtitles: runSubtitle.stats(), probeCache: { used: probes.size, limit: probeCacheLimit } }),
   }
 }

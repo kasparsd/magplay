@@ -206,6 +206,9 @@ Env vars still work and win over saved settings: a field set by one is read-only
 | `PROWLARR_INDEXERS` | `-2` | Comma-separated Prowlarr indexer ids; `-2` is every torrent indexer |
 | `SEARCH_TIMEOUT_S` | `30` | Per-source search timeout (also Explore's) |
 | `BITMAGNET_URL` | from `TORZNAB_URL` | BitMagnet's address, for Explore (its GraphQL API). Found automatically when a Torznab source is at BitMagnet's path `/torznab/api`; without BitMagnet, Explore says so. |
+| `LOG_LEVEL` | `info` | Structured stdout/Debug capture level: `debug`, `info`, `warn`, `error`, `silent`; restart required |
+| `METRICS_ENABLED` | `false` | Enable the separate private Prometheus listener |
+| `METRICS_HOST`, `METRICS_PORT` | `127.0.0.1`, `9091` | Management bind address/port; explicit internal-network bind needed for a container scraper |
 | `CACHE_DIR` | `./data` | Torrent data (`torrents/<infohash>/`) and HLS sessions (`hls/`). The Docker image overrides this to `/data`. |
 | `CACHE_MAX_GB` | `50` | Least-recently-used torrent folders are deleted above this (checked every minute; torrents in use are kept) |
 | `TORRENT_PORT` | `6881` | TCP (peers) and UDP (DHT). Publish both in Compose. |
@@ -219,6 +222,8 @@ Env vars still work and win over saved settings: a field set by one is read-only
 Local safeguards reject excess jobs with a retryable 503 rather than an unbounded queue. See [resource limits](docs/resources.md), [player lifetime handling](docs/lifecycle.md), and [per-file Resume/Start over behavior](docs/progress.md). HLS disk limits are soft; use a filesystem/container quota for a hard bound.
 
 `TORRENT_CHECK_TIMEOUT_S` (default `7200`) separately bounds cached-piece verification after metadata arrives. `DHT_ENABLED=false` and `LSD_ENABLED=false` disable those discovery mechanisms when using explicit trackers/peers; both default to enabled. See [loopback integration coverage](tests/integration/README.md) and [Docker/server acceptance](docs/deployment-acceptance.md).
+
+Logs are structured JSON on stdout and in Settings → Debug, with linked request/playback/job IDs and secrets removed. The Debug filter changes display only; `LOG_LEVEL` controls capture. The bundled Compose service rotates local logs and uses bounded non-blocking delivery. Inspect with `docker compose logs --since 10m --no-log-prefix magplay`. Metrics are disabled by default and are never served on the browser port. See [logging and observability](docs/logging.md) for the metrics/scrape setup, limits and collection contract.
 
 ## HTTP API
 
@@ -247,7 +252,7 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 | `GET /api/settings` | Server settings in use, secrets masked as `{set}`, with `meta[key] = {source: env\|file\|default, env, locked}` |
 | `PATCH /api/settings` | A partial update, validated as a whole (400 with `fields` per key, nothing saved) and written atomically. Same-origin only (403 otherwise), like every write below. |
 | `POST /api/settings/test` `{key: 'sources', item}` | Checks a source with unsaved values; returns a check result |
-| `GET /api/debug` | Version, uptime, ffmpeg versions, busy slots and limits, disk and cache use, and the last 200 log lines |
+| `GET /api/debug` | Version, uptime, ffmpeg versions, busy slots and limits, disk and cache use, and the bounded structured log tail plus capture level/drop count |
 | `POST /api/debug/clear-hls` | Stops every conversion and deletes its segments |
 | `GET /api/speedtest` | Random bytes (up to 256 MB) for the browser's connection test |
 | `GET /health` | 200 `{ ok, uptimeS }`; 503 once shutdown has begun |

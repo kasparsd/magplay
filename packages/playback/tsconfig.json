@@ -8,6 +8,9 @@
   "references": [
     {
       "path": "../api-contract"
+    },
+    {
+      "path": "../observability"
     }
   ]
 }

@@ -19,7 +19,7 @@ test('invalid env values stop the server at startup, naming the variable', t => 
   for (const [key, value] of [['PORT', '70000'], ['TORRENT_PORT', '-1'], ['METADATA_TIMEOUT_S', '99999'], ['TORRENT_CHECK_TIMEOUT_S', '0'], ['IDLE_TORRENT_MIN', '1000000']] as const) {
     assert.throws(() => loadConfig({ CACHE_DIR: dir, [key]: value }), new RegExp(key))
   }
-  assert.throws(() => loadConfig({ CACHE_DIR: dir, EXTRA_TRACKERS: 'udp://ok:1/announce, not a url' }), /EXTRA_TRACKERS: "not a url"/)
+  assert.throws(() => loadConfig({ CACHE_DIR: dir, EXTRA_TRACKERS: 'udp://ok:1/announce, not a url' }), /EXTRA_TRACKERS/)
 })
 
 test('EXTRA_TRACKERS: unset means the defaults, empty means none, and each entry must be a tracker URL', () => {
@@ -87,7 +87,7 @@ test('settings items become source configs with default names and indexers', () 
 })
 
 test('unknown source types and bad URLs fail at startup', () => {
-  assert.throws(() => sourceConfigs([{ id: 'x', type: 'unknown', name: 'x', url: 'http://x' }]), /Unknown source type: unknown/)
+  assert.throws(() => sourceConfigs([{ id: 'x', type: 'unknown', name: 'x', url: 'http://x' }]), /Unknown source type/)
   assert.throws(() => sourcesFromEnv({ TORZNAB_URL: 'bitmagnet:3333' }), /Not an http\(s\) URL/)
   assert.throws(() => sourcesFromEnv({ PROWLARR_URL: 'prowlarr' }), /Not an http\(s\) URL/)
 })

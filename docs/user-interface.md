@@ -243,3 +243,7 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 - [x] **Selected genres outside the top chips.** A genre chosen from a link or a narrower filter keeps its chip even when it isn't among the 14 most common.
 - [x] **Useful source errors.** A failed search source says why under the chips, with **Search again**, instead of a red chip with the reason on hover. A server with no sources configured says so (503) instead of an empty 502.
 - [x] **Honest title-list truncation.** The Title page reads only the 100 most-seeded search hits for a name; when BitMagnet had more, the list says so and links to Search all sources.
+
+## Debug logs
+
+Settings → Debug shows structured time/level/component/event/message records, expandable operation/request/error details, the server capture level and application-side loss count. Its severity filter only narrows captured records. Copy diagnostics includes the same sanitized tail; see [logging](logging.md) for capture, retention and metrics behavior.

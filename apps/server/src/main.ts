@@ -1,50 +1,56 @@
-// The magplay server process: config from env, the app, startup checks, and graceful shutdown on SIGTERM/SIGINT.
-import { captureConsole } from './logs.ts'
-import { loadConfig } from './config.ts'
+// The process owns bootstrap logging, listeners and the bounded shutdown deadline.
+import { readFileSync } from 'node:fs'
+import { createLogging } from '@magplay/observability'
+import { loadConfig, loggingConfig } from './config.ts'
 import { createApp } from './app.ts'
+import type { App } from './app.ts'
 import { installMdnsLookup } from './mdns.ts'
 
-const SHUTDOWN_TIMEOUT_MS = 10_000
-
-const logs = captureConsole() // first, so it sees every line
-
-const fail = (message: string): never => {
-  console.error(message)
+const { version } = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }
+let logging = createLogging({ version })
+let app: App | undefined
+let uninstallMdns: (() => void) | undefined
+let stopping = false
+async function fail (err: unknown): Promise<never> {
+  logging.logger.error('server.failed', { err })
+  await logging.flush()
   process.exit(1)
 }
-const reason = (err: unknown): string => err instanceof Error ? err.message : String(err)
-
-function attempt<T> (step: () => T, message: (err: unknown) => string): T {
-  try {
-    return step()
-  } catch (err) {
-    return fail(message(err))
-  }
-}
-
-// An invalid env value stops startup, naming the variable
-const config = attempt(() => loadConfig(process.env), reason)
-const app = attempt(() => createApp({ config, logs }), err =>
-  `Cannot create the cache directory ${config.current().cacheDir} (${reason(err)}). Set CACHE_DIR to a writable location, e.g. CACHE_DIR=./data`)
-
-app.startupChecks()
-const uninstallMdns = installMdnsLookup()
-if (uninstallMdns) console.log('Resolving .local names through the host’s avahi-daemon')
-await app.listen().catch((err: unknown) => fail(`Cannot listen on port ${config.current().port}: ${reason(err)}`))
-
-let stopping = false
 async function shutdown (signal: NodeJS.Signals): Promise<void> {
   if (stopping) return
   stopping = true
-  console.log(`[server] ${signal}: shutting down`)
-  // Paused (SIGSTOPped) ffmpegs would outlive us; close() kills them. A stuck close still exits.
-  setTimeout(() => fail('[server] shutdown took too long'), SHUTDOWN_TIMEOUT_MS).unref()
-  await app.close()
-  uninstallMdns?.()
-  process.exit(0)
+  const started = performance.now()
+  logging.logger.info('server.stopping', { signal }, 'shutting down')
+  const deadline = setTimeout(() => { fail(new Error('Server shutdown took too long')).catch(() => process.exit(1)) }, 9500)
+  deadline.unref()
+  try {
+    await app?.close()
+    uninstallMdns?.()
+    logging.logger.info('server.stopped', { signal, durationMs: performance.now() - started })
+    await logging.flush()
+    clearTimeout(deadline)
+    process.exit(0)
+  } catch (err) { await fail(err) }
 }
-for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(signal, () => {
-    shutdown(signal).catch((err: unknown) => fail(`[server] shutdown failed: ${reason(err)}`))
-  })
+try {
+  const options = loggingConfig(process.env)
+  await logging.flush()
+  logging = createLogging({ version, level: options.logLevel })
+  logging.logger.info('server.starting', { configurationRevision: 0 })
+  const config = loadConfig(process.env, logging.logger.child({ component: 'settings' }))
+  app = createApp({ config, logging })
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => { shutdown(signal).catch(fail) })
+  }
+  app.startupChecks()
+  uninstallMdns = installMdnsLookup() ?? undefined
+  if (uninstallMdns) logging.logger.info('server.mdns.enabled', {}, 'Resolving .local names through the host’s avahi-daemon')
+  await app.listen()
+  if (options.metricsEnabled) await app.listenMetrics()
+} catch (err) {
+  // Cleanup partial startup without letting a failed listener leave torrent ports open.
+  const deadline = setTimeout(() => { process.exit(1) }, 9500)
+  deadline.unref()
+  await app?.close().catch(() => {})
+  await fail(err)
 }

@@ -1,0 +1,296 @@
+{
+  "uid": "magplay-overview",
+  "title": "Magplay overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "tags": [
+    "magplay",
+    "local-dev"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "App scrape health",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"magplay\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Preparation outcomes in the last hour",
+      "type": "barchart",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (mode, outcome) (increase(magplay_playback_attempts_total[1h]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Mean server readiness (not browser first frame)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (mode) (rate(magplay_playback_ready_seconds_sum[5m])) / sum by (mode) (rate(magplay_playback_ready_seconds_count[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Resource slot utilization",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "magplay_resource_in_use / magplay_resource_limit",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Control API requests / second",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status_class) (rate(magplay_http_requests_total{group=\"control\"}[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Node resident memory",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{job=\"magplay\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Free storage (latest snapshot)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "magplay_storage_bytes{kind=\"free\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Application logging drops/failures",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "magplay-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "magplay_telemetry_dropped_total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "magplay-prometheus"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Correlated application logs",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "magplay-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"magplay\"} | json",
+          "datasource": {
+            "type": "loki",
+            "uid": "magplay-loki"
+          },
+          "legendFormat": "{{mode}}{{resource}}{{group}}{{outcome}}"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  }
+}

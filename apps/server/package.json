@@ -9,6 +9,7 @@
     "@magplay/indexers": "*",
     "@magplay/playback": "*",
     "@magplay/seekable-tar": "*",
-    "@magplay/torrent-engine": "*"
+    "@magplay/torrent-engine": "*",
+    "@magplay/observability": "*"
   }
 }

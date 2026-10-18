@@ -16,3 +16,5 @@ Colocated timer/session tests and Chromium regressions cover leaving during prob
 ## Server shutdown
 
 `createApp()` in `apps/server/src/app.ts` owns everything it starts, and `close()` releases it: it stops accepting connections, closes open ones (media streams, status polls, a search waiting on a silent indexer, a torrent still looking for peers) without waiting for them, kills every ffmpeg (resuming paused ones first) and deletes their output, and closes the torrent engine. `main.ts` calls it on SIGTERM or SIGINT, with a 10 s backstop. From the moment shutdown begins, `/health` answers 503, so Docker and proxies stop routing to a stopping server. Tests in `app.test.ts` and `main.test.ts` cover streams, a paused ffmpeg, a hanging search, a loading torrent and the signal path.
+
+Logging and metrics follow the same ownership: the app closes its management listener, snapshot timers and runtime observers; the process flushes final lifecycle logs within the shutdown deadline. Shared torrent/probe jobs have independent log IDs and consumer links, so a disconnected consumer does not become a shared-job failure. See [logging and observability](logging.md).

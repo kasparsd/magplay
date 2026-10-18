@@ -1,0 +1,57 @@
+logging {
+  level = "warn"
+}
+
+// Only this Compose project's app, never unrelated host containers.
+discovery.docker "magplay" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+  filter {
+    name = "label"
+    values = [
+      "com.docker.compose.service=magplay",
+      "com.docker.compose.project=" + sys.env("COMPOSE_PROJECT_NAME"),
+    ]
+  }
+}
+
+discovery.relabel "magplay" {
+  targets = []
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label = "project"
+  }
+}
+
+loki.source.docker "magplay" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.docker.magplay.targets
+  relabel_rules = discovery.relabel.magplay.rules
+  forward_to = [loki.process.magplay.receiver]
+}
+
+loki.process "magplay" {
+  stage.json {
+    expressions = { level = "level", time = "time" }
+  }
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339Nano"
+    action_on_failure = "skip"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  stage.static_labels {
+    values = { service = "magplay", environment = "development" }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+    batch_size = "256KiB"
+    max_retries = 10
+  }
+}

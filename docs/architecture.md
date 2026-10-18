@@ -64,7 +64,7 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
 ### Upstream requests and secrets
 
 - Indexer adapters fetch through `request()` in `packages/indexers/src/release.ts`. It follows redirects itself, only on the same server (an http → https upgrade included) and at most three times, so an `X-Api-Key` header or `apikey=` query never reaches another host. A redirect elsewhere is a `SourceError` asking for the new address. Bodies go through `readBytes`/`readText`/`readJson`, capped at 16 MiB by `Content-Length` and while streaming.
-- `redactSecrets()` in `api-contract` replaces API keys in query strings, URL passwords and `X-Api-Key` values. `captureConsole()` (`apps/server/src/logs.ts`) applies it to every console line before printing it and keeping it for Debug, and the client applies `redactDeep()` to copied diagnostics. Secret settings themselves leave the server only as `{ set }`.
+- Secret settings leave the server only as `{ set }`. [Logging and observability](logging.md) owns structured logging/redaction, metrics and collection architecture. Its [implementation plan](plans/structured-logging.md) tracks delivery and verification.
 
 ### Settings and status
 

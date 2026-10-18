@@ -58,3 +58,24 @@ test('failed probing removes its phase and permits a later successful retry', as
   await retry
   assert.equal(play.preparation('ih', 0), null)
 })
+
+test('cancelled preparation has one metric outcome and no false error or session', async () => {
+  const { createLogging, createMetrics } = await import('@magplay/observability')
+  const logging = createLogging({ level: 'debug', sink: { write () {} } })
+  const telemetry = createMetrics({ runtime: false })
+  const options = {
+    engine: {},
+    media: {},
+    tabs: { start: () => { throw new Error('must not start') } },
+    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    input: () => '',
+    logger: logging.logger,
+    metrics: telemetry.metrics,
+  } as unknown as PlayOptions
+  const play = createPlay(options)
+  await assert.rejects(play.play({ ih: 'hash', idx: 0 }, () => true, { logger: logging.logger.child({ requestId: 'request' }) }), /cancelled/)
+  assert.match(await telemetry.registry.metrics(), /magplay_playback_attempts_total\{mode="unknown",outcome="cancelled"\} 1/)
+  assert.equal(logging.tail().filter(l => l.level === 'error' || l.level === 'warn').length, 0)
+  assert.ok(logging.tail().some(l => l.requestId === 'request' && typeof l.operationId === 'string'))
+  telemetry.close()
+})

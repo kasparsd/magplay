@@ -1,5 +1,7 @@
 // Status check registry: checks run lazily when /api/status is asked, and are cached per TTL so polling
 // never hammers indexers.
+import { noopLogger } from '@magplay/observability'
+import type { Logger } from '@magplay/observability'
 import { overallLevel } from '@magplay/api-contract'
 import type { StatusAction, StatusCheck, StatusLevel, StatusResponse } from '@magplay/api-contract'
 
@@ -38,7 +40,7 @@ export interface StatusRegistry {
   snapshot: (opts?: { wait?: number }) => Promise<StatusResponse>
 }
 
-export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: () => number, timeoutMs?: number } = {}): StatusRegistry {
+export function createStatus ({ now = Date.now, timeoutMs = 10_000, logger = noopLogger }: { now?: () => number, timeoutMs?: number, logger?: Logger } = {}): StatusRegistry {
   const checks = new Map<string, Entry>()
   function start (entry: Entry): Promise<void> {
     if (entry.running) return entry.running
@@ -53,6 +55,7 @@ export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: ()
         result = { level: 'error', message }
       }
       if (entry.generation === generation && checks.get(entry.def.id) === entry) {
+        if (result?.level !== entry.result?.level) logger[result?.level === 'error' || result?.level === 'warn' ? 'warn' : 'info']('status.changed', { sourceId: entry.def.id, outcome: result?.level ?? 'hidden' })
         entry.result = result
         entry.at = now()
       }

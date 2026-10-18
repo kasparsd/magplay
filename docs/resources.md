@@ -29,6 +29,7 @@ Long-running servers keep a few answers in memory. Each one is bounded, and Sett
 | Converted subtitle tracks | 64 tracks and 64 MiB of WebVTT, least recently used out | The newest track is always kept, however big. |
 | Search download links | 5,000 opaque link IDs | The links can carry indexer API keys, so they never reach the browser. An evicted ID answers 410 "search again". |
 | Explore answers | 200 entries, 60 s (counts 15 min) | Cleared when BitMagnet's address changes. |
+| Debug log tail | 200 records and 512 KiB | Sanitized records, each at most 8 KiB; stdout buffering is bounded separately. See [logging](logging.md). |
 | Closed player tabs | 1,000 fences of three minutes | See [lifetimes](lifecycle.md). |
 
 These are fixed constants rather than settings: none has needed tuning, and the Debug numbers show whether one ever does.

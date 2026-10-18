@@ -1,4 +1,6 @@
 // The HTTP API and media routes. Handlers parse requests, call services and send api-contract shapes.
+import { noopLogger } from '@magplay/observability'
+import type { Logger } from '@magplay/observability'
 import type { IncomingMessage } from 'node:http'
 import { isSameOrigin, route, sendCached } from '@magplay/http-kit'
 import type { Route } from '@magplay/http-kit'
@@ -26,6 +28,8 @@ import { json, parseAddRequest, parsePlayRequest, readJson } from './request.ts'
 import { serveSpeedtest } from './speedtest.ts'
 
 export interface RouteDeps {
+  logger?: Logger
+  requestLogger?: (req: IncomingMessage) => Logger
   engine: TorrentEngine
   hls: HlsSessions
   tabs: Tabs
@@ -49,7 +53,7 @@ const requestOrigin = (req: IncomingMessage): string =>
 
 const index = (value: string): number => Number(value)
 
-export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles, settings, status, checks }: RouteDeps): Route[] {
+export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles, settings, status, checks, logger = noopLogger, requestLogger = () => logger }: RouteDeps): Route[] {
   return [
 
     // Settings, status and debugging
@@ -73,13 +77,13 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
     route('POST', '/api/debug/clear-hls', ({ req, res }) => {
       sameOriginOnly(req)
       const stopped = hls.stopAll()
-      console.log(`[debug] cleared the conversion cache, stopped ${stopped} session(s)`)
+      logger.info('hls.cache.cleared', { count: stopped })
       json(res, 200, { stopped })
     }),
     route('GET', '/api/speedtest', ({ req, res }) => serveSpeedtest(req, res)),
 
     // Search and Explore
-    route('GET', '/api/search', async ({ res, query }) => json<SearchResponse>(res, 200, await search.search(query.get('q'), query.get('cat')))),
+    route('GET', '/api/search', async ({ req, res, query }) => json<SearchResponse>(res, 200, await search.search(query.get('q'), query.get('cat'), { logger: requestLogger(req) }))),
     route('GET', '/api/recent', async ({ res }) => json<RecentTorrent[]>(res, 200, await engine.recent())),
     route('GET', '/api/explore', async ({ res, query }) => json<ExploreResponse>(res, 200, await explore.browse(explore.params(query)))),
     route('GET', '/api/explore/facets', async ({ res, query }) => json<ExploreFacets>(res, 200, await explore.facets(explore.params(query)))),
@@ -98,11 +102,11 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       json<TorrentStatus>(res, 200, { ...out, preparation: query.has('idx') ? play.preparation(params.ih, Number(query.get('idx'))) : null, session: s ? hls.stats(s) : null })
     }),
     route('GET', '/api/probe/:ih/:idx', async ({ req, res, params }) => {
-      const info: ProbeResult = await play.probe(params.ih, index(params.idx))
+      const info: ProbeResult = await play.probe(params.ih, index(params.idx), { logger: requestLogger(req) })
       sendCached(req, res, JSON.stringify(info), { 'Content-Type': 'application/json' })
     }),
     route('POST', '/api/play', async ({ req, res }) =>
-      json<PlaybackDecision>(res, 200, await play.play(parsePlayRequest(await readJson(req)), () => res.destroyed))),
+      json<PlaybackDecision>(res, 200, await play.play(parsePlayRequest(await readJson(req)), () => res.destroyed, { logger: requestLogger(req) }))),
     route('POST', '/api/play/tab/:tab', ({ res, params }) => {
       tabs.close(params.tab)
       json(res, 200, { ok: true })

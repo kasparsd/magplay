@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto'
+import { noopLogger, noopMetrics, observeJob, outcome } from '@magplay/observability'
+import type { Logger, Metrics, OperationContext } from '@magplay/observability'
 // The torrent engine: one WebTorrent client, a metadata store and cache on disk, deadlines for loading,
 // idle unloading and size-based eviction. Created by createTorrentEngine() and released by close().
 import fs from 'node:fs/promises'
@@ -40,6 +43,8 @@ export const DEFAULT_LIVE: LiveOptions = {
 }
 
 export interface TorrentEngineOptions {
+  logger?: Logger
+  metrics?: Metrics
   /** Torrent data and saved metadata, one folder per info hash. */
   dir: string
   /** TCP and DHT port; 0 picks a free one. */
@@ -78,11 +83,11 @@ export interface TorrentInfo {
 
 export interface TorrentEngine {
   /** Adds (or reuses) a torrent by magnet, info hash or .torrent bytes and waits for its file list. Nothing is selected for download. */
-  add: (id: string | Uint8Array) => Promise<Torrent>
+  add: (id: string | Uint8Array, context?: OperationContext) => Promise<Torrent>
   /** A loaded torrent, re-adding it by info hash if it was unloaded. */
-  get: (infoHash: string) => Promise<Torrent>
+  get: (infoHash: string, context?: OperationContext) => Promise<Torrent>
   /** A file of a torrent, loading the torrent if needed. */
-  file: (infoHash: string, idx: number) => Promise<TorrentFile>
+  file: (infoHash: string, idx: number, context?: OperationContext) => Promise<TorrentFile>
   /** The file list as the pages show it, with a content warning; warnings are remembered for knownWarning(). */
   describe: (torrent: Torrent) => TorrentInfo
   /** A warning from a file list seen earlier, so search results can show it. */
@@ -129,8 +134,9 @@ async function * fileBytes (file: WtFile, start: number, end: number, signal: Ab
   }
 }
 
-export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT_LIVE, housekeepingMs = 60_000 }: TorrentEngineOptions): TorrentEngine {
-  const runLoad = createLimiter(() => live().maxLoads, () => new EngineBusyError('Torrent initialization is busy. Try again shortly.'))
+export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT_LIVE, housekeepingMs = 60_000, logger = noopLogger, metrics = noopMetrics }: TorrentEngineOptions): TorrentEngine {
+  let stopping = false
+  const runLoad = createLimiter(() => live().maxLoads, () => { metrics.reject('torrent', 'capacity'); logger.warn('resource.rejected', { resource: 'torrent', reason: 'capacity' }); return new EngineBusyError('Torrent initialization is busy. Try again shortly.') })
   const client = new WebTorrent({
     torrentPort: port,
     dhtPort: port,
@@ -140,10 +146,11 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     natPmp: false,
     utp: false, // uTP would bind the same UDP port as the DHT; peers connect over TCP
   })
-  client.on('error', (err: Error) => console.error('[torrent] client error:', err.message))
+  client.on('error', (err: Error) => logger.error('torrent.client.failed', { err }))
 
   const lastUsed = new Map<string, number>() // infoHash -> ms
   const openStreams = new Map<string, number>() // infoHash -> number of open streams
+  const jobIds = new Map<string, string>()
   const pending = new Map<string, Promise<Torrent>>() // infoHash -> load waiting for metadata
   // Notes from file lists we've seen, so later searches show them even when the title looks playable
   const warnings = new Map<string, string>()
@@ -179,7 +186,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     return h
   }
 
-  async function load (ih: string, parsed: ParsedTorrent, existing: WtTorrent | undefined): Promise<Torrent> {
+  async function load (ih: string, parsed: ParsedTorrent, existing: WtTorrent | undefined, log: Logger): Promise<Torrent> {
     // Metadata saved on an earlier visit: no need to wait for peers to send it again
     const metaFile = path.join(dir, ih, 'meta.torrent')
     const saved = await fs.readFile(metaFile).catch(() => null)
@@ -187,16 +194,34 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     const { extraTrackers, metadataTimeoutMs, checkingTimeoutMs } = live()
     parsed.announce = [...new Set([...(parsed.announce ?? []), ...extraTrackers])]
     const torrent = existing ?? client.add(parsed, { path: path.join(dir, ih), deselect: true })
-    await waitForTorrent(torrent, { metadataMs: metadataTimeoutMs, checkingMs: checkingTimeoutMs })
+    let checkingAt: number | undefined
+    let result: ReturnType<typeof outcome> = 'success'
+    try {
+      await waitForTorrent(torrent, {
+        metadataMs: metadataTimeoutMs,
+        checkingMs: checkingTimeoutMs,
+        onMetadata: () => {
+          checkingAt ??= performance.now()
+          log.debug('torrent.metadata.ready', { cacheClass: saved ? 'warm' : 'cold' })
+        }
+      })
+    } catch (err) { result = outcome(err); throw err } finally {
+      if (checkingAt !== undefined) {
+        const durationMs = performance.now() - checkingAt
+        metrics.job('verification', result, durationMs / 1000)
+        log.debug('torrent.verification.completed', { durationMs, outcome: result })
+      }
+    }
+    log.info('torrent.ready', { cacheClass: saved ? 'warm' : 'cold' })
     if (!saved) {
       fs.mkdir(path.dirname(metaFile), { recursive: true })
         .then(() => fs.writeFile(metaFile, torrent.torrentFile))
-        .catch((err: unknown) => console.error('[torrent] saving metadata:', err instanceof Error ? err.message : err))
+        .catch((err: unknown) => logger.error('torrent.metadata.save.failed', { err }))
     }
     return handle(torrent)
   }
 
-  async function add (id: string | Uint8Array): Promise<Torrent> {
+  async function add (id: string | Uint8Array, context?: OperationContext): Promise<Torrent> {
     let parsed: ParsedTorrent
     try {
       parsed = await parseTorrent(id)
@@ -210,22 +235,24 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     const existing = find(ih)
     if (existing?.ready) return handle(existing)
     const waiting = pending.get(ih)
-    if (waiting) return waiting
+    if (waiting) { context?.logger.info('torrent.job.joined', { jobId: jobIds.get(ih) }); return waiting }
     // Publish the whole initialization job before its first filesystem await.
     // Player title/probe requests often arrive together on a cold cache.
-    const job = runLoad(() => load(ih, parsed, existing))
+    const jobId = randomUUID()
+    jobIds.set(ih, jobId)
+    const job = observeJob(logger, metrics, 'torrent', async log => await runLoad(() => load(ih, parsed, existing, log)), { jobId, torrentId: ih }, context, () => stopping)
     pending.set(ih, job)
     try {
       return await job
     } finally {
-      if (pending.get(ih) === job) pending.delete(ih)
+      if (pending.get(ih) === job) { pending.delete(ih); jobIds.delete(ih) }
     }
   }
 
-  async function get (ih: string): Promise<Torrent> {
+  async function get (ih: string, context?: OperationContext): Promise<Torrent> {
     if (!INFO_HASH.test(ih)) throw new InvalidTorrentError('Bad info hash')
     const loaded = find(ih)
-    const torrent = loaded?.ready ? handle(loaded) : await add(ih)
+    const torrent = loaded?.ready ? handle(loaded) : await add(ih, context)
     touch(ih)
     return torrent
   }
@@ -235,11 +262,11 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     for (const t of [...client.torrents]) {
       const idle = Date.now() - (lastUsed.get(t.infoHash) ?? 0) > idleMs
       if (idle && !openStreams.get(t.infoHash) && !pending.has(t.infoHash)) {
-        console.log(`[torrent] unloading idle ${t.infoHash} ${t.name ?? ''}`)
+        logger.info('torrent.unloaded', { torrentId: t.infoHash, reason: 'idle' })
         t.destroy()
       }
     }
-    await evict(dir, cacheMaxBytes, name => !!find(name))
+    await evict(dir, cacheMaxBytes, name => !!find(name), logger)
   }
 
   let housekeepingRunning = false
@@ -247,7 +274,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     if (housekeepingRunning) return
     housekeepingRunning = true
     housekeeping()
-      .catch((err: unknown) => console.error('[cache]', err instanceof Error ? err.message : err))
+      .catch((err: unknown) => logger.error('cache.housekeeping.failed', { err }))
       .finally(() => { housekeepingRunning = false })
   }, housekeepingMs)
   timer.unref()
@@ -257,8 +284,8 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
   return {
     add,
     get,
-    async file (ih, idx) {
-      const file = (await get(ih)).files[idx]
+    async file (ih, idx, context) {
+      const file = (await get(ih, context)).files[idx]
       if (!file) throw new NoSuchFileError('No such file in this torrent')
       return file
     },
@@ -300,10 +327,11 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     },
     housekeeping,
     close () {
+      stopping = true
       closing ??= new Promise<void>(resolve => {
         clearInterval(timer)
         client.destroy(err => {
-          if (err) console.error('[torrent] closing:', err.message)
+          if (err) logger.error('torrent.close.failed', { err })
           resolve()
         })
       })

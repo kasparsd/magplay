@@ -1,3 +1,5 @@
+import { noopLogger, noopMetrics, observeJob } from '@magplay/observability'
+import type { Logger, Metrics } from '@magplay/observability'
 // Explore: BitMagnet's browser behind a short cache, with its query parameters checked.
 import { createBitmagnetBrowser, isContentType } from '@magplay/indexers'
 import type { BitmagnetBrowser, BrowseOptions, ContentType, FacetFilter } from '@magplay/indexers'
@@ -9,6 +11,8 @@ const FACETS_TIMEOUT_MS = 120_000
 const CACHE_LIMIT = 200
 
 export interface ExploreOptions {
+  logger?: Logger
+  metrics?: Metrics
   /** BitMagnet's origin, read when the service is (re)built; null turns Explore off. */
   url: () => string | null
   timeoutMs: () => number
@@ -35,7 +39,7 @@ export interface Explore {
 
 const unavailable = (): HttpError => new HttpError(404, 'Explore needs BitMagnet. Set its address in Settings → Sources.')
 
-export function createExplore ({ url, timeoutMs, createBrowser = u => createBitmagnetBrowser({ url: u }) }: ExploreOptions): Explore {
+export function createExplore ({ url, timeoutMs, logger = noopLogger, metrics = noopMetrics, createBrowser = u => createBitmagnetBrowser({ url: u }) }: ExploreOptions): Explore {
   let browser: BitmagnetBrowser | null = null
   // Explore answers are cached briefly: browsing goes back and forth over the same filters
   const cache = new Map<string, { at: number, value: Promise<unknown> }>()
@@ -50,7 +54,7 @@ export function createExplore ({ url, timeoutMs, createBrowser = u => createBitm
   function cached<T> (key: string, load: () => Promise<T>, ttl = 60_000): Promise<T> {
     const hit = cache.get(key)
     if (hit && Date.now() - hit.at < ttl) return hit.value as Promise<T>
-    const value = load().catch((err: unknown) => {
+    const value = observeJob(logger, metrics, 'explore', async () => await load()).catch((err: unknown) => {
       cache.delete(key)
       throw err
     })
@@ -74,7 +78,7 @@ export function createExplore ({ url, timeoutMs, createBrowser = u => createBitm
   function warm (): void {
     if (!browser) return
     for (const type of ['movie', 'tv_show'] as const) {
-      loadFacets({ type }).catch((err: unknown) => console.log(`[explore] warming ${type} counts: ${err instanceof Error ? err.message : String(err)}`))
+      loadFacets({ type }).catch(() => {})
     }
   }
 

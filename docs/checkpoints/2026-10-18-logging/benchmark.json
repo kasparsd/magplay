@@ -1,0 +1,209 @@
+{
+  "scope": "Synthetic local-file domain preparation; no HTTP, Docker, browser or real-server claim",
+  "reports": [
+    {
+      "mode": "disabled",
+      "samples": [
+        {
+          "kind": "direct",
+          "cold": true,
+          "ms": 37.79
+        },
+        {
+          "kind": "remux",
+          "cold": true,
+          "ms": 159.76
+        },
+        {
+          "kind": "seek",
+          "cold": true,
+          "ms": 124.68
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.06
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 128.21
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 123.33
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.06
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 121.39
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 120.18
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.06
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 124.17
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 124.31
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.04
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 123.23
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 120.9
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.03
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 124
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 123.31
+        }
+      ],
+      "nodeCpuMs": 69.812,
+      "residentMiB": 82.45994567871094,
+      "eventLoopP99Ms": 11.444223,
+      "records": 0,
+      "logBytes": 0,
+      "applicationTailRecords": 0,
+      "series": 0
+    },
+    {
+      "mode": "enabled",
+      "samples": [
+        {
+          "kind": "direct",
+          "cold": true,
+          "ms": 43.1
+        },
+        {
+          "kind": "remux",
+          "cold": true,
+          "ms": 158.53
+        },
+        {
+          "kind": "seek",
+          "cold": true,
+          "ms": 127.27
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.15
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 125.49
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 123.19
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.14
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 121.76
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 122.52
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.13
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 122.38
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 123.48
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.11
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 124.77
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 117.96
+        },
+        {
+          "kind": "direct",
+          "cold": false,
+          "ms": 0.1
+        },
+        {
+          "kind": "remux",
+          "cold": false,
+          "ms": 119.78
+        },
+        {
+          "kind": "seek",
+          "cold": false,
+          "ms": 117.36
+        }
+      ],
+      "nodeCpuMs": 76.711,
+      "residentMiB": 83.31929779052734,
+      "eventLoopP99Ms": 11.444223,
+      "records": 131,
+      "logBytes": 53486,
+      "applicationTailRecords": 131,
+      "series": 59
+    }
+  ]
+}

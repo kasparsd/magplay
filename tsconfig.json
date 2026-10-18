@@ -5,6 +5,9 @@
       "path": "packages/api-contract"
     },
     {
+      "path": "packages/observability"
+    },
+    {
       "path": "packages/release-info"
     },
     {

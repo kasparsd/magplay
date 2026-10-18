@@ -36,13 +36,15 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 11. **Player chrome, theater layout and performance graph (Player steps 1–3):** one overlay chrome for every mode, video sized to the viewport, and three Performance lanes fed by the status poll with ffmpeg `fps`/`cpu`. See [the Player roadmap](user-interface.md#player-roadmap).
 12. **Hardening and long-session limits:** dependency advisory triaged and accepted; same-server redirects and 16 MiB bodies for indexers; secrets redacted from logs and diagnostics; bounded env knobs; LRU probe/subtitle caches with sizes in Debug; `/health` 503 while stopping; shutdown tests. See [resources](resources.md#in-memory-caches) and [lifecycle](lifecycle.md#server-shutdown).
 
+13. **Application observability:** structured correlated logs, safe error serialization and bounded stdout/Debug capture; independent low-cardinality metrics and an optional private listener; explicit runtime observer/shutdown ownership and Docker rotation. See [logging architecture](logging.md), [implementation](plans/structured-logging.md) and [local evidence](checkpoints/2026-10-18-logging.md).
+
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
 ## Verification and confidence
 
-- Fast colocated suite: **194 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, not helper modules or browser tests.
+- Fast colocated suite: **219 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
-- Chromium: **41 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
+- Chromium: **50 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
 - `npm run test:all` runs all three suites. CI also runs `npm run typecheck` and `npm run lint` (no warnings allowed). The Node 22 validation and first Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md); the isolated Docker check was rerun on Node 24 Alpine after each reorganization step, most recently after Phases 3–4 on 2026-10-18 (arm64; remux first segment 217 ms, seek-to-30 s 221 ms).
 - Browser fixture media is fully cached; the separate peer suite covers uncached transfer. Both generate original data/media locally and require no public swarm or live indexer.
 - Local Docker acceptance is Linux/arm64 on the development machine, **not** proof of server performance, browser rendering through the container, large-file hashing latency, or amd64 compatibility.
@@ -52,12 +54,12 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). What is left needs the real server and devices, then cleanup that waits on them.
+Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Application observability (structured logs, a small metrics baseline and bounded local collection) is implemented for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs.
 
 | # | Priority | Work | Completion evidence |
 | --- | --- | --- | --- |
 | 1 | **P1** | Check the browsers/devices actually used | Mobile controls and fullscreen, audio/subtitle switching, and unsupported-format/external-player handoff on each device in use, with the new chrome. Each failure becomes a test or a Player item. |
-| 2 | **P1** | Measure on the real server | A transcode that falls behind and ffmpeg CPU in the Performance graph (Linux only); remux startup/seek timings; cache sizes in Debug over a long session. Record the numbers here and tune limits only if they call for it. |
+| 2 | **P1** | Measure on the real server | A transcode that falls behind and ffmpeg CPU in the Performance graph (Linux only); remux startup/seek timings; cache sizes in Debug over a long session. Use structured logs for server stages and device evidence for browser readiness. Record the numbers here and tune limits only if they call for it. |
 | 3 | **P2** | Finish the Player checklists | The open manual checks in [Player steps 1–2](user-interface.md#player-roadmap) (layout at the listed sizes, 375 px portrait and landscape), `containerLabel` in ⓘ Details, and the remaining P4 Details item. |
 | 4 | **P2** | Player in TypeScript | `player.js` (and `capabilities.js`) become TypeScript now the redesign has landed, split into small modules; no behaviour change. |
 | 5 | **P2** | Changesets and application changelog ([plan](plans/changesets-changelog.md)) | One application version and generated changelog owned by the server workspace; release notes alongside changes, explicit version preparation, and CI checks for missing/invalid notes. Manual GitHub Releases reuse existing versioned Docker publishing. Planned, not implemented. |
@@ -66,7 +68,7 @@ Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [
 | 8 | **P3 / conditional** | Fingerprinted client assets | Only if revalidating unversioned bundles becomes a measured problem. |
 | 9 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
 
-**Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Item 5 reshapes the player's chrome, not its lifecycle ([lifetime rules](lifecycle.md)). Phases 3–4 are the scheduled structural work, and they must not change behaviour.
+**Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
 
 Before public/untrusted exposure, authentication, media/API access protection and Origin/CSRF handling become mandatory deployment gates. They are intentionally not account features on the local-only roadmap.
 

@@ -10,7 +10,7 @@ export interface Pending extends Pick<EventEmitter, 'once' | 'off'> {
 }
 
 /** Bound metadata discovery separately from potentially long cached-piece checking. */
-export function waitForTorrent<T extends Pending> (torrent: T, { metadataMs, checkingMs }: { metadataMs: number, checkingMs: number }): Promise<T> {
+export function waitForTorrent<T extends Pending> (torrent: T, { metadataMs, checkingMs, onMetadata = () => {} }: { metadataMs: number, checkingMs: number, onMetadata?: () => void }): Promise<T> {
   return new Promise((resolve, reject) => {
     let timer: NodeJS.Timeout | undefined
     const done = (): void => {
@@ -28,7 +28,7 @@ export function waitForTorrent<T extends Pending> (torrent: T, { metadataMs, che
         reject(new TorrentTimeoutError(message))
       }, ms)
     }
-    const metadata = (): void => arm(checkingMs, 'Checking cached torrent data took too long. Retry or increase TORRENT_CHECK_TIMEOUT_S for large files.')
+    const metadata = (): void => { onMetadata(); arm(checkingMs, 'Checking cached torrent data took too long. Retry or increase TORRENT_CHECK_TIMEOUT_S for large files.') }
     const ready = (): void => { done(); resolve(torrent) }
     const error = (err: unknown): void => {
       done()

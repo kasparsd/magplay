@@ -18,7 +18,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 try {
   const { ih, files, cache } = await prepareCachedMedia(dir)
   report.platform = await docker('image', 'inspect', image, '--format', '{{.Os}}/{{.Architecture}}')
-  await docker('run', '-d', '--name', name, '-p', '127.0.0.1::8080', '-e', 'EXTRA_TRACKERS=', '-e', 'TORRENT_PORT=0', '-e', 'DHT_ENABLED=false', '-e', 'LSD_ENABLED=false', image)
+  await docker('run', '-d', '--name', name, '-p', '127.0.0.1::8080', '-p', '127.0.0.1::9091', '--log-driver', 'local', '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--log-opt', 'mode=non-blocking', '--log-opt', 'max-buffer-size=1m', '-e', 'METRICS_ENABLED=true', '-e', 'METRICS_HOST=0.0.0.0', '-e', 'TORZNAB_URL=http://127.0.0.1:1/feed?apikey=docker-secret', '-e', 'EXTRA_TRACKERS=', '-e', 'TORRENT_PORT=0', '-e', 'DHT_ENABLED=false', '-e', 'LSD_ENABLED=false', image)
   started = true
   const port = (await docker('port', name, '8080/tcp')).split(':').at(-1)
   const origin = `http://127.0.0.1:${port}`
@@ -28,6 +28,7 @@ try {
     if (i === 60) throw new Error('Container did not become healthy')
     await sleep(200)
   }
+  const metricsPort = (await docker('port', name, '9091/tcp')).split(':').at(-1)
   assert.equal(await docker('inspect', name, '--format', '{{.Config.User}}'), 'node')
   assert.equal((await get('/player.js')).status, 200)
   assert.equal((await get('/lib/progress.js')).status, 404)
@@ -78,7 +79,24 @@ try {
     assert.equal((await get(decision.url)).status, 404)
   }
   report.checks.push('AC3 remux, HLS bytes, restart at 30 seconds and session cleanup')
+  const metrics = await fetch(`http://127.0.0.1:${metricsPort}/metrics`).then(r => r.text())
+  assert.match(metrics, /magplay_playback_attempts_total/)
+  assert.match(metrics, /magplay_playback_ready_seconds/)
+  assert.match(metrics, /process_resident_memory_bytes/)
+  const debug = await get('/api/debug').then(r => r.json())
+  assert.equal(debug.logging.level, 'info')
+  assert.doesNotMatch(JSON.stringify(debug.log), /docker-secret/)
+  assert.ok(debug.log.some(line => line.event === 'playback.ready' && line.requestId && line.operationId))
+  report.checks.push('private metrics, structured Debug and sanitized correlated playback')
   report.resources = await docker('stats', '--no-stream', '--format', '{{.CPUPerc}} CPU; {{.MemUsage}}', name)
+  await docker('stop', '--time', '10', name)
+  const lines = (await docker('logs', name)).split('\n').filter(Boolean).map(line => JSON.parse(line))
+  assert.ok(lines.some(line => line.event === 'server.stopped'))
+  assert.ok(lines.some(line => line.event === 'hls.media.published'))
+  assert.ok(lines.every(line => line.time && line.level && line.runId && line.service === 'magplay'))
+  assert.doesNotMatch(JSON.stringify(lines), /docker-secret/)
+  assert.equal(await docker('inspect', name, '--format', '{{.State.ExitCode}}'), '0')
+  report.checks.push('rotated local logging driver, JSON stdout and graceful final flush')
   console.log(JSON.stringify(report, null, 2))
 } catch (err) {
   if (started) console.error(await docker('logs', name).catch(() => 'Container logs unavailable'))

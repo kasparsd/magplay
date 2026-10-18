@@ -1,3 +1,4 @@
+import type { LogRecord, LogLevel } from './logging.ts'
 // Status checks: GET /api/status, merged in the client with browser-side checks.
 
 export type StatusLevel = 'ok' | 'warn' | 'error' | 'unknown'
@@ -63,5 +64,6 @@ export interface DebugInfo {
   /** Busy slots and limits for each kind of heavy work. */
   resources: DebugResource[]
   disk: { free: number, size: number, cacheBytes: number, cacheMaxBytes: number } | null
-  log: Array<{ at: number, level: 'debug' | 'info' | 'warn' | 'error', text: string }>
+  log: LogRecord[]
+  logging: { level: LogLevel | 'silent', dropped: number }
 }

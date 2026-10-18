@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 const main = new URL('./main.ts', import.meta.url).pathname
-const keys = /^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS|MAX_|HLS_MAX_GB|MIN_FREE_GB|PORT|CACHE_DIR)/
+const keys = /^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS|MAX_|HLS_MAX_GB|MIN_FREE_GB|PORT|CACHE_DIR|LOG_LEVEL|METRICS_)/
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !keys.test(key)))
 
 const tempDir = (t: { after: (fn: () => void) => void }): string => {
@@ -30,7 +30,7 @@ test('invalid env values stop the server at startup, naming the variable', t => 
   for (const [key, value, message] of [['MAX_PROBES', '0', 'at least 1'], ['HLS_MAX_GB', 'Infinity', 'a number']] as const) {
     const result = spawnSync(process.execPath, [main], { env: { ...baseEnv, CACHE_DIR: dir, [key]: value }, encoding: 'utf8', timeout: 10_000 })
     assert.equal(result.status, 1, key)
-    assert.match(result.stderr, new RegExp(`${key} must be ${message}`))
+    assert.match(result.stdout, new RegExp(`${key} must be ${message}`))
   }
 })
 
@@ -55,5 +55,17 @@ test('SIGTERM shuts down gracefully: the port closes and the process exits 0', {
   const [code] = await exited as [number | null]
   await download.body?.cancel().catch(() => {})
   assert.equal(code, 0, output)
-  assert.match(output, /\[server\] SIGTERM: shutting down/)
+  assert.match(output, /"event":"server.stopping"/)
+  assert.match(output, /"event":"server.stopped"/)
+})
+
+test('bootstrap failures never echo raw configuration values', t => {
+  const dir = tempDir(t)
+  for (const key of ['LOG_LEVEL', 'METRICS_HOST', 'EXTRA_TRACKERS', 'TORZNAB_URL']) {
+    const result = spawnSync(process.execPath, [main], { env: { ...baseEnv, CACHE_DIR: dir, [key]: key === 'METRICS_HOST' ? 'opaque-config-secret/invalid' : 'opaque-config-secret' }, encoding: 'utf8', timeout: 10_000 })
+    assert.equal(result.status, 1)
+    const text = result.stdout + result.stderr
+    assert.doesNotMatch(text, /opaque-config-secret/)
+    assert.match(text, /server.failed/)
+  }
 })

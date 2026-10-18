@@ -3,6 +3,8 @@
 // come from env vars only, validated the same way. All env parsing lives here, including indexer source configs,
 // so no package reads process.env.
 import path from 'node:path'
+import type { Logger, LogLevel } from '@magplay/observability'
+import { noopLogger } from '@magplay/observability'
 import { SOURCE_TYPES } from '@magplay/indexers'
 import type { SourceConfig, SourceType } from '@magplay/indexers'
 import type { ListItem, ValueDef } from '@magplay/api-contract'
@@ -10,6 +12,10 @@ import { createSettingsStore, resolve } from './settings-store.ts'
 import type { Env, EnvReaders, SettingsStore } from './settings-store.ts'
 
 export interface Config {
+  logLevel: LogLevel | 'silent'
+  metricsEnabled: boolean
+  metricsHost: string
+  metricsPort: number
   port: number
   sources: SourceConfig[]
   /** BitMagnet's origin for Explore, or null when there's none. */
@@ -42,7 +48,7 @@ export function hostName (url: string): string {
   try {
     u = new URL(url)
   } catch {}
-  if (!u || !/^https?:$/.test(u.protocol)) throw new Error(`Not an http(s) URL: ${url}`)
+  if (!u || !/^https?:$/.test(u.protocol)) throw new Error('Not an http(s) URL; check source address settings')
   return u.hostname.split('.')[0] ?? u.hostname
 }
 
@@ -99,7 +105,7 @@ const field = (item: ListItem, key: string): string => {
 export function sourceConfigs (items: readonly ListItem[]): SourceConfig[] {
   return items.map(item => {
     const type = field(item, 'type')
-    if (!SOURCE_TYPES.includes(type as SourceType)) throw new Error(`Unknown source type: ${type}`)
+    if (!SOURCE_TYPES.includes(type as SourceType)) throw new Error('Unknown source type')
     const [name, url, indexer] = [field(item, 'name'), field(item, 'url'), field(item, 'indexer')]
     const base = { id: item.id, url, apiKey: field(item, 'apiKey') }
     if (type === 'jackett') return { ...base, type, name: name || 'Jackett', indexer: indexer || 'all' }
@@ -149,7 +155,7 @@ const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1, max: 10_080 },
 ]
 
-type EnvOnlyConfig = Pick<Config, 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'dhtEnabled' | 'lsdEnabled' |
+type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'dhtEnabled' | 'lsdEnabled' |
   'maxHlsSessions' | 'maxTorrentLoads' | 'maxProbes' | 'maxSubtitleJobs' | 'extraTrackers' | 'metadataTimeoutMs' | 'checkingTimeoutMs' | 'idleTorrentMs'>
 
 type Values = Readonly<Record<string, unknown>>
@@ -165,7 +171,7 @@ export function trackersFromEnv (value: string | undefined): string[] {
   return splitList(value).map(tracker => {
     let protocol = ''
     try { protocol = new URL(tracker).protocol } catch {}
-    if (!['udp:', 'http:', 'https:', 'ws:', 'wss:'].includes(protocol)) throw new Error(`EXTRA_TRACKERS: "${tracker}" is not a udp://, http(s):// or ws(s):// tracker URL`)
+    if (!['udp:', 'http:', 'https:', 'ws:', 'wss:'].includes(protocol)) throw new Error('EXTRA_TRACKERS: expected udp, http(s) or ws(s) tracker URLs')
     return tracker
   })
 }
@@ -174,6 +180,7 @@ export function trackersFromEnv (value: string | undefined): string[] {
 export function envOnlyConfig (env: Env): EnvOnlyConfig {
   const v = resolve(env, {}, {}, ENV_ONLY as unknown as ValueDef[]).effective
   return {
+    ...loggingConfig(env),
     port: num(v, 'port'),
     torrentPort: num(v, 'torrentPort'),
     cacheDir: path.resolve(str(v, 'cacheDir')),
@@ -218,10 +225,10 @@ export interface AppConfig {
 }
 
 /** Reads env and the settings file once; an invalid env value throws, naming the variable. */
-export function loadConfig (env: Env): AppConfig {
+export function loadConfig (env: Env, logger: Logger = noopLogger): AppConfig {
   const fixed = envOnlyConfig(env)
   const settingsFile = path.join(fixed.cacheDir, 'settings.json')
-  const settings = createSettingsStore({ file: settingsFile, env, readers })
+  const settings = createSettingsStore({ file: settingsFile, env, readers, logger })
   let config: Config = { ...fixed, ...deriveSettings(settings.effective) }
   const listeners = new Set<(config: Config, changed: string[]) => void>()
   settings.on('changed', changed => {
@@ -237,4 +244,17 @@ export function loadConfig (env: Env): AppConfig {
       return () => listeners.delete(listener)
     },
   }
+}
+
+/** Parse before loading settings so configuration failures can use bootstrap logging. */
+export function loggingConfig (env: Env): Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort'> {
+  const logLevel = env.LOG_LEVEL || 'info'
+  if (!['debug', 'info', 'warn', 'error', 'silent'].includes(logLevel)) throw new Error('LOG_LEVEL must be debug, info, warn, error or silent')
+  const enabled = env.METRICS_ENABLED || 'false'
+  if (!['true', 'false', 'on', 'off', '1', '0'].includes(enabled)) throw new Error('METRICS_ENABLED must be a boolean')
+  const port = Number(env.METRICS_PORT || 9091)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('METRICS_PORT must be an integer from 1 to 65535')
+  const host = env.METRICS_HOST || '127.0.0.1'
+  if (!/^[a-zA-Z0-9.:-]{1,253}$/.test(host)) throw new Error('METRICS_HOST must be a host name or IP address')
+  return { logLevel: logLevel as LogLevel | 'silent', metricsEnabled: ['true', 'on', '1'].includes(enabled), metricsHost: host, metricsPort: port }
 }

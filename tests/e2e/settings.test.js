@@ -155,3 +155,17 @@ test('only the settings people tune are on the page, and Sources has a labelled 
   await expect(page.locator('#row-setting-sources > .row-text > .row-label')).toHaveText('Indexers')
   await expect(page.locator('#row-setting-sources > .row-text > .help')).toBeVisible()
 })
+
+test('Debug explains capture level and preserves expanded structured records during polling', async ({ page, app }) => {
+  await page.request.get(`${app.origin}/api/search?q=fixture`)
+  await page.goto(`${app.origin}/settings#debug`)
+  await expect(page.getByText('Server capture: info', { exact: false })).toBeVisible()
+  const record = page.locator('.log details').filter({ hasText: 'search.completed' }).first()
+  await record.locator('summary').click()
+  await expect(record.locator('pre')).toContainText('operationId')
+  await expect(record.locator('pre')).toContainText('requestId')
+  await page.waitForResponse(r => r.url().endsWith('/api/debug'))
+  await expect(record).toHaveAttribute('open', '')
+  await page.locator('label').filter({ has: page.locator('input[name="log-level"][value="error"]') }).click()
+  await expect(page.locator('.log')).not.toContainText('search.completed')
+})

@@ -8,13 +8,13 @@ const HEADER_SECRET = /(\bx-api-key["']?\s*[:=]\s*["']?)[^\s"',}]+/gi
 
 /** `text` with API keys in query strings, URL passwords and X-Api-Key values replaced by `***`. */
 export function redactSecrets (text: string): string {
-  return text.replace(QUERY_SECRET, '$1***').replace(USERINFO, '$1***@').replace(HEADER_SECRET, '$1***')
+  return text.replace(QUERY_SECRET, '$1***').replace(USERINFO, '$1***@').replace(HEADER_SECRET, '$1***').replace(/(\b(?:authorization|cookie|password|passkey|access_token|token)["']?\s*[:=]\s*["']?)[^\r\n"',}]+/gi, '$1***')
 }
 
 /** A JSON-like value with every string passed through redactSecrets(). */
 export function redactDeep<T> (value: T): T {
   if (typeof value === 'string') return redactSecrets(value) as T
   if (Array.isArray(value)) return value.map(redactDeep) as T
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactDeep(v)])) as T
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, /api.?key|password|passkey|token|authorization|cookie|secret/i.test(k) ? '***' : redactDeep(v)])) as T
   return value
 }

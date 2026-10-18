@@ -9,6 +9,7 @@
   "dependencies": {
     "@magplay/release-info": "*",
     "parse-torrent": "11.0.24",
-    "webtorrent": "3.0.21"
+    "webtorrent": "3.0.21",
+    "@magplay/observability": "*"
   }
 }
