@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { redactSecrets } from '@magplay/api-contract'
 import { createRouter } from '@magplay/http-kit'
 import { createHlsSessions, createMediaTools } from '@magplay/playback'
 import type { HlsSessions, SpawnProcess } from '@magplay/playback'
@@ -148,7 +149,7 @@ export function createApp ({ config, logs = () => [], publicDir = path.join(repo
           const address = server.address()
           port = typeof address === 'object' && address ? address.port : wanted
           const { sources } = current()
-          console.log(`magplay listening on :${port}, sources: ${sources.map(c => `${c.name} (${c.type} ${c.url})`).join(', ')}`)
+          console.log(`magplay listening on :${port}, sources: ${sources.map(c => `${c.name} (${c.type} ${redactSecrets(c.url)})`).join(', ') || 'none'}`)
           resolve(port)
         })
       })

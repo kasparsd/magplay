@@ -1,7 +1,7 @@
 // Torznab adapter: BitMagnet, Jackett (per indexer, `all`, or filter feeds), Prowlarr per-indexer feeds, NZBHydra2.
 import { XMLParser } from 'fast-xml-parser'
 import { SourceError } from './errors.ts'
-import { asArray, asRecord, asString, isRecord, release, request, statusError } from './release.ts'
+import { asArray, asRecord, asString, isRecord, readText, release, request, statusError } from './release.ts'
 import type { Fetch, Release } from './release.ts'
 import type { CheckOptions, SearchOptions, Source } from './source.ts'
 
@@ -46,7 +46,7 @@ export function createTorznabSource ({ name, url, apiKey }: TorznabOptions, { fe
       if (apiKey) u.searchParams.set('apikey', apiKey)
       // Torznab servers report bad keys etc. as <error code description> with a 4xx status
       const res = await request(fetchImpl, u, { signal }, { acceptErrors: true })
-      const body = await res.text()
+      const body = await readText(res, name)
       if (!res.ok && !body.includes('<error')) throw statusError(res.status)
       return parseTorznabFeed(body, name)
     },
@@ -57,7 +57,7 @@ export function createTorznabSource ({ name, url, apiKey }: TorznabOptions, { fe
       if (apiKey) u.searchParams.set('apikey', apiKey)
       const res = await request(fetchImpl, u, signal ? { signal } : {}, { acceptErrors: true })
       if (res.status === 401 || res.status === 403) throw statusError(res.status)
-      parseTorznabCaps(await res.text(), res.ok ? null : res.status)
+      parseTorznabCaps(await readText(res, name), res.ok ? null : res.status)
     },
   }
 }

@@ -1,6 +1,6 @@
 // The settings page, /settings#<section>: a loop over the settings schema, one control per entry.
 // Server settings collect in a save bar and are saved together; browser settings apply as they change.
-import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, validate } from '@magplay/api-contract'
+import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
 import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, renderControl } from './lib/controls.ts'
@@ -117,8 +117,8 @@ const ACTIONS: Record<string, () => Promise<string | undefined>> = {
     const [info, settings, statusNow] = await Promise.all([
       api<DebugInfo>('/api/debug'), api<SettingsResponse>('/api/settings'), api<StatusResponse>('/api/status'),
     ])
-    // Settings come masked from the server; the browser's own preferences hold no secrets
-    await copy(JSON.stringify({ at: new Date().toISOString(), userAgent: navigator.userAgent, debug: info, settings, preferences: prefs, status: statusNow }, null, 2))
+    // Settings come with secret fields masked; redactDeep also removes keys someone put in a URL's query string or userinfo
+    await copy(JSON.stringify(redactDeep({ at: new Date().toISOString(), userAgent: navigator.userAgent, debug: info, settings, preferences: prefs, status: statusNow }), null, 2))
     return 'Copied'
   },
   'debug.clearHls': async () => {

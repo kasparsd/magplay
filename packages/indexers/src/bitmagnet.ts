@@ -298,7 +298,7 @@ export function createBitmagnetBrowser ({ url }: { url: string }, { fetch: fetch
   return {
     async check ({ signal } = {}) {
       const res = await post({ query: '{ __typename }' }, signal)
-      const body: unknown = await res.json().catch(() => null)
+      const body: unknown = await readJson(res, 'BitMagnet').catch(() => null)
       if (!asRecord(body).data) throw new SourceError('BitMagnet: no GraphQL at this address')
     },
 

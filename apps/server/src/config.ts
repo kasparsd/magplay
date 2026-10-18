@@ -129,7 +129,7 @@ const DEFAULT_TRACKERS = [
 ]
 
 const count = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max, integer: true })
-const seconds = (key: string, name: string, fallback: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1 })
+const seconds = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max })
 type EnvOnlyDef = Pick<ValueDef, 'key' | 'env' | 'type' | 'default'> & { min?: number, max?: number, integer?: boolean }
 /** Env-only knobs, in the settings schema's shape so they validate (and fail at startup) like page settings. */
 const ENV_ONLY: EnvOnlyDef[] = [
@@ -144,9 +144,9 @@ const ENV_ONLY: EnvOnlyDef[] = [
   count('maxTorrentLoads', 'MAX_TORRENT_LOADS', 4, 64),
   count('maxProbes', 'MAX_PROBES', 2, 16),
   count('maxSubtitleJobs', 'MAX_SUBTITLE_JOBS', 1, 16),
-  seconds('metadataTimeoutS', 'METADATA_TIMEOUT_S', 60),
-  seconds('checkTimeoutS', 'TORRENT_CHECK_TIMEOUT_S', 7200),
-  { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1 },
+  seconds('metadataTimeoutS', 'METADATA_TIMEOUT_S', 60, 3600),
+  seconds('checkTimeoutS', 'TORRENT_CHECK_TIMEOUT_S', 7200, 86_400),
+  { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1, max: 10_080 },
 ]
 
 type EnvOnlyConfig = Pick<Config, 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'dhtEnabled' | 'lsdEnabled' |
@@ -158,6 +158,17 @@ const str = (v: Values, key: string): string => v[key] as string
 const bool = (v: Values, key: string): boolean => v[key] as boolean
 const list = (v: Values, key: string): ListItem[] => v[key] as ListItem[]
 const GB = 1024 ** 3
+
+/** EXTRA_TRACKERS as a list; unset means the defaults, set but empty means none. A non-tracker URL throws, naming it. */
+export function trackersFromEnv (value: string | undefined): string[] {
+  if (value === undefined) return DEFAULT_TRACKERS
+  return splitList(value).map(tracker => {
+    let protocol = ''
+    try { protocol = new URL(tracker).protocol } catch {}
+    if (!['udp:', 'http:', 'https:', 'ws:', 'wss:'].includes(protocol)) throw new Error(`EXTRA_TRACKERS: "${tracker}" is not a udp://, http(s):// or ws(s):// tracker URL`)
+    return tracker
+  })
+}
 
 /** The env-only part of the configuration; an invalid value throws, naming the variable. */
 export function envOnlyConfig (env: Env): EnvOnlyConfig {
@@ -174,8 +185,7 @@ export function envOnlyConfig (env: Env): EnvOnlyConfig {
     maxTorrentLoads: num(v, 'maxTorrentLoads'),
     maxProbes: num(v, 'maxProbes'),
     maxSubtitleJobs: num(v, 'maxSubtitleJobs'),
-    // Set but empty means "no extra trackers", which differs from unset (the defaults)
-    extraTrackers: env.EXTRA_TRACKERS === undefined ? DEFAULT_TRACKERS : splitList(env.EXTRA_TRACKERS),
+    extraTrackers: trackersFromEnv(env.EXTRA_TRACKERS),
     metadataTimeoutMs: num(v, 'metadataTimeoutS') * 1000,
     checkingTimeoutMs: num(v, 'checkTimeoutS') * 1000,
     idleTorrentMs: num(v, 'idleTorrentMin') * 60_000,
