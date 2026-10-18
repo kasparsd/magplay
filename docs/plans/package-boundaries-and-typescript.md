@@ -1,6 +1,6 @@
 # Package boundaries and TypeScript
 
-Status: **In progress (Phase 4 scheduled; 5–6 on touch)** · Owner: unassigned · Last updated: 2026-10-18
+Status: **In progress (Phase 7 next; 5–6 on touch)** · Owner: unassigned · Last updated: 2026-10-18
 
 The target structure, its reasons and its rules are canonical in [architecture.md](../architecture.md); priority and completion evidence are in [the roadmap](../roadmap.md). This plan tracks how we get there.
 
@@ -46,7 +46,7 @@ Build and runtime choices are summarized in the architecture doc; details live h
 4. **Type checking with project references:** `tsconfig.base.json` holds compiler options. Each package and app has a `tsconfig.json` with `composite` and references to its dependencies. Packages use Node types without DOM; `apps/client` uses DOM without Node types; `api-contract` and `release-info` use neither. `npm run typecheck` runs `tsc -b`. Project references need declaration output, so emit goes to a gitignored `.tsbuild/` inside each project, used only by the type checker. The base config sets `composite`, `include`, `rootDir` and the output paths once through `${configDir}`; a project's `tsconfig.json` names only its `types`/`lib` and references. The root `tsconfig.json` is a solution file (`files: []` plus references). `apps/client` is a solution too: `tsconfig.app.json` (DOM, no Node types, tests excluded) and `tsconfig.test.json` (colocated `*.test.ts` with DOM and Node types for `node:test`, referencing the app project), because Node's timer and global types must not leak into page code. ESLint's `projectService` finds both through the solution file.
 5. **Strict options:** `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `isolatedModules`, `module`/`moduleResolution: nodenext`, `target: es2023` (raise if Node 24 allows). Unconverted files are covered by `allowJs` with `checkJs: false` until their phase.
 6. **Client build:** esbuild bundles one ESM file per page into `dist/client/` with sourcemaps; `hls.js` is imported from npm.
-7. **Typed errors:** each package exports its error classes. A single `toHttpError(err)` in `apps/server/src/errors.ts` (moving into `http/` with the Phase 4 split) maps them to status codes and `Retry-After`. App modules not yet in a package throw `HttpError(status, message, { retryAfter })` from the same file.
+7. **Typed errors:** each package exports its error classes. A single `toHttpError(err)` in `apps/server/src/http/errors.ts` maps them to status codes and `Retry-After`. App services throw `HttpError(status, message, { retryAfter })` from the same file.
 8. **Third-party types:** use bundled or `@types/*` when they match the installed major; otherwise minimal declarations in the consuming package's `src/types/<pkg>.d.ts`, covering only the API we use.
 9. **Tests:** `node:test` from `.ts` sources and Playwright with native TypeScript. Unit tests stay next to their modules inside each package.
 10. **Linting:** ESLint (latest major, pinned) with one root `eslint.config.js` (flat config, `defineConfig`) covering all workspaces. It stays JavaScript: ESLint 10 loads a TypeScript config only through `jiti` or an unstable flag, and the file holds no logic worth typing. Global ignores come from `.gitignore` (`resolveIgnoresFromGitignore`).
@@ -118,12 +118,12 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 
 ### Phase 4: Torrent engine, playback and the server split
 
-- [ ] Types for `webtorrent` and `parse-torrent` covering the API we use.
-- [ ] `torrent-engine`: `createTorrentEngine(options)` with `close()`; move metadata store, eviction, deadlines (`torrent-ready`) and status; file handles expose cancellable range reads. Raw/tar HTTP serving moves to `apps/server/http/` using `http-kit` and `seekable-tar`.
-- [ ] `playback`: `probe(input)`, `decide(info, caps, policy)`, `ffmpegArgs`, `subtitleToVtt`, `createHlsSessions(options)` with `close()`. `rawUrl` and the app port leave the package; the app passes the `/raw` loopback URL. Tab fencing and `serveHls` move to the app. Export codec keys; `apps/client` `capabilities` imports them.
-- [ ] Split `server.js`: `config.ts` (typed, validated once), `main.ts` (create packages, startup checks, facet warming, signal handling and `close()`), `services/` (play, explore, playlists, subtitles) and `http/` (routes, request parsing from `unknown`, `toHttpError`).
-- [ ] Tests construct packages with factories instead of relying on module state; add a graceful-shutdown test.
-- [ ] Convert with tests; remove `allowJs` from the server and packages.
+- [x] Types for `webtorrent` and `parse-torrent` covering the API we use. Local declarations in `packages/torrent-engine/src/types/` (DefinitelyTyped's `@types/webtorrent` describes v1/v2, whose file API has no async iterator; parse-torrent 11 ships none). They cover the client, torrent, file and wire fields `engine.ts` and `activity.ts` read, including the internal `_startPiece`/`_endPiece` the downloaded-ranges view needs.
+- [x] `torrent-engine`: `createTorrentEngine(options)` with `close()`; move metadata store, eviction, deadlines (`torrent-ready`) and status; file handles expose cancellable range reads. Raw/tar HTTP serving moves to `apps/server/http/` using `http-kit` and `seekable-tar`. Options split into fixed ones (folder, port, DHT, LSD) and `live()`, read on each use for the load limit, trackers, timeouts, idle time and cache size. The engine returns its own `Torrent`/`TorrentFile` handles (`file.read(start, end, signal)`), counts streams through `openStream(ih)`, and throws `InvalidTorrentError`, `NoSuchFileError`, `TorrentTimeoutError`, `TorrentFailedError` and `EngineBusyError`. Download-link resolution moved to the app (`services/torrents.ts`), so the engine doesn't depend on `indexers`.
+- [x] `playback`: `probe(input)`, `decide(info, caps, policy)`, `ffmpegArgs`, `subtitleToVtt`, `createHlsSessions(options)` with `close()`. `rawUrl` and the app port leave the package; the app passes the `/raw` loopback URL. Tab fencing and `serveHls` move to the app. Export codec keys; `apps/client` `capabilities` imports them. `decide` takes the requested audio track as a fourth argument; `parseProbe` turns ffprobe JSON (`unknown`) into `MediaInfo`; `createMediaTools({ live })` adds the probe cache and the probe/subtitle process limits. `createHlsSessions` takes `replaces` (the tab's previous session, which doesn't count against the limit) and `onStop`, and keeps the fps/cpu sampling (`readProcCpu`, `parseProcStat`, injectable `readCpu`/`cores`). **Changed:** the codec keys live in `api-contract` (`CODEC_KEYS`, `VIDEO_CODEC_KEYS`, `AUDIO_CODEC_KEYS`), not `playback`: `playback`'s entry imports `node:child_process`, which can't go into a browser bundle, and `CodecKey` was already a wire type. `playback` reads them from `api-contract`, and `capabilities.js` builds its answer from `CODEC_KEYS`. `capabilities` stays `.js` for now: `player.js` imports it by that path, and the player is being rewritten by the Player roadmap, so it converts with that rewrite.
+- [x] Split `server.js`: `config.ts` (typed, validated once), `main.ts` (create packages, startup checks, facet warming, signal handling and `close()`), `services/` (play, explore, playlists, subtitles) and `http/` (routes, request parsing from `unknown`, `toHttpError`). `app.ts` holds `createApp({ config })` with `listen()`, `startupChecks()` and `close()`, so tests build the whole server in-process; `main.ts` only loads the config, creates the app, listens and handles SIGTERM/SIGINT (close, then exit, with a 10 s backstop). `services/` also holds search (rebuilt on settings changes), torrents (adding by link id), tabs, the status registry and its checks; `http/` holds routes, static pages, `/raw`/`/tar`, `/hls`, the speed test, request parsing and `errors.ts`. Live settings reach the packages through `config.current()` in their `live()` options; `config.onChange` rebuilds search and Explore and re-runs the affected status checks.
+- [x] Tests construct packages with factories instead of relying on module state; add a graceful-shutdown test. `app.test.ts` starts the app in-process on port 0 (pages, errors, statuses, live settings, and `close()` ending an open stream and killing a paused ffmpeg); `main.test.ts` spawns `main.ts` for env errors and SIGTERM. Engine, HLS and tab tests each create their own instance in a temp folder.
+- [x] Convert with tests; remove `allowJs` from the server and packages. `allowJs` now sits only in `apps/client`'s two configs.
 
 ### Phase 5: Client pages (on touch)
 
@@ -159,8 +159,8 @@ Runs once Phase 4 is done, since Phase 4 adds most vendor-boundary types (`webto
 | 0 | Tooling foundation | ✅ Done | `7b4b27b`, `6a9e2af`, `2152cad` | TypeScript pinned to 5.9.3, not 7 (typescript-eslint 8 peers `<6.1.0`); the ESLint config is `.js` (a `.ts` one needs `jiti`); npm 11.20 gates install scripts, allowed native ones via `allowScripts` in package.json |
 | 1 | Apps skeleton and client build | ✅ Done | `54cd9df`, `6a9e2af` | esbuild `--minify --sourcemap`; URLs unchanged (`/search.js` etc. now served from `dist/client/`); `npm test` and `test:e2e` build first; hls.js moved to devDependencies (bundled at build time, never served); Docker check passed on Node 24 Alpine |
 | 2 | Contract and pure packages | ✅ Done | `ee3ae1d`, `8c1b76c`…`00ef1de` | `api-contract`, `release-info`, `seekable-tar`, `http-kit`, boundary lint rules, `toHttpError` and the pure client helpers |
-| 3 | Indexers | ✅ Done | Phase 3 commit | `@magplay/indexers`; typed parse functions with fixtures; indexer errors; env parsing in `apps/server/src/config.ts` |
-| 4 | Torrent engine, playback, server split | ⬜ Not started | | |
+| 3 | Indexers | ✅ Done | `cd6c1bc` | `@magplay/indexers`; typed parse functions with fixtures; indexer errors; env parsing in `apps/server/src/config.ts` |
+| 4 | Torrent engine, playback, server split | ✅ Done | `f171049`, `87b8beb`, server split commit | `torrent-engine` and `playback` with factories and `close()`; `apps/server` fully `.ts` with `app.ts`/`main.ts`, `services/`, `http/`; graceful shutdown tested |
 | 5 | Client pages | ⬜ On touch | | Player rewritten in TS by Player step 1 |
 | 6 | Tests, scripts, config files | ⬜ On touch | | |
 | 7 | Tighten and document | ⬜ Not started | | After Phase 4 |
@@ -176,18 +176,18 @@ Tick when the package exists, has its own `package.json` and `tsconfig`, is full
 - [x] `seekable-tar` (from `tar`)
 - [x] `http-kit` (from `router`, `range`, `http-cache`)
 - [x] `indexers` (from `sources/*`, `search`)
-- [ ] `torrent-engine` (from `torrents`, `torrent-ready`, `limits`)
-- [ ] `playback` (from `media`, `sessions`)
-- [ ] `apps/server` (`config`, `main`, `errors`, `services/*`, `http/*`)
+- [x] `torrent-engine` (from `torrents`, `torrent-ready`, `limits`)
+- [x] `playback` (from `media`, `sessions`)
+- [x] `apps/server` (`config`, `main`, `errors`, `services/*`, `http/*`)
 - [ ] `apps/client` (`lib/*`, page entries)
 
 ### File conversion log
 
 Tick when the file is `.ts` in its target location, type-checks, passes the type-aware lint rules and its tests pass.
 
-- **Server, from `src/`:** [x] `config` · [ ] `limits` · [x] `range` · [x] `http-cache` · [x] `router` · [x] `tar` · [x] `episodes` · [ ] `torrent-ready` · [x] `search` · [ ] `torrents` · [ ] `media` · [ ] `sessions` · [ ] `server`
+- **Server, from `src/`:** [x] `config` · [x] `limits` · [x] `range` · [x] `http-cache` · [x] `router` · [x] `tar` · [x] `episodes` · [x] `torrent-ready` · [x] `search` · [x] `torrents` · [x] `media` · [x] `sessions` · [x] `server` (now `app`, `main`, `services/*`, `http/*`)
 - **Sources:** [x] `release` · [x] `links` · [x] `torznab` · [x] `prowlarr` · [x] `bitmagnet` · [x] `index` (now `sources.ts`) · [x] `test-helpers`
-- **Client:** [x] `lib/api-types` · [x] `lib/urls` · [x] `lib/requests` · [x] `lib/subtitles` · [ ] `lib/capabilities` · [x] `lib/progress` · [x] `lib/api` · [x] `lib/ui` · [ ] `search` · [ ] `explore` · [ ] `title` · [ ] `torrent` · [ ] `player`
+- **Client:** [x] `lib/api-types` · [x] `lib/urls` · [x] `lib/requests` · [x] `lib/subtitles` · [ ] `lib/capabilities` (stays `.js` until the Player rewrite; see Phase 4) · [x] `lib/progress` · [x] `lib/api` · [x] `lib/ui` · [ ] `search` · [ ] `explore` · [ ] `title` · [ ] `torrent` · [ ] `player`
 - **Tests, scripts, config:** [ ] `tests/e2e/fixtures` · [ ] `tests/e2e/playback.test` · [ ] `tests/fixtures/media` · [ ] `tests/integration/peers.test` · [ ] `tools/scripts/setup-indexers` · [ ] `tools/scripts/check-docker` · [ ] `playwright.config`
 
 ## Risks and open questions
@@ -199,7 +199,7 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - **Type-aware lint speed:** with `projectService` and project references, linting builds type information for every workspace. If CI lint becomes slow, cache with `--cache` and scope type-aware rules per workspace before dropping any.
 - **Formatting churn:** the Phase 0 style pass touches many lines before any move. Keeping it in one ignored commit preserves `git blame`.
 - **TypeScript version:** pin an exact version. If the native compiler (TypeScript 7) is stable at Phase 0, evaluate it for `tsc -b` speed. **Resolved 2026-10-17: TypeScript 7.0.2 is out but typescript-eslint 8.71.2 peers `typescript <6.1.0`, so type-aware linting pins TypeScript to 5.9.3.**
-- **Open:** does `limits` stay duplicated privately (current plan) or become a tiny shared package? Decide when the second copy is written in Phase 4.
+- **Resolved 2026-10-18:** `limits` stays duplicated: one 20-line private copy each in `torrent-engine` and `playback`, taking a `busy()` factory so each throws its own package's error. Promote it only if a third user appears.
 
 ## Log
 
@@ -218,3 +218,4 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - 2026-10-17: Scope revised with the roadmap reorder. Phases 3–4 stay scheduled (roadmap item 5, after the UI bug fixes, playback instrumentation, real-world acceptance and advisory triage). Phases 5–6 become convert-on-touch, the player is rewritten in TypeScript by the Player roadmap instead of being converted first, and Phase 7 runs after Phase 4. The "every file is `.ts`" success criterion now applies to `packages/*` and `apps/server`.
 - 2026-10-17: The owner confirmed playback works on the real NAS, so the roadmap dropped the NAS acceptance and instrumentation gates. Phases 3–4 are now roadmap item 3, right after the UI bug fixes and the advisory triage.
 - 2026-10-18: Phase 3 done. `packages/indexers` holds the adapters, search, download links and the BitMagnet browser, strict TypeScript with fixture tests; the env-parsing tests moved to `config.test.ts`, which now calls `loadConfig(env)` in-process instead of spawning Node. `config.ts` exports `loadConfig(env)` (settings store, `current()`, `onChange`); until the Phase 4 split, `config-instance.js` gives the remaining JS modules the old live object. Small differences, all in failure paths: an indexer body that isn't JSON is now a `SourceError` ("… returned invalid JSON") instead of an unexpected 500, and a BitMagnet answer without `data.torrentContent.search` is a `SourceError` instead of a `TypeError`.
+- 2026-10-18: Phase 4 done, in three commits: `torrent-engine` (`f171049`), `playback` (`87b8beb`) and the server split. Each package step kept the remaining JS modules working through a short-lived `*-instance.js` shim, deleted by the split. No behaviour change on the success paths; small differences in failure paths: `POST /api/torrents` with a non-string `infoHash`/`magnet`/`linkId` now answers 400 "Send infoHash, magnet or linkId" (was 400 "Not a valid…" or 410), `POST /api/play` coerces `caps` values to booleans, a failing `listen()` prints one line and exits 1 instead of an uncaught stack, and SIGTERM now closes the HTTP server and the torrent engine before exiting (it used to kill ffmpeg and exit at once). The player bundle grows by the parts of `api-contract` it now imports (`sideEffects: false` keeps the settings schema out).

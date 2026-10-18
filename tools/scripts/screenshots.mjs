@@ -65,7 +65,7 @@ await once(indexer, 'listening')
 const port = 38_000 + Math.floor(Math.random() * 1000)
 const origin = `http://127.0.0.1:${port}`
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS)/.test(key)))
-const server = spawn(process.execPath, ['apps/server/src/server.js'], {
+const server = spawn(process.execPath, ['apps/server/src/main.ts'], {
   cwd: root,
   stdio: 'inherit',
   env: { ...env, PORT: String(port), TORRENT_PORT: '0', CACHE_DIR: cache, TORZNAB_URL: `http://127.0.0.1:${indexer.address().port}/api`, TORZNAB_NAME: 'Free films', EXTRA_TRACKERS: '', DHT_ENABLED: 'false', LSD_ENABLED: 'false' },

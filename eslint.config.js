@@ -15,8 +15,8 @@ const nodeBuiltins = {
   message: 'This code runs without Node: no Node built-ins.',
 }
 const serverOnly = {
-  group: ['@magplay/http-kit', '@magplay/seekable-tar', '@magplay/indexers', '@magplay/torrent-engine', '@magplay/server'],
-  message: 'The client may only use api-contract and playback (codec keys and types).',
+  group: ['@magplay/http-kit', '@magplay/seekable-tar', '@magplay/indexers', '@magplay/torrent-engine', '@magplay/playback', '@magplay/server'],
+  message: 'The client may only use api-contract (wire types, settings schema and codec keys).',
 }
 const restrictImports = (...patterns) => ({ 'no-restricted-imports': ['error', { patterns }] })
 

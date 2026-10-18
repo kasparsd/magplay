@@ -5,7 +5,9 @@
       "es2023",
       "dom",
       "dom.iterable"
-    ]
+    ],
+    "allowJs": true,
+    "checkJs": false
   },
   "exclude": [
     "${configDir}/src/**/*.test.ts"

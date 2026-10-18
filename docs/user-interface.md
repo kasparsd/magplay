@@ -160,11 +160,11 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 Each lane's label shows the current value. In `direct` mode the Transcoder lane is hidden and the Buffer lane shows only the browser buffer.
 
-**Data.** Most of it already arrives in the 2 s `/api/torrents/:ih/status` poll. Keep the last 90 samples in memory on the page. A reload starts empty, which is acceptable for this step. Two server fields are new: `fps` and `cpu` in `sessionStats`. `fps` comes from ffmpeg's `-progress` output, which `apps/server/src/sessions.js` currently discards. `cpu` is the ffmpeg process's CPU-time delta between polls divided by `os.availableParallelism()`. On Linux it comes from `/proc/<pid>/stat`. Where `/proc` is missing (macOS development), it is `null` and the CPU area is hidden.
+**Data.** Most of it already arrives in the 2 s `/api/torrents/:ih/status` poll. Keep the last 90 samples in memory on the page. A reload starts empty, which is acceptable for this step. Two server fields are new: `fps` and `cpu` in `sessionStats`. `fps` comes from ffmpeg's `-progress` output, which the HLS sessions (`packages/playback/src/hls.ts`) used to discard. `cpu` is the ffmpeg process's CPU-time delta between polls divided by `os.availableParallelism()`. On Linux it comes from `/proc/<pid>/stat`. Where `/proc` is missing (macOS development), it is `null` and the CPU area is hidden.
 
 **Implementation checklist**
 
-- [ ] Keep `fps` from `-progress`, and add `cpu` (share of all cores, or `null`) to the session state and `sessionStats` in `apps/server/src/sessions.js`, with unit tests that use a fake `/proc` reader.
+- [ ] Keep `fps` from `-progress`, and add `cpu` (share of all cores, or `null`) to the session state and the session stats in `packages/playback/src/hls.ts` (formerly `apps/server/src/sessions.js`), with unit tests that use a fake `/proc` reader.
 - [ ] Add both fields to the shared API contract types.
 - [ ] Add a 90-sample ring buffer in `apps/client/src/player.js`, fed by `pollStatus` and by `waiting`/`playing` events for stalls.
 - [ ] Draw the three lanes as inline SVG with the shared sparkline helper, using theme colours and the existing tokens, and redraw only while the disclosure is open.

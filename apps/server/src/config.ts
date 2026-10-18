@@ -169,8 +169,8 @@ export interface AppConfig {
   settingsFile: string
   /** The configuration in use now. */
   current: () => Config
-  /** Runs after a save changed settings, with the new configuration and the changed keys. */
-  onChange: (listener: (config: Config, changed: string[]) => void) => void
+  /** Runs after a save changed settings, with the new configuration and the changed keys; returns an unsubscribe. */
+  onChange: (listener: (config: Config, changed: string[]) => void) => () => void
 }
 
 /** Reads env and the settings file once; an invalid env value throws, naming the variable. */
@@ -181,10 +181,18 @@ export function loadConfig (env: Env): AppConfig {
   const boot = structuredClone(settings.effective)
   const inUse = (): Values => ({ ...settings.effective, ...Object.fromEntries(restartKeys.map(key => [key, boot[key]])) })
   let config = deriveConfig(inUse())
-  const listeners: Array<(config: Config, changed: string[]) => void> = []
+  const listeners = new Set<(config: Config, changed: string[]) => void>()
   settings.on('changed', changed => {
     config = deriveConfig(inUse())
     for (const listener of listeners) listener(config, changed)
   })
-  return { settings, settingsFile, current: () => config, onChange: listener => { listeners.push(listener) } }
+  return {
+    settings,
+    settingsFile,
+    current: () => config,
+    onChange (listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  }
 }

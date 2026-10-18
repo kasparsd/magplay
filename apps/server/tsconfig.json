@@ -10,9 +10,6 @@
       "path": "../../packages/api-contract"
     },
     {
-      "path": "../../packages/release-info"
-    },
-    {
       "path": "../../packages/seekable-tar"
     },
     {

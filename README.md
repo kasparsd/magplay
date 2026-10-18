@@ -37,7 +37,7 @@ Searches always use free-text `t=search` (or `type=search`), never season/episod
 
 Some results have no magnet or infohash, only a download link through the indexer's proxy (Jackett's `/dl/…`, Prowlarr's `/<id>/download…`). These links contain the indexer's API key in plain text, so they never go to the browser. The page gets an opaque `linkId`, and magplay fetches the link itself when you open the result: either a `.torrent` file or a redirect to a magnet. Ids are kept for the last 5,000 results and are lost on restart ("This search result has expired. Search again."). Prowlarr also rewrites raw magnets into proxy links, so when it reports an infohash magplay builds the magnet itself and skips the proxy.
 
-Each kind of indexer is an adapter in `src/sources/` with one method, `search(query, { cat, signal })`, returning normalized releases. Adding another kind means writing an adapter and registering it in `src/sources/index.js`.
+Each kind of indexer is an adapter in `packages/indexers/src/` implementing the `Source` interface: `search(query, { cat, signal })`, returning normalized releases, and `check()` for the status menu. Adding another kind means writing an adapter with a parse function for its responses, adding its config to the `SourceConfig` union in `sources.ts`, and reading it from env in `apps/server/src/config.ts`.
 
 ## Using it
 
@@ -315,10 +315,10 @@ Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 
 
 Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
 
-- `apps/server/src/`: the Node service. Routes are one table in `server.js`, matched by the `http-kit` router.
+- `apps/server/src/`: the Node service. `main.ts` is the entry point (config, startup checks, graceful shutdown); `app.ts` builds the server from the packages; `config.ts` parses env and saved settings; `services/` coordinates the packages (play, tabs, search, Explore, playlists, subtitles, status); `http/` holds the routes, matched by the `http-kit` router, and the media and error handling.
 - `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.js`, `explore.js`, `title.js`), plus `lib/ui.ts` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.ts` (DOM-independent JSON transport) and `lib/urls.ts` (every URL the pages link to, including the external-player links). esbuild bundles each page, including `hls.js`, into `dist/client/` (`npm run build`); the server serves those bundles at the same URLs.
 - `public/`: HTML and CSS, served as-is.
-- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `indexers` (Torznab, Jackett, Prowlarr and BitMagnet adapters, merged search, download links), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
+- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `indexers` (Torznab, Jackett, Prowlarr and BitMagnet adapters, merged search, download links), `torrent-engine` (the WebTorrent client, torrent cache and eviction), `playback` (ffprobe, the direct/remux/transcode decision, HLS ffmpeg sessions), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
 
 ### Test layout
 
@@ -332,7 +332,7 @@ Docker excludes tests, fixture data and helpers from its build context, and the 
 
 Import `api` from `apps/client/src/lib/api.ts`. The client keeps same-origin relative URLs, forwards fetch options/AbortSignal/cache settings, preserves caller headers when posting JSON, and never retries implicitly. HTTP errors are `ApiError`s exposing `status` and the server's string error message (or `HTTP <status>` for a non-JSON proxy error). Invalid or empty JSON on a successful response now produces an explicit `Invalid JSON response` error instead of silently returning `{}`. Network, body-stream and abort failures retain their original error/reason. Use ordinary `fetch` for HEAD requests, text subtitles, playlists and media bytes.
 
-`@magplay/api-contract` types probe results, browser capability keys, play requests, direct/HLS decisions and torrent/session status. They are compile-time contracts, not runtime response validation.
+`@magplay/api-contract` types probe results, browser capability keys (and holds `CODEC_KEYS`), play requests, direct/HLS decisions, torrent/session status, search results, torrent file lists and Explore responses; the server's handlers are typed against the same interfaces. They are compile-time contracts, not runtime response validation.
 
 ### Player helpers
 
