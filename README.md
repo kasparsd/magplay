@@ -6,7 +6,7 @@ Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a vi
 
 ![magplay playing Big Buck Bunny on desktop and mobile](docs/screenshots/player.png)
 
-<sub>The search results come from a local fake indexer that lists only Blender's Creative Commons open movies and US public domain films. The player shows [Big Buck Bunny](https://peach.blender.org/) (© Blender Foundation, CC BY 3.0). To regenerate the screenshots, run `node tools/scripts/screenshots.mjs path/to/big_buck_bunny_720p_h264.mov`.</sub>
+<sub>The player shows [Big Buck Bunny](https://peach.blender.org/) (© Blender Foundation, CC BY 3.0). To regenerate the screenshots, run `node tools/scripts/screenshots.mjs path/to/big_buck_bunny_720p_h264.mov`.</sub>
 
 For sample media to try it with, Blender’s [Open Movies](https://studio.blender.org/films/) such as Big Buck Bunny and [Elephants Dream](https://orange.blender.org/download/) are shared under Creative Commons.
 
@@ -26,12 +26,19 @@ See [docs/roadmap.md](docs/roadmap.md) for the current review, verification limi
 
 magplay searches every configured source in parallel, merges the results, and removes duplicates by infohash (keeping the highest seeder count and listing every source a result came from). A source that fails or takes longer than `SEARCH_TIMEOUT_S` doesn't block the rest: you get the other results and a note such as "Jackett timed out after 30 s".
 
-| Source | Configure with | How magplay talks to it |
+| Source | Env vars | Protocol |
 |---|---|---|
-| **BitMagnet** | `TORZNAB_URL=http://bitmagnet:3333/torznab/api` | Torznab |
-| **Jackett** | `JACKETT_URL=http://jackett:9117`, `JACKETT_APIKEY` | Torznab feed `/api/v2.0/indexers/<JACKETT_INDEXER>/results/torznab/api`. The default `all` searches every configured tracker. A filter such as `tag:tv,!type:private` also works. A full feed URL in `JACKETT_URL` is used as is. |
-| **Prowlarr** | `PROWLARR_URL=http://prowlarr:9696`, `PROWLARR_APIKEY` | REST `/api/v1/search` across all torrent indexers (`PROWLARR_INDEXERS=-2`, or a list of indexer ids), with the key in an `X-Api-Key` header. Prowlarr has no combined Torznab feed. |
-| **Any Torznab feed** (NZBHydra2, a single Prowlarr indexer at `/<id>/api`, …) | `TORZNAB_URL_2` … `TORZNAB_URL_9`, each with optional `TORZNAB_APIKEY_n` and `TORZNAB_NAME_n` | Torznab |
+| **BitMagnet** | `TORZNAB_URL` | Torznab |
+| **Jackett** | `JACKETT_URL`, `JACKETT_APIKEY`, `JACKETT_INDEXER` | Torznab |
+| **Prowlarr** | `PROWLARR_URL`, `PROWLARR_APIKEY`, `PROWLARR_INDEXERS` | REST |
+| **Any Torznab feed** | `TORZNAB_URL_2` … `TORZNAB_URL_9`, `TORZNAB_APIKEY_n`, `TORZNAB_NAME_n` | Torznab |
+
+Sources can also be added in **Settings**.
+
+- **BitMagnet**: for example `TORZNAB_URL=http://bitmagnet:3333/torznab/api`.
+- **Jackett**: for example `JACKETT_URL=http://jackett:9117`. magplay reads the feed at `/api/v2.0/indexers/<JACKETT_INDEXER>/results/torznab/api`. The default indexer `all` searches every configured tracker, and a filter such as `tag:tv,!type:private` also works. A full feed URL in `JACKETT_URL` is used as is.
+- **Prowlarr**: for example `PROWLARR_URL=http://prowlarr:9696`. magplay calls `/api/v1/search` across all torrent indexers (`PROWLARR_INDEXERS=-2`, or a list of indexer ids) and sends the key in an `X-Api-Key` header. Prowlarr has no combined Torznab feed.
+- **Any Torznab feed**: NZBHydra2, a single Prowlarr indexer at `/<id>/api`, and so on.
 
 Searches always use free-text `t=search` (or `type=search`), never season/episode filters, which hide season packs.
 
