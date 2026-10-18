@@ -60,7 +60,8 @@ export function performanceView (history: readonly PerfSample[], { direct }: { d
   const hasCpu = history.some(s => s.cpu != null)
   if (!direct) {
     const speeds = history.map(s => s.paused ? null : s.speed)
-    const max = top(speeds, 2)
+    // Remux runs at 50–100×; only the range around 1× matters, so the scale stops at 4× (faster is drawn at the top)
+    const max = Math.min(top(speeds, 2), 4)
     const layers: SparkLayer[] = [
       ...(hasCpu ? [{ data: history.map(s => s.cpu == null ? null : s.cpu * max), kind: 'area' as const, className: 'cpu' }] : []),
       { data: speeds, kind: 'line', className: 'ff' },
