@@ -161,13 +161,13 @@ Each lane's label shows the current value. In `direct` mode the Transcoder lane 
 
 **Implementation checklist**
 
-- [ ] Keep `fps` from `-progress`, and add `cpu` (share of all cores, or `null`) to the session state and `sessionStats` in `apps/server/src/sessions.js`, with unit tests that use a fake `/proc` reader.
-- [ ] Add both fields to the shared API contract types.
-- [ ] Add a 90-sample ring buffer in `apps/client/src/player.js`, fed by `pollStatus` and by `waiting`/`playing` events for stalls.
-- [ ] Draw the three lanes as inline SVG with the shared sparkline helper, using theme colours and the existing tokens, and redraw only while the disclosure is open.
-- [ ] Hide the Transcoder lane in `direct` mode and the CPU area when `cpu` is `null`.
-- [ ] Keep the "converts slower than playback" warning, and link it to the Performance disclosure.
-- [ ] Check it with a healthy remux, a transcode that falls behind, and a direct file.
+- [x] Keep `fps` from `-progress`, and add `cpu` (share of all cores, or `null`) to the session state and `sessionStats` in `apps/server/src/sessions.js`, with unit tests that use a fake `/proc` reader.
+- [x] Add both fields to the shared API contract types.
+- [x] Add a 90-sample ring buffer in `apps/client/src/player.js`, fed by `pollStatus` and by `waiting`/`playing` events for stalls.
+- [x] Draw the three lanes as inline SVG with the shared sparkline helper, using theme colours and the existing tokens, and redraw only while the disclosure is open.
+- [x] Hide the Transcoder lane in `direct` mode and the CPU area when `cpu` is `null`.
+- [x] Keep the "converts slower than playback" warning, and link it to the Performance disclosure.
+- [ ] Check it with a healthy remux, a transcode that falls behind, and a direct file. Healthy remux and direct were checked (screenshots in `docs/checkpoints/2026-10-17-player-redesign/`); a transcode that falls behind still needs a slow NAS, and CPU only shows on Linux.
 
 ### Later, if use calls for it
 

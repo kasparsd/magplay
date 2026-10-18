@@ -1,0 +1,206 @@
+[
+  [
+    "dark-1440x900-239-chrome.png",
+    "1440×900, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "dark-1440x900-239-hidden.png",
+    "1440×900, 2.39:1, chrome faded while playing"
+  ],
+  [
+    "dark-1440x900-169-chrome.png",
+    "1440×900, 16:9 remux, chrome showing"
+  ],
+  [
+    "dark-1440x900-169-hidden.png",
+    "1440×900, 16:9, chrome faded while playing"
+  ],
+  [
+    "dark-1280x800-239-chrome.png",
+    "1280×800, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "dark-1280x800-169-chrome.png",
+    "1280×800, 16:9 remux, chrome showing"
+  ],
+  [
+    "dark-800x600-239-chrome.png",
+    "800×600, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "dark-800x600-169-chrome.png",
+    "800×600, 16:9 remux, chrome showing"
+  ],
+  [
+    "dark-375x812-239-chrome.png",
+    "375×812, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "dark-375x812-169-chrome.png",
+    "375×812, 16:9 remux, chrome showing"
+  ],
+  [
+    "dark-812x375-239-chrome.png",
+    "812×375, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "dark-812x375-169-chrome.png",
+    "812×375, 16:9 remux, chrome showing"
+  ],
+  [
+    "light-1440x900-239-chrome.png",
+    "1440×900, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "light-1440x900-169-chrome.png",
+    "1440×900, 16:9 remux, chrome showing"
+  ],
+  [
+    "light-1280x800-239-chrome.png",
+    "1280×800, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "light-1280x800-169-chrome.png",
+    "1280×800, 16:9 remux, chrome showing"
+  ],
+  [
+    "light-800x600-239-chrome.png",
+    "800×600, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "light-800x600-169-chrome.png",
+    "800×600, 16:9 remux, chrome showing"
+  ],
+  [
+    "light-375x812-239-chrome.png",
+    "375×812, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "light-375x812-169-chrome.png",
+    "375×812, 16:9 remux, chrome showing"
+  ],
+  [
+    "light-812x375-239-chrome.png",
+    "812×375, 2.39:1 direct, chrome showing"
+  ],
+  [
+    "light-812x375-169-chrome.png",
+    "812×375, 16:9 remux, chrome showing"
+  ],
+  [
+    "dark-1280x800-menu-subs.png",
+    "1280×800, subs menu open"
+  ],
+  [
+    "dark-1280x800-menu-audio.png",
+    "1280×800, audio menu open"
+  ],
+  [
+    "dark-1280x800-menu-speed.png",
+    "1280×800, speed menu open"
+  ],
+  [
+    "dark-1280x800-menu-more.png",
+    "1280×800, more menu open"
+  ],
+  [
+    "dark-1280x800-keys.png",
+    "1280×800, ? key sheet"
+  ],
+  [
+    "dark-375x812-menu-subs.png",
+    "375×812, subs menu open"
+  ],
+  [
+    "dark-375x812-menu-audio.png",
+    "375×812, audio menu open"
+  ],
+  [
+    "dark-375x812-menu-more.png",
+    "375×812, more menu open"
+  ],
+  [
+    "dark-375x812-keys.png",
+    "375×812, ? key sheet"
+  ],
+  [
+    "dark-1280x800-tooltip-missing.png",
+    "1280×800, seek tooltip: not downloaded yet"
+  ],
+  [
+    "dark-1280x800-tooltip-restart.png",
+    "1280×800, seek tooltip: past the converted range"
+  ],
+  [
+    "dark-1280x800-performance-remux.png",
+    "1280×800, Performance disclosure, remux"
+  ],
+  [
+    "dark-375x812-performance-remux.png",
+    "375×812, Performance disclosure, remux"
+  ],
+  [
+    "dark-1280x800-performance-direct.png",
+    "1280×800, Performance disclosure, direct"
+  ],
+  [
+    "dark-375x812-performance-direct.png",
+    "375×812, Performance disclosure, direct"
+  ],
+  [
+    "light-1280x800-menu-subs.png",
+    "1280×800, subs menu open"
+  ],
+  [
+    "light-1280x800-menu-audio.png",
+    "1280×800, audio menu open"
+  ],
+  [
+    "light-1280x800-menu-speed.png",
+    "1280×800, speed menu open"
+  ],
+  [
+    "light-1280x800-menu-more.png",
+    "1280×800, more menu open"
+  ],
+  [
+    "light-1280x800-keys.png",
+    "1280×800, ? key sheet"
+  ],
+  [
+    "light-375x812-menu-subs.png",
+    "375×812, subs menu open"
+  ],
+  [
+    "light-375x812-menu-audio.png",
+    "375×812, audio menu open"
+  ],
+  [
+    "light-375x812-menu-more.png",
+    "375×812, more menu open"
+  ],
+  [
+    "light-375x812-keys.png",
+    "375×812, ? key sheet"
+  ],
+  [
+    "light-1280x800-tooltip-missing.png",
+    "1280×800, seek tooltip: not downloaded yet"
+  ],
+  [
+    "light-1280x800-tooltip-restart.png",
+    "1280×800, seek tooltip: past the converted range"
+  ],
+  [
+    "light-1280x800-performance-remux.png",
+    "1280×800, Performance disclosure, remux"
+  ],
+  [
+    "light-1280x800-performance-direct.png",
+    "1280×800, Performance disclosure, direct"
+  ],
+  [
+    "dark-1280x800-fullscreen-subtitles.png",
+    "1280×800 fullscreen: title overlay and Subtitles menu"
+  ]
+]
