@@ -127,6 +127,15 @@ Prebuilt images are published to `ghcr.io/kasparsd/magplay`. Publishing a GitHub
 
 **Behind Nginx Proxy Manager:** turn off buffering for streams (Advanced tab: `proxy_buffering off;`). Otherwise nginx buffers `/raw` and `/hls` responses and seeking gets slow. Links in `.m3u` files honour `X-Forwarded-Proto`/`X-Forwarded-Host`.
 
+## VPN
+
+magplay makes torrent connections from the server. An optional [Gluetun deployment](docs/vpn.md) routes its public torrent traffic through a VPN while keeping the web UI accessible locally.
+
+- **BitMagnet on another LAN host:** allow that host as a local outbound exception so indexer requests stay on the LAN.
+- **BitMagnet and magplay sharing Gluetun:** use BitMagnet's loopback address; no local outbound exception is needed for those lookups.
+
+The [VPN guide](docs/vpn.md) explains both scenarios, the separate-container Docker-network case, port forwarding and disconnect checks. A standalone [Compose example](tools/docker/compose.vpn.yml) covers the LAN-host scenario.
+
 ## HTTP caching and reverse proxies
 
 Successful GETs and HEADs use these policies (HEAD has no body). All errors, including

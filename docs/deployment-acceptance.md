@@ -23,5 +23,6 @@ Use the server's normal Docker deployment and representative media. Record:
 - A cached large torrent's hash-verification time, and an uncached local-seed transfer.
 - Browser/device behavior, including Firefox/Safari or external players actually used.
 - A source URL with a `.local` name, with the host's `/run/avahi-daemon` mounted: the startup log says `Resolving .local names through the host’s avahi-daemon` and the source check passes ([plan](plans/mdns-resolution.md)).
+- For an optional VPN deployment, complete the [VPN routing and disconnect checks](vpn.md#ports-and-verification) for the selected LAN-host or shared Gluetun topology.
 
 No server address or access has been provided, so this remains a manual acceptance gate, not a claimed completed test.

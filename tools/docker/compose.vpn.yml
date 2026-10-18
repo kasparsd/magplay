@@ -1,0 +1,40 @@
+# Standalone example: BitMagnet is on another LAN host.
+# Set VPN_SERVICE_PROVIDER, OPENVPN_USER and OPENVPN_PASSWORD in your shell or --env-file.
+# Replace 192.168.1.50 in BOTH places below with your BitMagnet host's address.
+# See docs/vpn.md for the shared Gluetun alternative and verification steps.
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "3382:8080"
+    environment:
+      VPN_SERVICE_PROVIDER: "${VPN_SERVICE_PROVIDER:?Set your VPN provider}"
+      VPN_TYPE: "openvpn"
+      OPENVPN_USER: "${OPENVPN_USER:?Set your VPN username}"
+      OPENVPN_PASSWORD: "${OPENVPN_PASSWORD:?Set your VPN password}"
+      FIREWALL_INPUT_PORTS: "8080"
+      FIREWALL_OUTBOUND_SUBNETS: "192.168.1.50/32"
+
+  magplay:
+    image: ghcr.io/kasparsd/magplay:edge
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      TORZNAB_URL: "http://192.168.1.50:3333/torznab/api"
+      TORZNAB_NAME: "BitMagnet"
+      TORRENT_PORT: "6881"
+      LSD_ENABLED: "false"
+      CACHE_MAX_GB: "50"
+    volumes:
+      - magplay_data:/data
+
+volumes:
+  magplay_data:
