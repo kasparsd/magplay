@@ -13,15 +13,16 @@
     <form class="topsearch" action="/" role="search"><input name="q" type="search" placeholder="Search" aria-label="Search"></form>
   </header>
   <main class="settings">
-    <nav id="settings-nav" class="settings-nav" aria-label="Settings sections"></nav>
+    <h1>Settings</h1>
+    <!-- One <section> per schema section, stacked in order (lib: settings.ts renderSection) -->
     <div id="settings-body" class="settings-body"></div>
+    <div id="savebar" class="savebar" role="region" aria-label="Unsaved changes" hidden>
+      <span id="savebar-count" role="status"></span>
+      <span id="savebar-status" class="status"></span>
+      <button id="savebar-discard" type="button" class="button">Discard</button>
+      <button id="savebar-save" type="button" class="button primary">Save</button>
+    </div>
   </main>
-  <div id="savebar" class="savebar" role="region" aria-label="Unsaved changes" hidden>
-    <span id="savebar-count"></span>
-    <span id="savebar-status" class="status"></span>
-    <button id="savebar-discard" type="button" class="button">Discard</button>
-    <button id="savebar-save" type="button" class="button primary">Save</button>
-  </div>
   <script type="module" src="/settings.js"></script>
 </body>
 </html>

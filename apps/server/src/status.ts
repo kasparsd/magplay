@@ -1,7 +1,7 @@
-// Status check registry: checks run lazily when /api/status is asked, are cached per TTL so polling
-// never hammers indexers, and level changes are kept in a small in-memory ring buffer of events.
+// Status check registry: checks run lazily when /api/status is asked, and are cached per TTL so polling
+// never hammers indexers.
 import { overallLevel } from '@magplay/api-contract'
-import type { StatusAction, StatusCheck, StatusEvent, StatusLevel, StatusResponse } from '@magplay/api-contract'
+import type { StatusAction, StatusCheck, StatusLevel, StatusResponse } from '@magplay/api-contract'
 
 export interface CheckResult {
   level: StatusLevel
@@ -34,36 +34,12 @@ export interface StatusRegistry {
   removeChecks: (predicate: (id: string) => boolean) => void
   /** Forgets a cached result, so the next snapshot runs the check again. */
   invalidate: (id: string) => void
-  pushEvent: (event: Omit<StatusEvent, 'at'>) => void
   /** Runs stale checks and waits up to `wait` ms; checks still running report unknown and finish in the background. */
   snapshot: (opts?: { wait?: number }) => Promise<StatusResponse>
-  events: () => StatusEvent[]
 }
-
-export const EVENT_LIMIT = 50
 
 export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: () => number, timeoutMs?: number } = {}): StatusRegistry {
   const checks = new Map<string, Entry>()
-  const events: StatusEvent[] = []
-
-  function pushEvent (event: Omit<StatusEvent, 'at'>): void {
-    events.push({ at: now(), ...event })
-    if (events.length > EVENT_LIMIT) events.splice(0, events.length - EVENT_LIMIT)
-  }
-
-  function record (entry: Entry, result: CheckResult | null): void {
-    const before = entry.result?.level
-    const after = result?.level
-    // A first result is news only when it's a problem; after that, every change is
-    if (after && after !== before && (before || after === 'warn' || after === 'error') && after !== 'unknown') {
-      const detail = result?.message ?? result?.value ?? after
-      const message = after === 'ok' ? `${entry.def.label} is working again` : detail.startsWith(entry.def.label) ? detail : `${entry.def.label}: ${detail}`
-      pushEvent({ checkId: entry.def.id, level: after, message })
-    }
-    entry.result = result
-    entry.at = now()
-  }
-
   function start (entry: Entry): Promise<void> {
     if (entry.running) return entry.running
     const generation = entry.generation
@@ -76,7 +52,10 @@ export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: ()
         const message = err instanceof Error ? (err.name === 'TimeoutError' ? `didn’t answer within ${timeoutMs / 1000} s` : err.message) : String(err)
         result = { level: 'error', message }
       }
-      if (entry.generation === generation && checks.get(entry.def.id) === entry) record(entry, result)
+      if (entry.generation === generation && checks.get(entry.def.id) === entry) {
+        entry.result = result
+        entry.at = now()
+      }
     })().finally(() => { entry.running = null })
     return entry.running
   }
@@ -86,7 +65,7 @@ export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: ()
   return {
     registerCheck (def) {
       const old = checks.get(def.id)
-      // Re-registering (a source edited) keeps the last result, so events still describe changes
+      // Re-registering (a source edited) keeps the last result until the check runs again
       checks.set(def.id, { def, result: old?.result ?? null, at: 0, running: null, generation: (old?.generation ?? 0) + 1 })
     },
     removeChecks (predicate) {
@@ -99,7 +78,6 @@ export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: ()
       entry.generation++
       entry.running = null
     },
-    pushEvent,
     async snapshot ({ wait = 4000 } = {}) {
       const runs = [...checks.values()].filter(stale).map(start)
       let timer: NodeJS.Timeout | undefined
@@ -120,8 +98,7 @@ export function createStatus ({ now = Date.now, timeoutMs = 10_000 }: { now?: ()
           ...(at && { at }),
         })
       }
-      return { level: overallLevel(list), checks: list, events: [...events] }
+      return { level: overallLevel(list), checks: list }
     },
-    events: () => [...events],
   }
 }
