@@ -28,7 +28,8 @@ const app = attempt(() => createApp({ config, logs }), err =>
   `Cannot create the cache directory ${config.current().cacheDir} (${reason(err)}). Set CACHE_DIR to a writable location, e.g. CACHE_DIR=./data`)
 
 app.startupChecks()
-if (installMdnsLookup()) console.log('Resolving .local names through the host’s avahi-daemon')
+const uninstallMdns = installMdnsLookup()
+if (uninstallMdns) console.log('Resolving .local names through the host’s avahi-daemon')
 await app.listen().catch((err: unknown) => fail(`Cannot listen on port ${config.current().port}: ${reason(err)}`))
 
 let stopping = false
@@ -39,6 +40,7 @@ async function shutdown (signal: NodeJS.Signals): Promise<void> {
   // Paused (SIGSTOPped) ffmpegs would outlive us; close() kills them. A stuck close still exits.
   setTimeout(() => fail('[server] shutdown took too long'), SHUTDOWN_TIMEOUT_MS).unref()
   await app.close()
+  uninstallMdns?.()
   process.exit(0)
 }
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
