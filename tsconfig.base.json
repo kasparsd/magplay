@@ -13,8 +13,6 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
-    "allowJs": true,
-    "checkJs": false,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,

@@ -3,11 +3,13 @@ import { format } from 'node:util'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 export interface LogLine { at: number, level: LogLevel, text: string }
+export type LogTail = () => LogLine[]
 
 const LIMIT = 200
-const lines: LogLine[] = []
 
-export function captureConsole (target: Console = console): void {
+/** Copies every console line into a ring buffer; main.ts calls it first, so it sees every line. */
+export function captureConsole (target: Console = console): LogTail {
+  const lines: LogLine[] = []
   const methods: Array<[keyof Console & ('debug' | 'log' | 'info' | 'warn' | 'error'), LogLevel]> = [['debug', 'debug'], ['log', 'info'], ['info', 'info'], ['warn', 'warn'], ['error', 'error']]
   for (const [method, level] of methods) {
     const original = target[method].bind(target)
@@ -17,8 +19,5 @@ export function captureConsole (target: Console = console): void {
       original(...args)
     }
   }
+  return () => [...lines]
 }
-
-export const logTail = (): LogLine[] => [...lines]
-
-captureConsole()

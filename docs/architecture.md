@@ -14,14 +14,16 @@ Packages are internal npm workspaces. Publishing any of them is a later, optiona
 
 ## Findings that motivated the change
 
-| Problem | Where | Consequence |
+All resolved by Phases 2–4 of the plan (2026-10-18); kept as the record of why.
+
+| Problem | Where it was | Resolution |
 | --- | --- | --- |
-| HTTP concerns in core logic | `HttpError(503/504/499)` thrown from `torrents`, `media`, `sessions`, `limits`, `torrent-ready`, `search`, `sources/links`; `retryAfter` set in `limits`. Mapping is now central (`toHttpError` in `apps/server/src/errors.ts`) and extracted packages throw typed errors; these modules switch as they move into packages | Core code decides HTTP responses and can't be used or tested without the HTTP vocabulary |
-| Config is a global singleton with the dependency inverted | `config.js` imports `sources/index.js` for env parsing (it no longer exports the HTTP error helper) | Every module depends on process env; configuration depends on an adapter |
-| Work at import time | WebTorrent client created and ports bound in `torrents.js`; facet loading and ffmpeg checks at the top of `server.js`; module-level maps in `sessions.js` | Nothing can be created twice, configured per test or shut down cleanly |
-| Modules with several jobs | `torrents.js` (engine, metadata store, eviction, content warnings, HTTP serving); `sessions.js` (ffmpeg processes, HLS disk budget, tab fencing, HTTP); `server.js` (startup, Explore cache, play orchestration, playlists, subtitle jobs, routes) | Changes in one job touch unrelated code |
-| Content classification split across layers | Resolved: `release-info` owns file kinds, episodes and badges | — |
-| Implicit cross-runtime contracts | `api-contract` types the wire data, but only client JSDoc references it so far; codec keys in `apps/client/src/lib/capabilities.js` must match `decide()` in `media.js` | Mismatches surface at runtime |
+| HTTP concerns in core logic | `HttpError(503/504/499)` thrown from `torrents`, `media`, `sessions`, `limits`, `torrent-ready`, `search`, `sources/links` | Packages throw typed errors; `toHttpError` in `apps/server/src/http/errors.ts` is the only place they become statuses and `Retry-After` |
+| Config is a global singleton with the dependency inverted | `config.js` imported `sources/index.js` for env parsing | `apps/server/src/config.ts` parses all env, including source configs; `loadConfig(env)` returns an object the app passes down |
+| Work at import time | WebTorrent client and ports in `torrents.js`; facet loading and ffmpeg checks in `server.js`; module-level maps and timers in `sessions.js` | Factories (`createTorrentEngine`, `createHlsSessions`, `createApp`) with `close()`; `main.ts` starts and stops them |
+| Modules with several jobs | `torrents.js`, `sessions.js`, `server.js` | Engine, store and activity in `torrent-engine`; ffmpeg and the disk budget in `playback`; tab fencing, play, Explore, playlists and subtitles as app services; HTTP in `http/` |
+| Content classification split across layers | `episodes.js` and `sources/release.js` | `release-info` owns file kinds, episodes and badges |
+| Implicit cross-runtime contracts | Codec keys and response shapes aligned by comments | `api-contract` types the API handlers' responses and holds `CODEC_KEYS`, read by `decide()` and the client's capability probe |
 
 ## Package boundaries
 
@@ -31,9 +33,9 @@ Arrows show dependencies; nothing points back up, and no package imports an app.
 apps/server ──► indexers ──────► release-info
      │      ──► torrent-engine ─► release-info
      │      ──► seekable-tar
-     │      ──► playback
+     │      ──► playback ───────► api-contract (track, capability and session types; codec keys)
      │      ──► http-kit
-     └──► api-contract ◄── apps/client ──► playback (codec keys and types only)
+     └──► api-contract ◄── apps/client
 ```
 
 | Package | Responsibility | Takes in | Never knows about |
@@ -42,27 +44,28 @@ apps/server ──► indexers ──────► release-info
 | `indexers` | Torznab/Jackett/Prowlarr/BitMagnet adapters, normalized `Release`, parallel search with timeouts, deduplication, private link IDs | Source configs, `fetch` | Env vars, HTTP status codes |
 | `torrent-engine` | `createTorrentEngine(options)`: add/get/status/recent torrents, metadata store, cache eviction, discovery/checking deadlines; files expose cancellable range reads | Cache dir, ports, DHT/LSD, trackers, limits | HTTP request/response objects |
 | `seekable-tar` | PAX tar layout computed from file sizes, any byte range produced on demand | Sizes, a `read(range)` callback | Torrents, Node streams |
-| `playback` | `probe(input)`, `decide(info, caps, policy)`, ffmpeg arguments, subtitle→VTT, `createHlsSessions(options)` with process limits and HLS disk budget, codec key list | An input URL or path, policy, ffmpeg paths | Tabs, routes, the app's port |
+| `playback` | `probe(input)`, `decide(info, caps, policy, audio)`, ffmpeg arguments, subtitle→VTT, `createMediaTools` (probe cache, process limits), `createHlsSessions(options)` with the session limit, HLS disk budget and fps/CPU sampling | An input URL or path, policy, ffmpeg paths | Tabs, routes, the app's port |
 | `http-kit` | Router, Range parsing, conditional caching, `serveFile`, JSON helpers | Requests/responses | Core logic; only apps use it |
-| `api-contract` | Types for the server JSON API (replaces `api-types.js`), plus the settings schema with `validate()` and the status level helpers, which run on both sides | — | Node or DOM APIs |
+| `api-contract` | Types for the server JSON API (replaces `api-types.js`), the codec keys, the settings schema with `validate()` and the status level helpers, which run on both sides | — | Node or DOM APIs |
 
 Each package throws its own typed errors (busy, timeout, not found, cancelled, invalid input). `apps/server` maps them to HTTP statuses in one place.
 
 ### Apps
 
 - **`apps/server`**
-  - `config.ts`: all env parsing, including indexer configs, validated once.
-  - `main.ts`: creates the engine, indexers and HLS sessions in order, runs startup checks and owns graceful shutdown.
-  - Services that coordinate packages: play (probe → decide → direct URL or HLS session, tab fencing), Explore (cache, parameter validation), playlists, subtitle jobs. Tab fencing stays here because "tab" is a browser concept.
-  - `http/`: routes, request parsing from `unknown`, the error→status mapping, static and built-client serving.
-- **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types from `api-contract` and codec keys from `playback`.
+  - `config.ts`: all env parsing, including indexer configs, validated once. `loadConfig(env)` returns the settings store, `current()` (the configuration in use) and `onChange`.
+  - `app.ts`: `createApp({ config })` creates the HLS sessions, media tools and torrent engine in that order, then the services and routes; `listen()`, `startupChecks()` and `close()`. Packages get live settings through `live()` options that read `config.current()`.
+  - `main.ts`: the process: config, app, startup checks (sources, ffmpeg, Explore's counts), listening, and graceful shutdown on SIGTERM/SIGINT.
+  - `services/`: play (probe → decide → direct URL or HLS session), tabs (one session per player tab, and fencing for closed tabs; "tab" is a browser concept), Explore (cache, parameter checks), search (rebuilt when sources change), torrents (adding by private link id), playlists, subtitles, and the status registry and checks.
+  - `http/`: routes typed against `api-contract`, request parsing from `unknown`, the error→status mapping, static and built-client serving, `/raw`/`/tar`, `/hls` and the speed test.
+- **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types and codec keys from `api-contract`.
 - **`public/`**: static HTML and CSS only.
 
 ### Settings and status
 
 - **Schema.** `packages/api-contract/src/settings.ts` lists every setting once: key, section, scope (`server` or `browser`), control type, label, default and env vars. It holds only what a person tunes on the page; other knobs (ports, job limits, timeouts, trackers, ffmpeg paths) are env-only, resolved in `config.ts` (`envOnlyConfig`) with the same validation. The server validates env values, `settings.json` and `PATCH` bodies with the same `validate()` the client uses for `localStorage` and before saving. A new setting is one entry; the page, validation and API pick it up.
-- **Server resolution.** `apps/server/src/settings-store.ts` resolves env, then `<CACHE_DIR>/settings.json`, then the default, records where each value came from, and writes the file atomically (temp file and rename). An invalid env value stops startup naming the variable; an invalid saved value is ignored with a warning. `loadConfig()` in `config.ts` combines the env-only knobs with the page's settings into one typed `Config`, rebuilt on the store's `changed` event, so a saved setting applies on its next use (search and Explore are rebuilt).
-- **Status registry.** `apps/server/src/status.ts` holds checks (`id`, `label`, `ttl`, `required`, `run`), runs stale ones when `/api/status` is asked (waiting up to 4 s, then reporting `unknown`), and turns a throw into `error`. `status-checks.js` registers the checks: one per source, Explore, ffmpeg/ffprobe and disk. The client merges browser checks (the connection test) and computes the overall level with the same `overallLevel()`.
+- **Server resolution.** `apps/server/src/settings-store.ts` resolves env, then `<CACHE_DIR>/settings.json`, then the default, records where each value came from, and writes the file atomically (temp file and rename). An invalid env value stops startup naming the variable; an invalid saved value is ignored with a warning. `loadConfig()` in `config.ts` combines the env-only knobs with the page's settings into one typed `Config`, replaced on the store's `changed` event, so a saved setting applies on its next use (packages read limits and paths through their `live()` options, search and Explore are rebuilt).
+- **Status registry.** `apps/server/src/services/status.ts` holds checks (`id`, `label`, `ttl`, `required`, `run`), runs stale ones when `/api/status` is asked (waiting up to 4 s, then reporting `unknown`), and turns a throw into `error`. `services/status-checks.ts` registers the checks: one per source, Explore, ffmpeg/ffprobe and disk. The client merges browser checks (the connection test) and computes the overall level with the same `overallLevel()`.
 - **Writes** (`PATCH /api/settings`, `POST /api/settings/test`, `POST /api/debug/clear-hls`) require `Sec-Fetch-Site: same-origin` or a matching `Origin` (`isSameOrigin` in `http-kit`), since there is no login.
 - **Browser preferences** live in `localStorage`, one JSON value per setting under `magplay:<key with : for .>` (`magplay:player:speed`), the same keys the Player's `recall()`/`remember()` use. `apps/client/src/lib/preferences.ts` exports the keys (`PREFERENCE`, `STORAGE_KEYS`) and parses values against the schema on read.
 

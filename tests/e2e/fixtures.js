@@ -55,7 +55,7 @@ async function startApp () {
     const origin = `http://127.0.0.1:${port}`
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
       !/^(TORZNAB_|JACKETT_|PROWLARR_|BITMAGNET_|EXTRA_TRACKERS|ALLOW_VIDEO_TRANSCODE)/.test(key)))
-    proc = spawn(process.execPath, ['apps/server/src/server.js'], {
+    proc = spawn(process.execPath, ['apps/server/src/main.ts'], {
       cwd: root,
       env: {
         ...env,

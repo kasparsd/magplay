@@ -4,6 +4,8 @@
 
 export * from './settings.ts'
 export * from './status.ts'
+export type * from './search.ts'
+export type * from './explore.ts'
 
 /** Codecs the browser reports support for and the server's playback decision reads, in one list for both sides. */
 export const VIDEO_CODEC_KEYS = ['h264', 'hevc', 'vp9', 'av1'] as const

@@ -40,4 +40,4 @@ USER node
 ENV CACHE_DIR=/data
 EXPOSE 8080 6881/tcp 6881/udp
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
-CMD ["node", "apps/server/src/server.js"]
+CMD ["node", "apps/server/src/main.ts"]
