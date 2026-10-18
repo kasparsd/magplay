@@ -1,5 +1,5 @@
 // The one place errors become HTTP responses. Packages throw their own typed errors and never see a status;
-// app modules that haven't moved into a package yet throw HttpError directly.
+// app services throw HttpError directly.
 import { FileNotFoundError, MalformedPathError } from '@magplay/http-kit'
 import { LinkExpired, NoSourcesError, SearchTimeout, SourceError } from '@magplay/indexers'
 import { MediaToolError, NoSuchTrackError, PlaybackBusyError, UnplayableError } from '@magplay/playback'
