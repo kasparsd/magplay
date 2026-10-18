@@ -3,13 +3,11 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { settingDef } from '@magplay/api-contract'
-import config, { settings } from './config.js'
+import config, { settings } from './config-instance.js'
 import { createStatus } from './status.ts'
-import { createSources } from './sources/index.js'
-import { createBitmagnetBrowser } from './sources/bitmagnet.js'
-import { runProbeJob, runSubtitleJob } from './media.js'
-import { cacheBytes, loadedTorrents, runTorrentLoad } from './torrents.js'
-import { sessionSummary } from './sessions.js'
+import { createBitmagnetBrowser, createSources } from '@magplay/indexers'
+import { hls, media } from './playback-instance.js'
+import { engine } from './engine-instance.js'
 
 export const status = createStatus()
 
@@ -85,7 +83,7 @@ status.registerCheck({
 let cacheUsage = { at: 0, bytes: 0 }
 /** Torrent cache bytes, measured at most every 30 s: it walks every file. */
 async function cachedCacheBytes () {
-  if (Date.now() - cacheUsage.at > 30_000) cacheUsage = { at: Date.now(), bytes: await cacheBytes() }
+  if (Date.now() - cacheUsage.at > 30_000) cacheUsage = { at: Date.now(), bytes: await engine.cacheBytes() }
   return cacheUsage.bytes
 }
 
@@ -138,7 +136,7 @@ const { version } = JSON.parse(readFileSync(new URL('../../../package.json', imp
 
 /** GET /api/debug: versions, what's busy, and the log tail. */
 export async function debugInfo (log) {
-  const sessions = sessionSummary()
+  const sessions = hls.summary()
   return {
     version,
     node: process.versions.node,
@@ -147,10 +145,10 @@ export async function debugInfo (log) {
     ffprobe: versions.ffprobe,
     resources: [
       { id: 'conversions', label: 'Conversions', used: sessions.active, limit: config.maxHlsSessions },
-      { id: 'torrentLoads', label: 'Torrents loading', ...runTorrentLoad.stats() },
-      { id: 'torrents', label: 'Torrents loaded', used: loadedTorrents(), limit: 0 },
-      { id: 'probes', label: 'Probes', ...runProbeJob.stats() },
-      { id: 'subtitles', label: 'Subtitle jobs', ...runSubtitleJob.stats() },
+      { id: 'torrentLoads', label: 'Torrents loading', ...engine.stats().loads },
+      { id: 'torrents', label: 'Torrents loaded', used: engine.stats().loaded, limit: 0 },
+      { id: 'probes', label: 'Probes', ...media.stats().probes },
+      { id: 'subtitles', label: 'Subtitle jobs', ...media.stats().subtitles },
       { id: 'hls', label: 'Conversion storage', used: sessions.bytes, limit: config.hlsMaxBytes, unit: 'bytes' },
     ],
     disk: await diskInfo(),

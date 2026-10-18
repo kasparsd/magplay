@@ -5,7 +5,13 @@
 export * from './settings.ts'
 export * from './status.ts'
 
-export type CodecKey = 'h264' | 'hevc' | 'vp9' | 'av1' | 'aac' | 'ac3' | 'eac3' | 'opus' | 'flac'
+/** Codecs the browser reports support for and the server's playback decision reads, in one list for both sides. */
+export const VIDEO_CODEC_KEYS = ['h264', 'hevc', 'vp9', 'av1'] as const
+export const AUDIO_CODEC_KEYS = ['aac', 'ac3', 'eac3', 'opus', 'flac'] as const
+export const CODEC_KEYS = [...VIDEO_CODEC_KEYS, ...AUDIO_CODEC_KEYS] as const
+export type VideoCodecKey = typeof VIDEO_CODEC_KEYS[number]
+export type AudioCodecKey = typeof AUDIO_CODEC_KEYS[number]
+export type CodecKey = typeof CODEC_KEYS[number]
 
 export type BrowserCapabilities = Record<CodecKey, boolean>
 

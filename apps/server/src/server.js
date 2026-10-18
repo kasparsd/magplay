@@ -3,20 +3,19 @@ import http from 'node:http'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import config, { settings } from './config.js'
-import { HttpError, toHttpError } from './errors.ts'
+import config, { settings } from './config-instance.js'
+import { HttpError, toHttpError } from './http/errors.ts'
 import { createRouter, isSameOrigin, route, sendCached, serveFile } from '@magplay/http-kit'
-import { SourceError } from './sources/release.js'
-import { createSearch } from './search.js'
-import { createSources } from './sources/index.js'
-import { createBitmagnetBrowser, TYPES } from './sources/bitmagnet.js'
-import { addTorrent, describe, getFile, getTorrent, knownWarning, recent, serveRaw, serveTar, status } from './torrents.js'
-import { probe, decide, subtitleToVtt } from './media.js'
-import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls, stopAllSessions } from './sessions.js'
+import { createBitmagnetBrowser, createSearch, createSources, resolveLink, TYPES } from '@magplay/indexers'
+import { engine } from './engine-instance.js'
+import { serveRaw, serveTar } from './http/media.ts'
+import { decide } from '@magplay/playback'
+import { hls, media, rawUrl, tabs } from './playback-instance.js'
+import { serveHls } from './http/hls.ts'
 import { checkSource, debugInfo, status as statusChecks } from './status-checks.js'
 import { serveSpeedtest } from './speedtest.ts'
 import { installMdnsLookup } from './mdns.ts'
-import { sourceConfigs } from './sources/index.js'
+import { sourceConfigs } from './config.ts'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(root, '../../..')
@@ -68,8 +67,6 @@ function cached (key, load, ttl = 60_000) {
   if (hit && Date.now() - hit.at < ttl) return hit.value
   const value = load().catch(err => {
     exploreCache.delete(key)
-    if (err.name === 'TimeoutError') throw new HttpError(504, 'BitMagnet took too long to answer. Try again in a moment.')
-    if (err instanceof SourceError) throw new HttpError(502, err.message)
     throw err
   })
   exploreCache.set(key, { at: Date.now(), value })
@@ -120,13 +117,13 @@ async function play (body, cancelled) {
   }
   const check = () => { if (cancelled()) throw new HttpError(499, 'Playback request cancelled') }
   check()
-  const file = await getFile(ih, idx)
+  const file = await engine.file(ih, idx)
   check()
-  const info = await probe(ih, idx, file.name)
+  const info = await media.probe(rawUrl(ih, idx), file.name)
   check()
   let decision
   try {
-    decision = decide(info, caps, audio)
+    decision = decide(info, caps, { allowTranscode: config.allowTranscode, transcodeMaxHeight: config.transcodeMaxHeight }, audio)
   } catch (err) {
     console.log(`[play] refused ${ih}/${idx} ${file.name}: ${err.message}`)
     throw err
@@ -134,10 +131,10 @@ async function play (body, cancelled) {
   console.log(`[play] ${decision.mode} ${ih}/${idx} ${file.name} @${start.toFixed(0)}s: ${decision.reason}`)
   const out = { ...decision, duration: info.duration }
   if (decision.mode === 'direct') {
-    stopTab(tab)
+    tabs.stop(tab)
     return { ...out, url: `/raw/${ih}/${idx}`, offset: 0 }
   }
-  const s = startSession({ ih, idx, info, audio, start, mode: decision.mode, tab })
+  const s = tabs.start(tab, { input: rawUrl(ih, idx), info, audio, start, mode: decision.mode })
   return {
     ...out,
     url: `/hls/${s.id}/index.m3u8`,
@@ -151,8 +148,8 @@ async function play (body, cancelled) {
 /** An .m3u for external players: one file, or every video in the torrent (a season) when idx is omitted. */
 async function playlist (req, res, ih, idx) {
   if (!/^[a-f0-9]{40}$/.test(ih ?? '')) throw new HttpError(400, 'Bad info hash')
-  const torrent = await addTorrent({ infoHash: ih })
-  const files = describe(torrent).files.filter(f => idx == null ? f.isVideo : f.idx === Number(idx))
+  const torrent = await engine.add(ih)
+  const files = engine.describe(torrent).files.filter(f => idx == null ? f.isVideo : f.idx === Number(idx))
   if (!files.length) throw new HttpError(404, 'No video files')
   // Links must use the address the browser reached us on, never 127.0.0.1
   const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`
@@ -173,8 +170,8 @@ async function subtitles ({ req, res, params }) {
   const key = `${params.ih}/${params.idx}/${track}`
   if (!subtitleCache.has(key)) {
     const job = (async () => {
-      await getFile(params.ih, Number(params.idx))
-      return subtitleToVtt(params.ih, Number(params.idx), track === 'file' ? null : Number(track))
+      await engine.file(params.ih, Number(params.idx))
+      return media.subtitleToVtt(rawUrl(params.ih, Number(params.idx)), track === 'file' ? null : Number(track))
     })()
     job.catch(() => subtitleCache.delete(key))
     subtitleCache.set(key, job)
@@ -187,7 +184,7 @@ async function searchRoute ({ res, query }) {
   if (!query.get('q')?.trim()) throw new HttpError(400, 'Type something to search for')
   const out = await searcher.search(query.get('q').trim(), query.get('cat'))
   for (const r of out.results) {
-    const warning = r.infoHash && knownWarning(r.infoHash)
+    const warning = r.infoHash && engine.knownWarning(r.infoHash)
     if (warning) Object.assign(r, { warning, likelyDirect: false })
   }
   json(res, 200, out)
@@ -196,24 +193,25 @@ async function searchRoute ({ res, query }) {
 async function addRoute ({ req, res }) {
   const { infoHash, magnet, linkId } = await readJson(req)
   const link = linkId ? searcher.linkFor(linkId) : null
-  if (linkId && !link) throw new HttpError(410, 'This search result has expired. Search again.')
-  json(res, 200, describe(await addTorrent({ infoHash, magnet, link })))
+  const id = magnet || infoHash || (link && await resolveLink(link))
+  if (!id) throw new HttpError(400, 'Send infoHash, magnet or linkId')
+  json(res, 200, engine.describe(await engine.add(id)))
 }
 
 async function probeRoute ({ req, res, params }) {
-  const torrent = await getTorrent(params.ih)
+  const torrent = await engine.get(params.ih)
   const file = torrent.files[Number(params.idx)]
   if (!file) throw new HttpError(404, 'No such file in this torrent')
-  const info = await probe(params.ih, Number(params.idx), file.name)
-  const { files } = describe(torrent)
+  const info = await media.probe(rawUrl(params.ih, Number(params.idx)), file.name)
+  const { files } = engine.describe(torrent)
   sendCached(req, res, JSON.stringify({ ...info, externalSubtitles: files.filter(f => f.isSub).map(f => ({ idx: f.idx, name: f.name })) }), { 'Content-Type': 'application/json' })
 }
 
 /** Torrent activity; the player adds idx (its file) and session/pos (its ffmpeg session, kept alive by this poll). */
 function statusRoute ({ res, params, query }) {
-  const out = status(params.ih, { idx: query.has('idx') ? Number(query.get('idx')) : undefined })
-  const s = query.get('session') && touchSession(query.get('session'), Number(query.get('pos')))
-  json(res, 200, { ...out, session: s ? sessionStats(s) : null })
+  const out = engine.status(params.ih, { idx: query.has('idx') ? Number(query.get('idx')) : undefined })
+  const s = query.get('session') && hls.touch(query.get('session'), Number(query.get('pos')))
+  json(res, 200, { ...out, session: s ? hls.stats(s) : null })
 }
 
 /** Writes change the server for everyone, so only this site's own pages may make them. */
@@ -261,13 +259,13 @@ const match = createRouter([
   route('GET', '/api/debug', async ({ res }) => json(res, 200, await debugInfo(logTail()))),
   route('POST', '/api/debug/clear-hls', ({ req, res }) => {
     sameOriginOnly(req)
-    const stopped = stopAllSessions()
+    const stopped = hls.stopAll()
     console.log(`[debug] cleared the conversion cache, stopped ${stopped} session(s)`)
     json(res, 200, { stopped })
   }),
   route('GET', '/api/speedtest', ({ req, res }) => serveSpeedtest(req, res)),
   route('GET', '/api/search', searchRoute),
-  route('GET', '/api/recent', async ({ res }) => json(res, 200, await recent())),
+  route('GET', '/api/recent', async ({ res }) => json(res, 200, await engine.recent())),
   route('GET', '/api/explore', async ({ res, query }) => {
     const p = exploreParams(query)
     json(res, 200, await cached(JSON.stringify(p), () => browser.browse(p, exploreTimeout())))
@@ -289,25 +287,25 @@ const match = createRouter([
     json(res, 200, t)
   }),
   route('POST', '/api/torrents', addRoute),
-  route('GET', '/api/torrents/:ih', async ({ res, params }) => json(res, 200, describe(await getTorrent(params.ih)))),
+  route('GET', '/api/torrents/:ih', async ({ res, params }) => json(res, 200, engine.describe(await engine.get(params.ih)))),
   route('GET', '/api/torrents/:ih/status', statusRoute),
   route('GET', '/api/probe/:ih/:idx', probeRoute),
   route('POST', '/api/play', async ({ req, res }) => json(res, 200, await play(await readJson(req), () => res.destroyed))),
   route('POST', '/api/play/tab/:tab', ({ res, params }) => {
-    closeTab(params.tab)
+    tabs.close(params.tab)
     json(res, 200, { ok: true })
   }),
   route('DELETE|POST', '/api/play/:session', ({ res, params }) => { // POST too, for navigator.sendBeacon
-    stopSession(params.session)
+    hls.stop(params.session)
     json(res, 200, { ok: true })
   }),
 
   // Media
   // An optional trailing file name lets external players show a title and guess the format
-  route('GET|HEAD', '/raw/:ih/:idx/:name?', ({ req, res, params, query }) => serveRaw(req, res, params.ih, Number(params.idx), { download: query.has('download') })),
-  route('GET|HEAD', '/tar/:ih/:name?', ({ req, res, params }) => serveTar(req, res, params.ih)),
+  route('GET|HEAD', '/raw/:ih/:idx/:name?', ({ req, res, params, query }) => serveRaw(req, res, engine, params.ih, Number(params.idx), { download: query.has('download') })),
+  route('GET|HEAD', '/tar/:ih/:name?', ({ req, res, params }) => serveTar(req, res, engine, params.ih)),
   route('GET', '/playlist.m3u', ({ req, res, query }) => playlist(req, res, query.get('ih'), query.get('idx'))),
-  route('GET', '/hls/:session/:file', ({ req, res, params }) => serveHls(res, params.session, params.file, req)),
+  route('GET', '/hls/:session/:file', ({ req, res, params }) => serveHls(req, res, hls, params.session, params.file)),
   route('GET', '/subs/:ih/:idx/:track', subtitles),
 ])
 
