@@ -18,7 +18,7 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 | Resume | Per-file browser timestamps, Resume/Start over, HLS absolute timeline handling, completion detection, timestamped torrent action | Local browser only; no cross-device sync or audio/subtitle preference persistence; completion is a time heuristic, not credits detection |
 | Lifetimes | Abortable page/play/subtitle waits, stale-result guards, countdown cleanup, tab-close fencing, raw/tar cancellation and separate metadata/checking deadlines | Browser crashes/dropped beacons still rely on idle cleanup; shared probe/torrent jobs can finish for other consumers rather than being destroyed by one cancellation |
 | Resource safety | Limits on HLS sessions, torrent initialization, probes and standalone subtitle conversion; free-space admission check and soft HLS disk monitor | Not an OS quota; checks can overshoot between samples; torrent LRU preserves active data; in-memory result caches still need long-session observation |
-| HTTP/static delivery | Explicit cache policies, conditional GET/HEAD, validators, safe static streaming and same-origin proxy guidance | Unversioned assets revalidate; shared proxy media caching is intentionally disabled; proxy offload has not been benchmarked |
+| HTTP/static delivery | Explicit cache policies, conditional GET/HEAD, validators, safe static streaming and same-origin proxy guidance; content-hashed immutable `/assets/` bundles and stylesheet, pages revalidated with a content ETag | Pages always revalidate; shared proxy media caching is intentionally disabled; proxy offload has not been benchmarked |
 | Deployment | Non-root Node 24 Alpine Docker image with a separate install stage, multi-platform GHCR publishing (`edge` from `main`, versions from releases), local arm64 container acceptance (rerun on Node 24 Alpine, including native `node-datachannel` on musl and Alpine ffmpeg), `.local` source names resolved through the host's avahi-daemon socket (checked in the image against a fake avahi), unit/peer/browser/typecheck/lint CI; optional [Gluetun VPN deployment](vpn.md) for public torrent traffic | Playback on the real server deployment confirmed by the owner (2026-10-17), without recorded timings; amd64, current Firefox/Safari/device acceptance `.local` resolution against a real avahi-daemon and live VPN routing/disconnect protection are still unverified |
 
 ## Implemented in the revised sequence
@@ -41,12 +41,14 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 16. **Deployment documentation:** an optional [Gluetun VPN deployment](vpn.md) with a standalone Compose example (configuration validated, no VPN containers run), and macOS local network permission notes in the README.
 17. **Player checklists:** ⓘ Details names the container ("MP4", "Matroska") through `containerLabel`; the layout e2e covers a 16:9 and a 2.39:1 file at 1440 × 900, 1280 × 800, 800 × 600 and 375 × 812 in both orientations, and a narrow-chrome e2e checks the under-600 px controls and 40 px targets. Chromium only; real devices remain item 1, and the transcode-that-falls-behind check moved to item 2. See [the Player roadmap](user-interface.md#player-roadmap).
 18. **Changesets and application changelog:** one application version in `apps/server/package.json`, notes in `.changeset/`, `npm run release:version` for an explicit release, and a CI check that every pull request adds a note or is a valid release. No release has been cut; the Docker acceptance check of the version source is still to run before the first one. See [releases](releases.md) and [the plan](plans/changesets-changelog.md).
+19. **Player in TypeScript:** `player.ts` and `capabilities.ts`, with the Player's pure parts in tested `lib/player-*.ts` modules (Details rows, track choices, speeds, keys) and DOM-free formatters in `lib/format.ts`; no behaviour change. See [the TypeScript plan](plans/package-boundaries-and-typescript.md).
+20. **Content-hashed client assets:** esbuild writes `[name]-[hash]` bundles and the stylesheet with a metafile; the server links pages to them, serves `/assets/` as immutable and revalidates pages with a strong content ETag, so a release reaches browsers behind caching proxies on the next reload. See [the plan](plans/asset-fingerprinting.md) and [architecture](architecture.md).
 
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
 ## Verification and confidence
 
-- Fast colocated suite: **223 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, not helper modules or browser tests.
+- Fast colocated suite: **231 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
 - Chromium: **53 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
 - `npm run test:all` runs all three suites. CI also runs `npm run typecheck` and `npm run lint` (no warnings allowed). The Node 22 validation and first Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md); the isolated Docker check was rerun on Node 24 Alpine after each reorganization step, most recently after Phases 3–4 on 2026-10-18 (arm64; remux first segment 217 ms, seek-to-30 s 221 ms).
@@ -58,19 +60,17 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Since then, application observability (13), magnet search (14), playback wait explanations (15), the VPN guide (16), the Player checklists (17) and Changesets (18) have landed; the [desktop packaging](plans/desktop-packaging.md) plan is written but not implemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs.
+Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Since then, application observability (13), magnet search (14), playback wait explanations (15), the VPN guide (16), the Player checklists (17), Changesets (18), the Player in TypeScript (19) and content-hashed client assets (20) have landed; the [desktop packaging](plans/desktop-packaging.md) plan is written but not implemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs.
 
-Items 1–2 need the owner's devices and server. Of the work that does not, item 3 (Player in TypeScript) is next.
+Items 1–2 need the owner's devices and server. Everything else in the table is P3 or conditional; reprioritize explicitly before starting it.
 
 | # | Priority | Work | Completion evidence |
 | --- | --- | --- | --- |
 | 1 | **P1** | Check the browsers/devices actually used | Mobile controls and fullscreen, audio/subtitle switching, wait explanations, and unsupported-format/external-player handoff on each device in use, with the new chrome. Each failure becomes a test or a Player item. |
 | 2 | **P1** | Measure on the real server | A transcode that falls behind, shown both in the Performance graph with ffmpeg CPU (Linux only) and as the wait explanation/capacity advisory (closes the open check in Player step 3); remux startup/seek timings; cache sizes in Debug over a long session (closes the open Wave 3 item); `.local` resolution against the server's real avahi-daemon. Use structured logs for server stages and device evidence for browser readiness. Record the numbers here and tune limits only if they call for it. |
-| 3 | **P2** | Player in TypeScript | `player.js` (about 1,000 lines, now including the wait overlay) and `capabilities.js` become TypeScript, split into small modules; no behaviour change. |
-| 4 | **P3** | TypeScript Phase 7 review | The [plan](plans/package-boundaries-and-typescript.md)'s tighten-and-document pass; other client pages, tests and scripts still convert on touch. |
-| 5 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
-| 6 | **P3 / conditional** | Fingerprinted client assets | Only if revalidating unversioned bundles becomes a measured problem. |
-| 7 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
+| 3 | **P3** | TypeScript Phase 7 review | The [plan](plans/package-boundaries-and-typescript.md)'s tighten-and-document pass; other client pages, tests and scripts still convert on touch. |
+| 4 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
+| 5 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
 
 **Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
 
