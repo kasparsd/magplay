@@ -17,6 +17,9 @@
       "path": "packages/indexers"
     },
     {
+      "path": "packages/torrent-engine"
+    },
+    {
       "path": "apps/server"
     },
     {

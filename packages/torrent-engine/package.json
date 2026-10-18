@@ -1,0 +1,14 @@
+{
+  "name": "@magplay/torrent-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@magplay/release-info": "*",
+    "parse-torrent": "11.0.24",
+    "webtorrent": "3.0.21"
+  }
+}

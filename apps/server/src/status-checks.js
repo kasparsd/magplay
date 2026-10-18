@@ -7,7 +7,7 @@ import config, { settings } from './config-instance.js'
 import { createStatus } from './status.ts'
 import { createBitmagnetBrowser, createSources } from '@magplay/indexers'
 import { runProbeJob, runSubtitleJob } from './media.js'
-import { cacheBytes, loadedTorrents, runTorrentLoad } from './torrents.js'
+import { engine } from './engine-instance.js'
 import { sessionSummary } from './sessions.js'
 
 export const status = createStatus()
@@ -84,7 +84,7 @@ status.registerCheck({
 let cacheUsage = { at: 0, bytes: 0 }
 /** Torrent cache bytes, measured at most every 30 s: it walks every file. */
 async function cachedCacheBytes () {
-  if (Date.now() - cacheUsage.at > 30_000) cacheUsage = { at: Date.now(), bytes: await cacheBytes() }
+  if (Date.now() - cacheUsage.at > 30_000) cacheUsage = { at: Date.now(), bytes: await engine.cacheBytes() }
   return cacheUsage.bytes
 }
 
@@ -153,8 +153,8 @@ export async function debugInfo (log) {
     ffprobe: versions.ffprobe,
     resources: [
       { id: 'conversions', label: 'Conversions', used: sessions.active, limit: config.maxHlsSessions },
-      { id: 'torrentLoads', label: 'Torrents loading', ...runTorrentLoad.stats() },
-      { id: 'torrents', label: 'Torrents loaded', used: loadedTorrents(), limit: 0 },
+      { id: 'torrentLoads', label: 'Torrents loading', ...engine.stats().loads },
+      { id: 'torrents', label: 'Torrents loaded', used: engine.stats().loaded, limit: 0 },
       { id: 'probes', label: 'Probes', ...runProbeJob.stats() },
       { id: 'subtitles', label: 'Subtitle jobs', ...runSubtitleJob.stats() },
       { id: 'hls', label: 'Conversion storage', used: sessions.bytes, limit: config.hlsMaxBytes, unit: 'bytes' },

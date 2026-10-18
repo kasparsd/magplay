@@ -9,7 +9,6 @@
     "@magplay/indexers": "*",
     "@magplay/release-info": "*",
     "@magplay/seekable-tar": "*",
-    "parse-torrent": "11.0.24",
-    "webtorrent": "3.0.21"
+    "@magplay/torrent-engine": "*"
   }
 }

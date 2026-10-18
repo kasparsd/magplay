@@ -2,6 +2,7 @@
 // app modules that haven't moved into a package yet throw HttpError directly.
 import { FileNotFoundError, MalformedPathError } from '@magplay/http-kit'
 import { LinkExpired, NoSourcesError, SearchTimeout, SourceError } from '@magplay/indexers'
+import { EngineBusyError, InvalidTorrentError, NoSuchFileError, TorrentFailedError, TorrentTimeoutError } from '@magplay/torrent-engine'
 
 /** An error with an HTTP status, shown to the user as-is. */
 export class HttpError extends Error {
@@ -34,5 +35,10 @@ export function toHttpError (err: unknown): HttpFailure {
   if (err instanceof NoSourcesError) return known(503, err.message)
   if (err instanceof SearchTimeout) return known(504, err.message)
   if (err instanceof LinkExpired) return known(410, err.message)
+  if (err instanceof InvalidTorrentError) return known(400, err.message)
+  if (err instanceof NoSuchFileError) return known(404, err.message)
+  if (err instanceof TorrentTimeoutError) return known(504, err.message)
+  if (err instanceof TorrentFailedError) return known(502, err.message)
+  if (err instanceof EngineBusyError) return known(503, err.message, 5)
   return { status: 500, message: err instanceof Error ? err.message : String(err), retryAfter: undefined, unexpected: true }
 }
