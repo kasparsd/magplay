@@ -132,17 +132,18 @@ test('fps comes from -progress and cpu is the share of all cores between polls',
   const pids: Array<number | undefined> = []
   const readCpu = (pid: number | undefined) => { pids.push(pid); return text == null ? null : parseProcStat(text) }
   const { hls, start } = await setup(t, { readCpu, cores: 4 })
-  // The session takes its first CPU sample at start; a frozen clock keeps the windows exact
-  const started = Date.now()
-  t.mock.timers.enable({ apis: ['Date'], now: started })
   const { s, proc } = start()
   proc.stdout.write('frame=240\nfps=47.92\nout_time_us=10000000\nspeed=2.0x\nprogress=continue\n')
+  // Every poll sets the baseline the next one measures from, so a first poll at a chosen time keeps the windows
+  // exact (the sample taken at start uses the real clock)
+  const started = Date.now()
+  hls.stats(s, started)
   // 4 CPU seconds over 2 s of wall time on 4 cores: half the machine
   text = procStat(300, 100)
   let stats = hls.stats(s, started + 2000)
   assert.equal(stats.fps, 47.92)
   assert.equal(stats.cpu, 0.5)
-  assert.deepEqual(pids, [4242])
+  assert.deepEqual(pids, [4242, 4242])
   // The next poll measures only its own window: 1 CPU second in 2 s on 4 cores
   text = procStat(350, 150)
   assert.equal(hls.stats(s, started + 4000).cpu, 0.125)
