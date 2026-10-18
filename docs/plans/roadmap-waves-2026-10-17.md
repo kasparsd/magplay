@@ -12,7 +12,7 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
 
 ## Wave 2
 
-- [ ] **TypeScript Phases 3–4** (roadmap item 3): `indexers`, `torrent-engine` and `playback` packages, factories with `close()`, `main.ts` with graceful shutdown. Starts after 1a and the Player session's `sessions.js` change are on `main`, because it moves those files.
+- [x] **TypeScript Phases 3–4** (roadmap item 3): `indexers`, `torrent-engine` and `playback` packages, factories with `close()`, `main.ts` with graceful shutdown. Starts after 1a and the Player session's `sessions.js` change are on `main`, because it moves those files. Branch `claude/ts-phase-3-4-84439f`, merged 2026-10-18.
 
 ## Wave 3
 
@@ -22,3 +22,4 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
 
 - 2026-10-17: plan approved; Wave 1 started.
 - 2026-10-18: Wave 1 merged to main (typecheck, lint, 153 unit and 38 e2e tests pass); Wave 2 started.
+- 2026-10-18: settings follow-ups (two top-bar buttons, one stacked page, trimmed to tunable settings) and Wave 2 merged; with both merged, typecheck, lint and the 178 unit, 4 peer and 40 e2e tests pass. Wave 3 started.
