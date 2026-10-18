@@ -14,6 +14,9 @@
       "path": "packages/http-kit"
     },
     {
+      "path": "packages/indexers"
+    },
+    {
       "path": "apps/server"
     },
     {

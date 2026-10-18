@@ -10,7 +10,7 @@ const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-sessions-'))
 process.env.CACHE_DIR = dir
 process.env.MAX_HLS_SESSIONS = '2'
 const { startSession, stopSession, getSession, touchSession, sessionStats, checkSessionResources, closeTab, parseProcStat } = await import('./sessions.js')
-const { default: config } = await import('./config.js')
+const { default: config } = await import('./config-instance.js')
 after(() => fs.rm(dir, { recursive: true, force: true }))
 
 const info = { video: { codec: 'h264' }, audio: [], subtitles: [] }

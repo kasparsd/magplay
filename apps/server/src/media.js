@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import config from './config.js'
+import config from './config-instance.js'
 import { HttpError } from './errors.ts'
 import { createLimiter } from './limits.js'
 

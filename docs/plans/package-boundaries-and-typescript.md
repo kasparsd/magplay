@@ -1,6 +1,6 @@
 # Package boundaries and TypeScript
 
-Status: **In progress (Phases 3–4 scheduled; 5–6 on touch)** · Owner: unassigned · Last updated: 2026-10-17
+Status: **In progress (Phase 4 scheduled; 5–6 on touch)** · Owner: unassigned · Last updated: 2026-10-18
 
 The target structure, its reasons and its rules are canonical in [architecture.md](../architecture.md); priority and completion evidence are in [the roadmap](../roadmap.md). This plan tracks how we get there.
 
@@ -111,10 +111,10 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 
 ### Phase 3: Indexers
 
-- [ ] Move `sources/*` and `search` into `indexers`; move `sourcesFromEnv`/`bitmagnetUrl` env parsing into `apps/server/config.ts`, so config no longer imports an adapter.
-- [ ] Replace `httpError` in `search` with indexer errors (`SearchTimeout`, `SourceError`, `LinkExpired`).
-- [ ] Define a `Source` interface and the `Release` type in one place; parse functions for Torznab XML, Prowlarr JSON and BitMagnet GraphQL; fixtures exercise them.
-- [ ] Convert with tests; revisit the no-validation-library decision.
+- [x] Move `sources/*` and `search` into `indexers`; move `sourcesFromEnv`/`bitmagnetUrl` env parsing into `apps/server/config.ts`, so config no longer imports an adapter. `sourceConfigs` (settings items → configs) and `hostName` moved too; `config.ts` reads only the indexers' `SourceConfig` type and `SOURCE_TYPES`.
+- [x] Replace `httpError` in `search` with indexer errors (`SearchTimeout`, `SourceError`, `LinkExpired`). Also `NoSourcesError` (the 503 for "no sources configured"). `search` throws `SourceError` naming each source when all fail; `linkFor(id)` throws `LinkExpired` instead of returning null; `resolveLink` throws `SourceError` instead of `HttpError(502)`; the BitMagnet browser turns a timeout into `SearchTimeout`, so the Explore cache no longer translates errors. `toHttpError` maps them to 502, 503, 504 and 410 as before.
+- [x] Define a `Source` interface and the `Release` type in one place; parse functions for Torznab XML, Prowlarr JSON and BitMagnet GraphQL; fixtures exercise them. `parseTorznabFeed`/`parseTorznabCaps`, `parseProwlarrResults` and `parseSearchResponse` take `unknown` (or XML text) and return typed values; `createSource(config)` switches over a discriminated `SourceConfig` union.
+- [x] Convert with tests; revisit the no-validation-library decision. Kept hand-written parsing: four small `as*` narrowing helpers in `release.ts` cover every upstream shape, and the parse functions read like the data they accept. A library would add a dependency and a second way to describe types without removing code.
 
 ### Phase 4: Torrent engine, playback and the server split
 
@@ -159,7 +159,7 @@ Runs once Phase 4 is done, since Phase 4 adds most vendor-boundary types (`webto
 | 0 | Tooling foundation | ✅ Done | `7b4b27b`, `6a9e2af`, `2152cad` | TypeScript pinned to 5.9.3, not 7 (typescript-eslint 8 peers `<6.1.0`); the ESLint config is `.js` (a `.ts` one needs `jiti`); npm 11.20 gates install scripts, allowed native ones via `allowScripts` in package.json |
 | 1 | Apps skeleton and client build | ✅ Done | `54cd9df`, `6a9e2af` | esbuild `--minify --sourcemap`; URLs unchanged (`/search.js` etc. now served from `dist/client/`); `npm test` and `test:e2e` build first; hls.js moved to devDependencies (bundled at build time, never served); Docker check passed on Node 24 Alpine |
 | 2 | Contract and pure packages | ✅ Done | `ee3ae1d`, `8c1b76c`…`00ef1de` | `api-contract`, `release-info`, `seekable-tar`, `http-kit`, boundary lint rules, `toHttpError` and the pure client helpers |
-| 3 | Indexers | ⬜ Not started | | |
+| 3 | Indexers | ✅ Done | Phase 3 commit | `@magplay/indexers`; typed parse functions with fixtures; indexer errors; env parsing in `apps/server/src/config.ts` |
 | 4 | Torrent engine, playback, server split | ⬜ Not started | | |
 | 5 | Client pages | ⬜ On touch | | Player rewritten in TS by Player step 1 |
 | 6 | Tests, scripts, config files | ⬜ On touch | | |
@@ -175,7 +175,7 @@ Tick when the package exists, has its own `package.json` and `tsconfig`, is full
 - [x] `release-info` (from `episodes`, parts of `sources/release`)
 - [x] `seekable-tar` (from `tar`)
 - [x] `http-kit` (from `router`, `range`, `http-cache`)
-- [ ] `indexers` (from `sources/*`, `search`)
+- [x] `indexers` (from `sources/*`, `search`)
 - [ ] `torrent-engine` (from `torrents`, `torrent-ready`, `limits`)
 - [ ] `playback` (from `media`, `sessions`)
 - [ ] `apps/server` (`config`, `main`, `errors`, `services/*`, `http/*`)
@@ -185,8 +185,8 @@ Tick when the package exists, has its own `package.json` and `tsconfig`, is full
 
 Tick when the file is `.ts` in its target location, type-checks, passes the type-aware lint rules and its tests pass.
 
-- **Server, from `src/`:** [ ] `config` · [ ] `limits` · [x] `range` · [x] `http-cache` · [x] `router` · [x] `tar` · [x] `episodes` · [ ] `torrent-ready` · [ ] `search` · [ ] `torrents` · [ ] `media` · [ ] `sessions` · [ ] `server`
-- **Sources:** [ ] `release` · [ ] `links` · [ ] `torznab` · [ ] `prowlarr` · [ ] `bitmagnet` · [ ] `index` · [ ] `test-helpers`
+- **Server, from `src/`:** [x] `config` · [ ] `limits` · [x] `range` · [x] `http-cache` · [x] `router` · [x] `tar` · [x] `episodes` · [ ] `torrent-ready` · [x] `search` · [ ] `torrents` · [ ] `media` · [ ] `sessions` · [ ] `server`
+- **Sources:** [x] `release` · [x] `links` · [x] `torznab` · [x] `prowlarr` · [x] `bitmagnet` · [x] `index` (now `sources.ts`) · [x] `test-helpers`
 - **Client:** [x] `lib/api-types` · [x] `lib/urls` · [x] `lib/requests` · [x] `lib/subtitles` · [ ] `lib/capabilities` · [x] `lib/progress` · [x] `lib/api` · [x] `lib/ui` · [ ] `search` · [ ] `explore` · [ ] `title` · [ ] `torrent` · [ ] `player`
 - **Tests, scripts, config:** [ ] `tests/e2e/fixtures` · [ ] `tests/e2e/playback.test` · [ ] `tests/fixtures/media` · [ ] `tests/integration/peers.test` · [ ] `tools/scripts/setup-indexers` · [ ] `tools/scripts/check-docker` · [ ] `playwright.config`
 
@@ -217,3 +217,4 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - 2026-10-17: Pure client helpers converted to `.ts` with their tests; `apps/client` split into app and test projects so tests get Node types without leaking them into page code. Lint `files` globs for client tests name their extensions (`*.test.{js,ts}`), because a bare `*.test.*` also matched `tsconfig.test.json` and made ESLint parse it. Phase 2 complete: typecheck, lint, 110 unit + 4 peer + 19 e2e tests and the isolated Docker check pass (linux/arm64, remux first segment 219 ms, seek-to-30 s 216 ms).
 - 2026-10-17: Scope revised with the roadmap reorder. Phases 3–4 stay scheduled (roadmap item 5, after the UI bug fixes, playback instrumentation, real-world acceptance and advisory triage). Phases 5–6 become convert-on-touch, the player is rewritten in TypeScript by the Player roadmap instead of being converted first, and Phase 7 runs after Phase 4. The "every file is `.ts`" success criterion now applies to `packages/*` and `apps/server`.
 - 2026-10-17: The owner confirmed playback works on the real NAS, so the roadmap dropped the NAS acceptance and instrumentation gates. Phases 3–4 are now roadmap item 3, right after the UI bug fixes and the advisory triage.
+- 2026-10-18: Phase 3 done. `packages/indexers` holds the adapters, search, download links and the BitMagnet browser, strict TypeScript with fixture tests; the env-parsing tests moved to `config.test.ts`, which now calls `loadConfig(env)` in-process instead of spawning Node. `config.ts` exports `loadConfig(env)` (settings store, `current()`, `onChange`); until the Phase 4 split, `config-instance.js` gives the remaining JS modules the old live object. Small differences, all in failure paths: an indexer body that isn't JSON is now a `SourceError` ("… returned invalid JSON") instead of an unexpected 500, and a BitMagnet answer without `data.torrentContent.search` is a `SourceError` instead of a `TypeError`.

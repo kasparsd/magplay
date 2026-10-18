@@ -3,19 +3,16 @@ import http from 'node:http'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import config, { settings } from './config.js'
+import config, { settings } from './config-instance.js'
 import { HttpError, toHttpError } from './errors.ts'
 import { createRouter, isSameOrigin, route, sendCached, serveFile } from '@magplay/http-kit'
-import { SourceError } from './sources/release.js'
-import { createSearch } from './search.js'
-import { createSources } from './sources/index.js'
-import { createBitmagnetBrowser, TYPES } from './sources/bitmagnet.js'
+import { createBitmagnetBrowser, createSearch, createSources, TYPES } from '@magplay/indexers'
 import { addTorrent, describe, getFile, getTorrent, knownWarning, recent, serveRaw, serveTar, status } from './torrents.js'
 import { probe, decide, subtitleToVtt } from './media.js'
 import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls, stopAllSessions } from './sessions.js'
 import { checkSource, debugInfo, status as statusChecks } from './status-checks.js'
 import { serveSpeedtest } from './speedtest.ts'
-import { sourceConfigs } from './sources/index.js'
+import { sourceConfigs } from './config.ts'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(root, '../../..')
@@ -67,8 +64,6 @@ function cached (key, load, ttl = 60_000) {
   if (hit && Date.now() - hit.at < ttl) return hit.value
   const value = load().catch(err => {
     exploreCache.delete(key)
-    if (err.name === 'TimeoutError') throw new HttpError(504, 'BitMagnet took too long to answer. Try again in a moment.')
-    if (err instanceof SourceError) throw new HttpError(502, err.message)
     throw err
   })
   exploreCache.set(key, { at: Date.now(), value })
@@ -195,7 +190,6 @@ async function searchRoute ({ res, query }) {
 async function addRoute ({ req, res }) {
   const { infoHash, magnet, linkId } = await readJson(req)
   const link = linkId ? searcher.linkFor(linkId) : null
-  if (linkId && !link) throw new HttpError(410, 'This search result has expired. Search again.')
   json(res, 200, describe(await addTorrent({ infoHash, magnet, link })))
 }
 
