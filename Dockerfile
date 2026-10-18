@@ -20,6 +20,8 @@ FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=manifests /app ./
 RUN npm ci
+# esbuild reads the shared compiler options (verbatimModuleSyntax and friends) through each package's tsconfig.json.
+COPY tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
 COPY public ./public
