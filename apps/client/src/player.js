@@ -154,7 +154,7 @@ function renderFacts () {
     ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.width}×${v.height}, ${(v.width * (v.sampleAspect || 1) / v.height).toFixed(2)}:1, ${v.bitDepth}-bit`],
     ['Audio', a && [audioFormat(a.codec, a.channels), languageName(a.language)].filter(Boolean).join(', ')],
     ['Peers', st?.loaded ? `${st.peers.length} · ↓ ${formatSpeed(st.downloadSpeed)}` : null],
-    ['On the NAS', st?.file ? `${Math.round(st.file.progress * 100)}% of this file` : null],
+    ['On the server', st?.file ? `${Math.round(st.file.progress * 100)}% of this file` : null],
     ['Buffered', cur ? `${Math.max(0, Math.round(bufferedAhead()))} s ahead` : null],
     ['ffmpeg', s ? `${s.speed ? `${s.speed.toFixed(1)}x` : '…'}${s.paused ? ', paused far enough ahead' : s.running ? '' : ', finished'}` : null],
   ].filter(([, value]) => value)
@@ -518,7 +518,7 @@ async function pollStatus (signal = pageLife.signal) {
       const nowSlow = s.running && !s.paused && s.speed && s.speed < 1 && s.produced - video.currentTime < 30
       if (s.failed) notify(`ffmpeg failed: ${s.error}`, 'error', [button('Try again', () => start(position()), true)])
       else if (nowSlow) {
-        notify(`The NAS converts at ${s.speed.toFixed(1)}x, slower than playback, so this will stall. Try another release.`, 'warn',
+        notify(`The server converts at ${s.speed.toFixed(1)}x, slower than playback, so this will stall. Try another release.`, 'warn',
           [el('button', { type: 'button', className: 'link', textContent: 'Performance', onclick: showPerformance })])
       } else if (slow) notify('')
       slow = nowSlow
@@ -547,18 +547,18 @@ const seek = $('#seek')
 let dragging = false
 let autoMuted = false // muted by the autoplay fallback, not by choice
 
-/** The four seek bar layers: on the NAS, converted by ffmpeg, in the browser, played. */
+/** The four seek bar layers: on the server, converted by ffmpeg, in the browser, played. */
 function drawSeekbar () {
   const total = duration()
   const layer = (id, value) => { $(id).style.backgroundImage = value }
   if (!total) {
-    for (const id of ['#layer-nas', '#layer-conv', '#layer-buf']) layer(id, 'none')
+    for (const id of ['#layer-server', '#layer-conv', '#layer-buf']) layer(id, 'none')
     $('#layer-played').style.width = '0'
     return
   }
   const offset = cur?.offset ?? 0
   const session = cur?.session && lastStatus?.session?.id === cur.session ? lastStatus.session : null
-  layer('#layer-nas', layerBackground(lastStatus?.file?.ranges ?? [], 'var(--seek-nas)'))
+  layer('#layer-server', layerBackground(lastStatus?.file?.ranges ?? [], 'var(--seek-server)'))
   layer('#layer-conv', layerBackground(session ? [[offset / total, (offset + session.produced) / total]] : [], 'var(--seek-conv)'))
   layer('#layer-buf', layerBackground(cur ? spans(video.buffered).map(([a, b]) => [(a + offset) / total, (b + offset) / total]) : [], 'var(--seek-buf)'))
   $('#layer-played').style.width = `${Math.min(100, (dragging ? Number(seek.value) : position()) / total * 100)}%`

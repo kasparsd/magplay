@@ -10,7 +10,7 @@ export interface RecentTorrent {
   length: number | null
   /** ms; the folder's mtime or the last use since startup, whichever is later. */
   lastUsed: number
-  /** Bytes on the NAS (torrent files are sparse). */
+  /** Bytes on the server (torrent files are sparse). */
   onDisk: number
 }
 
@@ -36,7 +36,7 @@ export async function listCached (dir: string, limit: number, lastUsed: (infoHas
     return parsed && { infoHash: ih, name: parsed.name ?? null, length: parsed.length ?? null, lastUsed: Math.max(stat.mtimeMs, lastUsed(ih)), folder }
   }))
   const list = entries.filter(e => e !== null).sort((a, b) => b.lastUsed - a.lastUsed).slice(0, limit)
-  // How much is on the NAS; the folder holds the data and the metadata file
+  // How much is on the server; the folder holds the data and the metadata file
   return Promise.all(list.map(async ({ folder, ...e }) => {
     const bytes = await dirBytes(folder)
     return { ...e, onDisk: e.length === null ? bytes : Math.min(e.length, bytes) }

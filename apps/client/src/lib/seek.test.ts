@@ -12,7 +12,7 @@ test('spans reads TimeRanges-like objects', () => {
   assert.deepEqual(spans(ranges), [[0, 5], [10, 20]])
 })
 
-test('HLS outcomes: buffer, seekable session, restart on the NAS, missing', () => {
+test('HLS outcomes: buffer, seekable session, restart on the server, missing', () => {
   assert.equal(seekOutcome(70, hls()), 'buffered')
   assert.equal(seekOutcome(90, hls()), 'seekable')
   // seekTo stays 2 s inside the seekable end, so the tooltip does too
@@ -24,7 +24,7 @@ test('HLS outcomes: buffer, seekable session, restart on the NAS, missing', () =
   assert.equal(seekHint('seekable'), '')
 })
 
-test('direct outcomes depend only on the buffer and the NAS', () => {
+test('direct outcomes depend only on the buffer and the server', () => {
   const direct = hls({ mode: 'direct', offset: 0, seekable: [[0, 600]], buffered: [[0, 30]] })
   assert.equal(seekOutcome(10, direct), 'buffered')
   assert.equal(seekOutcome(200, direct), 'seekable')

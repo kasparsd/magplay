@@ -14,7 +14,7 @@ Status: built 2026-10-17 on branch `claude/settings-status-b42d44` (roadmap wave
 ## Why
 
 - **Configuration is invisible.** Every indexer URL, API key and limit is an env var. A wrong Prowlarr key shows up as "no results", and fixing it means editing compose and restarting the container. The server already knows when a source fails; nothing tells the user.
-- **Stalls have an unmeasured link.** [The performance graphs plan](performance-graphs.md) wants every stall traceable to the swarm, the NAS CPU or the browser. The network between the NAS and the device is the fourth link, and nothing measures it today.
+- **Stalls have an unmeasured link.** [The performance graphs plan](performance-graphs.md) wants every stall traceable to the swarm, the server CPU or the browser. The network between the server and the device is the fourth link, and nothing measures it today.
 - **Player preferences need a home.** [One player chrome](../user-interface.md#1-one-player-chrome-for-every-mode) persists volume, speed and audio/subtitle language in `localStorage`. Users need one place to see and change those defaults.
 - **Debugging needs a view.** Today, finding out what the server is doing means reading container logs.
 
@@ -133,7 +133,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 | `GET /api/debug` | versions, limits in use, live sessions and torrents, log tail |
 | `GET /api/speedtest` | byte faucet for the connection test |
 
-**Write protection:** there is no login, but a web page in the same browser could POST to the NAS. Writes (`PATCH`, `POST /test`, clear cache) require `Sec-Fetch-Site: same-origin` or a matching `Origin`, and reject anything else with 403. This belongs in `http-kit` as a small guard.
+**Write protection:** there is no login, but a web page in the same browser could POST to the server. Writes (`PATCH`, `POST /test`, clear cache) require `Sec-Fetch-Site: same-origin` or a matching `Origin`, and reject anything else with 403. This belongs in `http-kit` as a small guard.
 
 ### Connection test (from the earlier draft)
 
@@ -186,4 +186,4 @@ The connection test result is `magplay:connection` (`STORAGE_KEYS` in `lib/prefe
 - Is a toast warranted when the overall level gets worse while the user is on a page, or is the dot enough? The proposal is the dot only, plus a one-time `notify()` when the level becomes `error`.
 - Do the poll interval (30 s) and the per-source check TTL (60 s) suit Prowlarr instances that rate-limit?
 - Should the speed test ever run unprompted (once per browser per week) so the Connection check isn't `unknown` for most users?
-- Exact connection thresholds: confirm against real NAS validation numbers (roadmap P1).
+- Exact connection thresholds: confirm against real server validation numbers (roadmap P1).

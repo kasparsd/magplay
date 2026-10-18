@@ -124,7 +124,7 @@ export interface SessionStats {
   speed: number | null
   /** Frames per second ffmpeg is producing, from its -progress output. */
   fps: number | null
-  /** ffmpeg's share of all CPU cores since the previous poll (0–1, 1 saturates the NAS), or null where it can't be measured. */
+  /** ffmpeg's share of all CPU cores since the previous poll (0–1, 1 saturates the server), or null where it can't be measured. */
   cpu: number | null
   /** Seconds generated relative to this session's start. */
   produced: number

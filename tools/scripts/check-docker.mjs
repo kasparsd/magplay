@@ -12,7 +12,7 @@ const docker = async (...args) => (await exec('docker', args, { timeout: 120_000
 const image = process.argv[2] || 'magplay:local-acceptance'
 const name = `magplay-check-${process.pid}`
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-docker-'))
-const report = { image, checks: [], timingsMs: {}, device: 'local Docker host; not the NAS' }
+const report = { image, checks: [], timingsMs: {}, device: 'local Docker host; not the server' }
 let started = false
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 try {

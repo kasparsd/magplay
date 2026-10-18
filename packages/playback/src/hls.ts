@@ -191,7 +191,7 @@ export function createHlsSessions ({
   }
 
   /**
-   * ffmpeg's share of all CPU cores since the previous call (0–1, so 1 means the NAS is saturated), or null when unknown.
+   * ffmpeg's share of all CPU cores since the previous call (0–1, so 1 means the server is saturated), or null when unknown.
    * Each status poll calls it once, so the window is the poll interval.
    */
   function sampleCpu (s: Session, now: number): number | null {

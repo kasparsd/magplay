@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { backTarget } from './back.ts'
 
-const origin = 'http://nas:8080'
+const origin = 'http://server:8080'
 
 test('search results, Explore, titles and the home list are worth going back to', () => {
   assert.deepEqual(backTarget(`${origin}/?q=bunny&cat=2000`, origin), { label: '← Results', href: '/?q=bunny&cat=2000', history: true })
@@ -17,5 +17,5 @@ test('direct links, other sites and other pages fall back', () => {
   assert.deepEqual(backTarget('', origin, fallback), { ...fallback, history: false })
   assert.deepEqual(backTarget('https://example.com/?q=x', origin, fallback), { ...fallback, history: false })
   assert.equal(backTarget(`${origin}/play/abc/0`, origin), null)
-  assert.equal(backTarget('http://nas:8080.evil.test/?q=x', origin), null) // the origin must end at a slash
+  assert.equal(backTarget('http://server:8080.evil.test/?q=x', origin), null) // the origin must end at a slash
 })

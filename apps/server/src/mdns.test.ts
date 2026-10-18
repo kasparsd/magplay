@@ -22,25 +22,25 @@ async function fakeAvahi (names: Record<string, string>) {
 }
 
 test('resolves names through the avahi-daemon line protocol', async t => {
-  const avahi = await fakeAvahi({ 'nas.local': '192.168.1.20' })
+  const avahi = await fakeAvahi({ 'server.local': '192.168.1.20' })
   t.after(avahi.close)
-  assert.equal(await avahiResolve(avahi.socketPath, 'nas.local.', 4), '192.168.1.20')
+  assert.equal(await avahiResolve(avahi.socketPath, 'server.local.', 4), '192.168.1.20')
   await assert.rejects(avahiResolve(avahi.socketPath, 'gone.local', 4), /Timeout reached/)
-  assert.deepEqual(avahi.asked, ['RESOLVE-HOSTNAME-IPV4 nas.local', 'RESOLVE-HOSTNAME-IPV4 gone.local'])
+  assert.deepEqual(avahi.asked, ['RESOLVE-HOSTNAME-IPV4 server.local', 'RESOLVE-HOSTNAME-IPV4 gone.local'])
 })
 
 test('only .local names go to avahi; misses and other names use the fallback', async t => {
-  const avahi = await fakeAvahi({ 'nas.local': '192.168.1.20' })
+  const avahi = await fakeAvahi({ 'server.local': '192.168.1.20' })
   t.after(avahi.close)
   const fellBack: string[] = []
   const lookup = createLookup(avahi.socketPath, (hostname, _options, cb) => { fellBack.push(hostname); cb!(null, '10.0.0.1', 4) })
   const run = (hostname: string, options: object) => new Promise(resolve => lookup(hostname, options, (err, address, family) => resolve({ err, address, family })))
-  assert.deepEqual(await run('nas.local', {}), { err: null, address: '192.168.1.20', family: 4 })
-  assert.deepEqual(await run('NAS.local', { all: true }), { err: null, address: [{ address: '192.168.1.20', family: 4 }], family: undefined })
+  assert.deepEqual(await run('server.local', {}), { err: null, address: '192.168.1.20', family: 4 })
+  assert.deepEqual(await run('SERVER.local', { all: true }), { err: null, address: [{ address: '192.168.1.20', family: 4 }], family: undefined })
   assert.deepEqual(await run('gone.local', {}), { err: null, address: '10.0.0.1', family: 4 })
   assert.deepEqual(await run('example.com', {}), { err: null, address: '10.0.0.1', family: 4 })
   assert.deepEqual(fellBack, ['gone.local', 'example.com'])
-  assert.deepEqual(avahi.asked, ['RESOLVE-HOSTNAME-IPV4 nas.local', 'RESOLVE-HOSTNAME-IPV4 NAS.local', 'RESOLVE-HOSTNAME-IPV4 gone.local'])
+  assert.deepEqual(avahi.asked, ['RESOLVE-HOSTNAME-IPV4 server.local', 'RESOLVE-HOSTNAME-IPV4 SERVER.local', 'RESOLVE-HOSTNAME-IPV4 gone.local'])
 })
 
 test('once installed, fetch reaches a .local host; without the socket nothing changes', async t => {

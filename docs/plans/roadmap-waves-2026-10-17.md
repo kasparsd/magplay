@@ -22,7 +22,7 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
   - [x] Upper bounds for the env-only timeouts; `EXTRA_TRACKERS` entries must be tracker URLs.
   - [x] LRU bounds for probe results (256) and subtitle tracks (64 / 64 MiB); cache sizes in Debug.
   - [x] `/health` answers 503 once shutdown begins; shutdown test with a hanging search and a loading torrent.
-  - [ ] NAS numbers for cache sizes over a long session (needs the real deployment; nothing measured yet).
+  - [ ] Server numbers for cache sizes over a long session (needs the real deployment; nothing measured yet).
 
 ## Log
 

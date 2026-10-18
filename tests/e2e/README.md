@@ -53,7 +53,7 @@ The deliberately failed/malformed POST responses and delayed audio-switch respon
 ## What this does not prove
 
 - Peer discovery, missing-piece download and dead-swarm behavior: this browser fixture is already cached. The separate [loopback integration suite](../integration/README.md) now covers those paths without a browser.
-- Actual NAS CPU/memory/disk performance, Docker builds, or large-file cache pressure.
+- Actual server CPU/memory/disk performance, Docker builds, or large-file cache pressure.
 - Safari/Firefox codec behavior, hardware decoding or external-player launches.
 - Browser back/forward-cache eligibility: the test exercises Back/Forward navigation, which may reload the page depending on the browser. A restored-document lifecycle test is still useful.
 

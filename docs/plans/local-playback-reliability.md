@@ -2,7 +2,7 @@
 
 ## Goal
 
-Deliver the revised local-first roadmap: bounded NAS work, real peer-failure coverage, targeted lifecycle ownership and useful resume/restart, without making a framework/controller migration a prerequisite.
+Deliver the revised local-first roadmap: bounded server work, real peer-failure coverage, targeted lifecycle ownership and useful resume/restart, without making a framework/controller migration a prerequisite.
 
 ## Progress
 
@@ -14,7 +14,7 @@ Deliver the revised local-first roadmap: bounded NAS work, real peer-failure cov
 - [x] Add per-file absolute resume timestamps, explicit restart, completion handling and storage-failure regressions (`9d33199`).
 - [x] Validate all suites under Node 22, repeat the final arm64 Docker check, and align the canonical roadmap/architecture guidance.
 - [x] Fix HLS seeks clamping to the browser's seekable edge when it lagged ffmpeg progress; cover the restart path with a speed-independent capped-playlist e2e.
-- [ ] Run representative acceptance on the actual NAS and browsers/devices used. Device access has not been provided.
+- [ ] Run representative acceptance on the actual server and browsers/devices used. Device access has not been provided.
 - [ ] Address further discovery/navigation friction when actual use or reproducible tests identify it.
 
 ## Canonical behavior and evidence

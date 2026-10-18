@@ -2,7 +2,7 @@
 // validation, persistence) and the client (the /settings page renders one control per entry).
 
 export type SectionId = 'sources' | 'playback' | 'connection' | 'storage' | 'debug'
-/** Server settings apply to everyone and are saved on the NAS; browser settings live in one browser's localStorage. */
+/** Server settings apply to everyone and are saved on the server; browser settings live in one browser's localStorage. */
 export type SettingScope = 'server' | 'browser'
 
 export interface SectionDef {
@@ -15,7 +15,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { id: 'sources', label: 'Sources', intro: 'Where search and Explore get their results.' },
   { id: 'playback', label: 'Playback', intro: 'How files play, on the server and in this browser’s player.' },
   { id: 'connection', label: 'Connection', intro: 'The link between this device and the server: the part of playback nothing else measures.' },
-  { id: 'storage', label: 'Storage', intro: 'How much of the NAS’s disk torrents and conversions may use.' },
+  { id: 'storage', label: 'Storage', intro: 'How much of the server’s disk torrents and conversions may use.' },
   { id: 'debug', label: 'Debug', intro: 'What the server is doing right now, for working out why something is slow or broken.' },
 ]
 
@@ -165,14 +165,14 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Slow sources are dropped from results after this.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
 
   // Playback, server
-  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Allow video transcoding', help: 'Converts video the browser can’t play. Uses a lot of NAS CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false },
+  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Allow video transcoding', help: 'Converts video the browser can’t play. Uses a lot of server CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false },
   {
     key: 'transcode.maxHeight',
     section: 'playback',
     scope: 'server',
     type: 'segmented',
     label: 'Transcode resolution',
-    help: 'Higher looks better and needs a faster NAS.',
+    help: 'Higher looks better and needs a faster server.',
     env: ['TRANSCODE_MAX_HEIGHT'],
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],

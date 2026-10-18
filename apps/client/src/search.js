@@ -91,16 +91,16 @@ async function showRecent () {
   fill($('#recent'), ...(shown.length
     ? [el('h2', { textContent: 'Recently opened' }), el('ul', {}, ...shown.map(t => {
         const last = recall(`last:${t.infoHash}`)
-        const onNas = t.length ? Math.round((t.onDisk / t.length) * 100) : 0
+        const onServer = t.length ? Math.round((t.onDisk / t.length) * 100) : 0
         const row = el('li', {},
           el('div', { className: 'main' },
             el('a', { className: 'title', href: urls.torrent(t.infoHash, { title: t.name }), textContent: t.name }),
             el('div', { className: 'meta' }, [
               last && `last played ${last.label}, ${timeAgo(last.at)}`,
               !last && `opened ${timeAgo(t.lastUsed)}`,
-              `${formatBytes(t.length)}, ${onNas}% on the NAS`,
+              `${formatBytes(t.length)}, ${onServer}% on the server`,
             ].filter(Boolean).join(' · '))))
-        row.append(el('button', { type: 'button', className: 'remove', textContent: '✕', title: 'Remove from this list (the files stay on the NAS)', ariaLabel: `Remove ${t.name} from this list`, onclick: () => remove(t, row) }))
+        row.append(el('button', { type: 'button', className: 'remove', textContent: '✕', title: 'Remove from this list (the files stay on the server)', ariaLabel: `Remove ${t.name} from this list`, onclick: () => remove(t, row) }))
         return row
       }))]
     : [el('p', { className: 'help' }, 'Search every configured source for a film, show or anything else with a torrent, or ', el('a', { href: urls.explore(), textContent: 'explore what BitMagnet has found' }), '. Torrents you open are listed here.')]))

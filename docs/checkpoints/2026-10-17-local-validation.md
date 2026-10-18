@@ -1,6 +1,6 @@
 # Local validation — 2026-10-17
 
-Implementation through `9d33199` plus the final Docker packaging assertions was validated on the development machine. This is evidence, not the canonical roadmap or a NAS performance claim. The shared working tree also contained unrelated example/indexer edits; these were preserved and are not part of the implementation commits listed in the feature plan.
+Implementation through `9d33199` plus the final Docker packaging assertions was validated on the development machine. This is evidence, not the canonical roadmap or a server performance claim. The shared working tree also contained unrelated example/indexer edits; these were preserved and are not part of the implementation commits listed in the feature plan.
 
 ## Automated checks
 
@@ -27,4 +27,4 @@ The runs are not a controlled performance comparison. Their workloads/cache cond
 
 ## Not verified
 
-Actual NAS hardware, amd64 container execution, real-world/public swarms/NAT, current Firefox/Safari/external-player behavior, proxy offload performance, long-film disk pressure, and browser BFCache eligibility. Follow [deployment acceptance](../deployment-acceptance.md) for the remaining device check.
+Actual server hardware, amd64 container execution, real-world/public swarms/NAT, current Firefox/Safari/external-player behavior, proxy offload performance, long-film disk pressure, and browser BFCache eligibility. Follow [deployment acceptance](../deployment-acceptance.md) for the remaining device check.

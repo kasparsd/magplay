@@ -2,7 +2,7 @@
 
 ## Decision
 
-magplay stays a small Node service with multi-page browser clients for one person on a trusted LAN/NAS, without accounts. [The roadmap](roadmap.md) owns priorities and completion status.
+magplay stays a small Node service with multi-page browser clients for one person on a trusted LAN, without accounts. [The roadmap](roadmap.md) owns priorities and completion status.
 
 **Direction change (2026-10-17):** the code is reorganized into isolated packages and moved to strict TypeScript now, while the codebase is small (~5k lines) and the change is cheap. The server and packages are converted as scheduled work; client pages, tests and scripts convert when next touched ([roadmap](roadmap.md#why-this-order)). This replaces the earlier stance of deferring a TypeScript migration and factory refactors until a concrete bug required them. Reasons:
 

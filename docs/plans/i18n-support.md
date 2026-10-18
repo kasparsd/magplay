@@ -74,7 +74,7 @@ Metadata (`description`, `origin`, `maxLength`) is strictly preserved in version
     "player.restart_at": "Starting at {time}…"
   }
   ```
-- This ensures maximum context during translation with zero payload penalty on low-power NAS devices and mobile browsers.
+- This ensures maximum context during translation with zero payload penalty on low-power servers and mobile browsers.
 
 ### 5. Runtime & Bundle Footprint
 - `magplay` client uses vanilla JS + esbuild with no bulky UI framework (React/Vue).

@@ -140,7 +140,7 @@ for (const scheme of ['dark', 'light']) {
   // Seek tooltip on the partly downloaded 2.39:1 file, and the restart prediction on the remux
   for (const [file, fraction, label] of [[wide, 0.8, 'missing'], [tv, 0.75, 'restart']]) {
     const { page, context } = await open(scheme, { width: 1280, height: 800 }, file)
-    await sleep(2500) // a status poll for the NAS ranges
+    await sleep(2500) // a status poll for the server ranges
     const track = await page.locator('#seekbar .track').boundingBox()
     await page.mouse.move(track.x + 10, track.y - 30)
     await page.mouse.move(track.x + track.width * fraction, track.y + 2)

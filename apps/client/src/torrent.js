@@ -50,11 +50,11 @@ async function load () {
 
 const fileLabel = f => episodeLabel(f) || baseName(f.name)
 
-/** A thin bar under a file; pollActivity fills it with how much of the file is on the NAS. */
+/** A thin bar under a file; pollActivity fills it with how much of the file is on the server. */
 function progressBar (bars, f) {
   const fillEl = el('span')
   bars.set(f.idx, fillEl)
-  return el('div', { className: 'bar', title: 'Downloaded to the NAS' }, fillEl)
+  return el('div', { className: 'bar', title: 'Downloaded to the server' }, fillEl)
 }
 
 /** "6 episodes · 829 MB · ID d797d14f…" under the name. */
@@ -143,7 +143,7 @@ function renderPeers (peers) {
       el('td', { textContent: `${Math.round(p.share * 100)}%` })))))
 }
 
-/** One activity line (peers, speed, how much is on the NAS) that opens into the peer table; every 2 s. */
+/** One activity line (peers, speed, how much is on the server) that opens into the peer table; every 2 s. */
 async function pollActivity (box, bars) {
   for (;;) {
     const st = document.hidden ? null : await api(`/api/torrents/${infoHash}/status`).catch(() => null)
@@ -151,7 +151,7 @@ async function pollActivity (box, bars) {
       for (const f of st.files) if (bars.has(f.idx)) bars.get(f.idx).style.width = `${(f.progress * 100).toFixed(1)}%`
       const open = box.querySelector('details')?.open ?? false
       const line = [`${st.peers.length} peer${st.peers.length === 1 ? '' : 's'}`, `↓ ${formatSpeed(st.downloadSpeed)}`,
-        `${(st.progress * 100).toFixed(st.progress > 0 && st.progress < 1 ? 1 : 0)}% on the NAS`].join(' · ')
+        `${(st.progress * 100).toFixed(st.progress > 0 && st.progress < 1 ? 1 : 0)}% on the server`].join(' · ')
       fill(box, st.peers.length
         ? el('details', { open }, el('summary', { textContent: line }), renderPeers(st.peers),
           st.peers.length > 40 && el('p', { textContent: `…and ${st.peers.length - 40} more` }))

@@ -1,4 +1,4 @@
-# NAS resource safeguards
+# Server resource safeguards
 
 These limits protect a single-user deployment from accidental overload through tabs, rapid retries and abandoned work. They are admission controls, not multi-user scheduling.
 
@@ -33,4 +33,4 @@ Long-running servers keep a few answers in memory. Each one is bounded, and Sett
 
 These are fixed constants rather than settings: none has needed tuning, and the Debug numbers show whether one ever does.
 
-Keep `HLS_MAX_GB` large enough for expected remux output: HLS retains past segments to support seeking, so pause-ahead throttling alone does not bound a long film's total output. Raising the budget may be preferable to server transcoding; external players use no HLS storage. Observe representative files on the actual NAS before tuning the defaults.
+Keep `HLS_MAX_GB` large enough for expected remux output: HLS retains past segments to support seeking, so pause-ahead throttling alone does not bound a long film's total output. Raising the budget may be preferable to server transcoding; external players use no HLS storage. Observe representative files on the actual server before tuning the defaults.

@@ -34,12 +34,12 @@ External players (added on request): `.m3u` for one file and for the whole seaso
 - Direct play is only chosen for the first audio track. Picking another track remuxes, because browsers can't switch tracks in a plain `<video>`.
 - About 1,200 lines of JS plus ~130 lines of HTML/CSS. That's over the ~1,000 target, because of the external-player hand-off, progressive subtitles and the pause-ahead throttle.
 - The image is ~1 GB, mostly Debian ffmpeg's libraries.
-- `.local` names don't resolve inside a Linux container, so use `bitmagnet:3333` or an IP on the NAS.
+- `.local` names don't resolve inside a Linux container, so use `bitmagnet:3333` or an IP on the server.
 
 ## Not done
 
 - **Phase 2 (WebCodecs client decode)** was not started. External players now cover HEVC/10-bit/DTS/TrueHD/PGS with hardware decoding, which takes away most of the reason for it. I recommend dropping it unless in-browser HEVC in Firefox matters.
-- Not run on the NAS CPU itself. Remux was ~0% CPU here, but check `speed=` in the player on the Marvell box.
+- Not run on the server CPU itself. Remux was ~0% CPU here, but check `speed=` in the player on low-power hardware.
 
 ## Multiple indexer sources (added later)
 

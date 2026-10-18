@@ -1,6 +1,6 @@
 # magplay
 
-Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a video from it, either in the browser or in an external player such as VLC, IINA or Infuse. One small Node.js service, meant for a home NAS on a private network. It has no login.
+Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a video from it, either in the browser or in an external player such as VLC, IINA or Infuse. One small Node.js service, meant for a home server, homelab box or desktop computer on a private network. It has no login.
 
 ![magplay search results on desktop and mobile](docs/screenshots/search.png)
 
@@ -45,7 +45,7 @@ Three pages, each with its own URL, so Back, reload, bookmarks and new tabs all 
 
 - **Search** (`/?q=…`). Results from every source, merged, with size, seeders, title badges and "plays in browser" for H.264 releases with AAC or unknown audio. With more than one source, chips under the search show each source's result count and each row says where it came from; a failed source is listed with the reason and a **Search again** button. All / Movies / TV searches again at once. With no search, the page lists **recently opened** torrents from the cache, with the last episode this browser played (✕ hides one in this browser until it's opened again), or a line of help on first run.
 - **Explore** (`/explore`, needs BitMagnet). Films and shows from BitMagnet's TMDB-matched index, one tile per title (plain coloured tiles, no posters, nothing loaded from outside). Movies / TV, Most seeded / Newest, genre chips with counts (left out where BitMagnet only estimated them), year and quality. Each filter change is a history entry, so Back steps back through them. A title page (`/title/…`) shows rating, runtime, genres, overview, IMDb/TMDB links and every release of that exact title in BitMagnet, most seeded first, with **Best release** (the most seeded one that plays in the browser, marked in the list) and **Search all sources**. "Just added" lists the newest releases, including ones BitMagnet couldn't match.
-- **Torrent** (`/t/<infohash>`). Opens straight away and counts the seconds while magplay finds peers and the file list (up to `METADATA_TIMEOUT_S`). One **Play** button (or **Resume S01E04 at 12:34** where you left off), a **More** menu for the whole torrent (playlist of all episodes, Download all as `.tar`, open or copy the magnet, copy the infohash), and a row per file with ▶ and a ⋯ menu (external players, copy the stream link, download the file). One activity line (peers, speed, how much is on the NAS) opens into the peer table; each file has a progress bar.
+- **Torrent** (`/t/<infohash>`). Opens straight away and counts the seconds while magplay finds peers and the file list (up to `METADATA_TIMEOUT_S`). One **Play** button (or **Resume S01E04 at 12:34** where you left off), a **More** menu for the whole torrent (playlist of all episodes, Download all as `.tar`, open or copy the magnet, copy the infohash), and a row per file with ▶ and a ⋯ menu (external players, copy the stream link, download the file). One activity line (peers, speed, how much is on the server) opens into the peer table; each file has a progress bar.
 - **Player** (`/play/<infohash>/<file>`). Messages appear on the video. Audio, subtitles, **Open in** (external players) and **ⓘ Details** (mode, codecs, peers, buffer, ffmpeg speed) sit below. A **Next** bar links to the next episode, and at the end of one the next starts after 10 s unless you cancel.
 
 ### Playing
@@ -53,11 +53,11 @@ Three pages, each with its own URL, so Back, reload, bookmarks and new tabs all 
 Each video can be played these ways:
 
 - **In the browser** (▶). magplay probes the file and picks a mode based on what this browser says it can decode (`MediaSource.isTypeSupported`, not the user agent):
-  1. **direct**: MP4/WebM with codecs the browser supports. The browser reads `/raw` itself, and the NAS does no work.
+  1. **direct**: MP4/WebM with codecs the browser supports. The browser reads `/raw` itself, and the server does no work.
   2. **remux**: the video codec is supported but the container (MKV…) or the audio (AC3, E-AC3, DTS, TrueHD…) isn't. ffmpeg copies the video into HLS (fMP4) and converts the audio to AAC stereo, which takes very little CPU.
-  3. **transcode**: only with `ALLOW_VIDEO_TRANSCODE=true`. libx264 at `TRANSCODE_MAX_HEIGHT`. This is too slow for 1080p on the NAS CPU.
+  3. **transcode**: only with `ALLOW_VIDEO_TRANSCODE=true`. libx264 at `TRANSCODE_MAX_HEIGHT`. This is too slow for 1080p on the server CPU.
   4. Otherwise it **refuses** before streaming and explains why (for example HEVC in Firefox).
-- **In an external player** (the ⋯ menu, or **Open in** in the player). These links open the same `/raw` URL in a player that decodes everything on the client: HEVC, 10-bit, AV1, DTS, TrueHD and image subtitles (PGS/VobSub), with all audio and subtitle tracks and no ffmpeg on the NAS. The links offered depend on the device:
+- **In an external player** (the ⋯ menu, or **Open in** in the player). These links open the same `/raw` URL in a player that decodes everything on the client: HEVC, 10-bit, AV1, DTS, TrueHD and image subtitles (PGS/VobSub), with all audio and subtitle tracks and no ffmpeg on the server. The links offered depend on the device:
   - `.m3u`: works with any player on any OS (the OS opens your default video player). For packs, **More → Play all (.m3u)** puts every episode in one playlist, so the next episode plays automatically.
   - **IINA** (macOS) `iina://weblink?url=…`, **Infuse** (macOS/iOS/tvOS) `infuse://x-callback-url/play?url=…`, **VLC** (iOS/Android) `vlc://…`, **Open with…** (Android) `intent://…#Intent;type=video/*;end`.
   - **Copy stream link** for "Open network stream".
@@ -66,13 +66,13 @@ Each video can be played these ways:
 
 **Download.** Every file's ⋯ menu has **Download file**, and torrents with several files have **More → Download all (.tar)**, which streams every file as one tar archive. Both go through the same `/raw` path and support Range requests, so an interrupted browser download can resume. Tar needs no extra tools to open on macOS, Linux or Windows 11, and long or non-ASCII file names are kept (PAX headers). **More → Open in your torrent client** hands the magnet to your own client instead. The torrent page shows its infohash (**ID 5d0e004f…**), which copies the full ID when clicked.
 
-**Torrent status.** While a torrent page is open, its activity line (updated every 2 s) opens into the connected peers (address, client, download and upload speed, how much of the torrent each one has; peers not currently sending are greyed out), the total speeds, how much of the torrent is on the NAS, and a progress bar under each file. It covers downloads and playback alike. A torrent magplay has unloaded after `IDLE_TORRENT_MIN` shows as not active.
+**Torrent status.** While a torrent page is open, its activity line (updated every 2 s) opens into the connected peers (address, client, download and upload speed, how much of the torrent each one has; peers not currently sending are greyed out), the total speeds, how much of the torrent is on the server, and a progress bar under each file. It covers downloads and playback alike. A torrent magplay has unloaded after `IDLE_TORRENT_MIN` shows as not active.
 
 Torrents whose title names a program or an archive (`.exe`, `.rar`…) get a plain note instead of "plays in browser". So does a torrent magplay has opened and found no video in ("No media file found"); later searches show the same note.
 
 **Firefox/Zen** can't play HEVC, AC3, E-AC3 or DTS. Audio is converted cheaply, but HEVC is refused, so use an external player or pick an x264 release. **Safari** plays HEVC (remuxed and tagged `hvc1`). **Chrome** plays HEVC where the OS has a decoder.
 
-**ⓘ Details** in the player shows the mode, codecs, peers, how much of the file is on the NAS, how much is buffered, and ffmpeg's speed (e.g. `85x`). If ffmpeg runs below 1.0x and playback catches up with it, a warning appears on the video. A file the browser can't play gets a card on the video with the first external player for your device, **Copy stream link** and **Back to files**. ffmpeg is paused once it is 4 minutes ahead of playback, so it doesn't fill the disk with segments nobody has watched yet. Seeking past what ffmpeg has produced restarts it at the new position (the seek bar uses the probed duration). Switching the audio track also restarts at the current position. Text subtitles (SRT/ASS/WebVTT inside the file, or `.srt`/`.vtt` files in the torrent) can be selected; image subtitles are listed but disabled.
+**ⓘ Details** in the player shows the mode, codecs, peers, how much of the file is on the server, how much is buffered, and ffmpeg's speed (e.g. `85x`). If ffmpeg runs below 1.0x and playback catches up with it, a warning appears on the video. A file the browser can't play gets a card on the video with the first external player for your device, **Copy stream link** and **Back to files**. ffmpeg is paused once it is 4 minutes ahead of playback, so it doesn't fill the disk with segments nobody has watched yet. Seeking past what ffmpeg has produced restarts it at the new position (the seek bar uses the probed duration). Switching the audio track also restarts at the current position. Text subtitles (SRT/ASS/WebVTT inside the file, or `.srt`/`.vtt` files in the torrent) can be selected; image subtitles are listed but disabled.
 
 If autoplay with sound is blocked (Firefox does this on a fresh tab), playback starts muted. Click the video or press **M** to unmute. Other keys: **space** to play/pause, **←/→** to seek 10 s.
 
@@ -116,7 +116,7 @@ Then open `http://example-host:3382/`. To build from a checkout instead of pulli
 
 Prebuilt images are published to `ghcr.io/kasparsd/magplay`. Publishing a GitHub release `vX.Y.Z` tags the image `X.Y.Z`, `X.Y` and `X`; a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to `main` moves the `edge` tag, and older edge builds are deleted. There is no `latest` tag, so pin a release or follow `edge` on purpose.
 
-**Indexer addresses:** inside the container, use Compose service names (`http://bitmagnet:3333/...`, `http://jackett:9117`), IP addresses, or `.local` mDNS names such as `example-host.local`. mDNS multicast doesn't reach a container on Docker's bridge network, so magplay asks the host's avahi-daemon instead: install it on the host (`apt install avahi-daemon`; Synology and most NAS systems already run it) and mount its socket directory with `- /run/avahi-daemon:/run/avahi-daemon:ro` under `volumes:`. The log says `Resolving .local names through the host’s avahi-daemon` at startup when the socket is there. Without it, `.local` names fall through to normal DNS, which works in Docker Desktop but usually not on Linux.
+**Indexer addresses:** inside the container, use Compose service names (`http://bitmagnet:3333/...`, `http://jackett:9117`), IP addresses, or `.local` mDNS names such as `example-host.local`. mDNS multicast doesn't reach a container on Docker's bridge network, so magplay asks the host's avahi-daemon instead: install it on the host (`apt install avahi-daemon`; many Linux systems already run it) and mount its socket directory with `- /run/avahi-daemon:/run/avahi-daemon:ro` under `volumes:`. The log says `Resolving .local names through the host’s avahi-daemon` at startup when the socket is there. Without it, `.local` names fall through to normal DNS, which works in Docker Desktop but usually not on Linux.
 
 **Behind Nginx Proxy Manager:** turn off buffering for streams (Advanced tab: `proxy_buffering off;`). Otherwise nginx buffers `/raw` and `/hls` responses and seeking gets slow. Links in `.m3u` files honour `X-Forwarded-Proto`/`X-Forwarded-Host`.
 
@@ -141,7 +141,7 @@ preconditions run before Range; If-Range requires the exact strong ETag (weak or
 mismatched validators cause a full response). HEAD ignores Range.
 Large files remain streamed: media is not buffered or hashed per request.
 `private` intentionally permits browser caching but not shared proxy caches, even
-on a single-user NAS. Cached raw bytes may remain usable for an hour after origin
+on a single-user server. Cached raw bytes may remain usable for an hour after origin
 cache eviction; session media instead always revalidates.
 
 A conservative Nginx configuration needs no disk proxy cache:
@@ -196,13 +196,13 @@ Env vars still work and win over saved settings: a field set by one is read-only
 | `EXTRA_TRACKERS` | opentrackr, stealth.si, torrent.eu.org, explodie.org, desync.com | Comma-separated, added to every torrent (BitMagnet magnets often have none) |
 | `METADATA_TIMEOUT_S` | `60` | Give up fetching a torrent's file list after this |
 | `IDLE_TORRENT_MIN` | `30` | Unload torrents nobody has streamed or watched for this long (data stays on disk) |
-| `ALLOW_VIDEO_TRANSCODE` | `false` | Enable the libx264 path (slow on the NAS CPU) |
+| `ALLOW_VIDEO_TRANSCODE` | `false` | Enable the libx264 path (slow on the server CPU) |
 | `TRANSCODE_MAX_HEIGHT` | `720` | Downscale target when transcoding |
 | `FFMPEG_PATH`, `FFPROBE_PATH` | `ffmpeg`, `ffprobe` | Paths to the binaries when they aren't on `PATH` |
 
 Local safeguards reject excess jobs with a retryable 503 rather than an unbounded queue. See [resource limits](docs/resources.md), [player lifetime handling](docs/lifecycle.md), and [per-file Resume/Start over behavior](docs/progress.md). HLS disk limits are soft; use a filesystem/container quota for a hard bound.
 
-`TORRENT_CHECK_TIMEOUT_S` (default `7200`) separately bounds cached-piece verification after metadata arrives. `DHT_ENABLED=false` and `LSD_ENABLED=false` disable those discovery mechanisms when using explicit trackers/peers; both default to enabled. See [loopback integration coverage](tests/integration/README.md) and [Docker/NAS acceptance](docs/deployment-acceptance.md).
+`TORRENT_CHECK_TIMEOUT_S` (default `7200`) separately bounds cached-piece verification after metadata arrives. `DHT_ENABLED=false` and `LSD_ENABLED=false` disable those discovery mechanisms when using explicit trackers/peers; both default to enabled. See [loopback integration coverage](tests/integration/README.md) and [Docker/server acceptance](docs/deployment-acceptance.md).
 
 ## HTTP API
 

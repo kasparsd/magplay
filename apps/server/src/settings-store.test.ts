@@ -73,9 +73,9 @@ test('updates validate the whole patch, save atomically, keep unchanged secrets 
   // The browser sends back { set: true } for a key it didn't replace
   const [item] = store.response().values.sources as ListItem[]
   assert.ok(item)
-  store.update({ sources: [{ ...item, name: 'NAS Prowlarr' }] })
+  store.update({ sources: [{ ...item, name: 'Home Prowlarr' }] })
   assert.equal((store.effective.sources as ListItem[])[0]?.apiKey, 'secret')
-  assert.equal((store.effective.sources as ListItem[])[0]?.name, 'NAS Prowlarr')
+  assert.equal((store.effective.sources as ListItem[])[0]?.name, 'Home Prowlarr')
   const tested = store.unsavedItem('sources', { ...item, url: 'http://other:9696' })
   assert.ok(tested.ok && tested.item.apiKey === 'secret' && tested.item.url === 'http://other:9696')
 

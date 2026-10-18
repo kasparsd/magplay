@@ -21,13 +21,13 @@ export interface SeekContext {
   buffered: Span[]
   /** video.seekable, relative to the session. */
   seekable: Span[]
-  /** status.file.ranges: fractions of the file's bytes on the NAS, or null until the first status poll. */
+  /** status.file.ranges: fractions of the file's bytes on the server, or null until the first status poll. */
   ranges: Array<[number, number]> | null
 }
 
 /**
  * - `buffered`: the browser has it; the jump is instant.
- * - `seekable`: the browser can land there in this session (direct mode: the bytes are on the NAS).
+ * - `seekable`: the browser can land there in this session (direct mode: the bytes are on the server).
  * - `restart`: outside what the browser has, so ffmpeg restarts there (HLS modes only).
  * - `missing`: not downloaded yet; playback waits for peers.
  */
@@ -40,8 +40,8 @@ export function spans (ranges: RangeList): Span[] {
 
 const inside = (t: number, list: Span[]): boolean => list.some(([a, b]) => t >= a && t < b)
 
-/** Whether byte fraction `fraction` of the file is on the NAS. Unknown ranges count as present, so nothing warns before the first poll. */
-export function onNas (fraction: number, ranges: Array<[number, number]> | null): boolean {
+/** Whether byte fraction `fraction` of the file is on the server. Unknown ranges count as present, so nothing warns before the first poll. */
+export function onServer (fraction: number, ranges: Array<[number, number]> | null): boolean {
   return !ranges || ranges.some(([a, b]) => fraction >= a && fraction <= b)
 }
 
@@ -60,7 +60,7 @@ export function canSeekLocally (rel: number, seekable: Span[]): boolean {
 export function seekOutcome (t: number, ctx: SeekContext): SeekOutcome {
   const rel = t - ctx.offset
   if (inside(rel, ctx.buffered)) return 'buffered'
-  const present = onNas(ctx.duration > 0 ? t / ctx.duration : 0, ctx.ranges)
+  const present = onServer(ctx.duration > 0 ? t / ctx.duration : 0, ctx.ranges)
   if (ctx.mode === 'direct') return present ? 'seekable' : 'missing'
   if (canSeekLocally(rel, ctx.seekable)) return 'seekable'
   return present ? 'restart' : 'missing'

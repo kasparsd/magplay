@@ -49,7 +49,7 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 
 - Dark, low-contrast chrome so video and titles stand out. One accent colour for actions and links; green only for "plays in browser".
 - Same side gutter on every page, including the Player. The Player's video band is the one exception: it runs edge to edge, and everything under it keeps the gutter.
-- Nothing is loaded from outside the NAS: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
+- Nothing is loaded from outside the server: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
 - Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized.
 - Search filters (All, Movies, TV) appear only once there is a query; the home page shows just the search bar and recent items.
 - Labels hide only what the source can't add to: show the source name on search results only when more than one source is configured.
@@ -80,17 +80,17 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 - **Left to right:** play/pause, back 10 s, forward 10 s, mute with a volume slider, `0:22 / 26:06`, a flexible gap, **Next: S01E02** (only when there is a next file), Subtitles, Audio, Speed, ⋯ More, Fullscreen. More holds the Open in items, Download file, Copy stream link and Picture in picture, so the Player offers the same file actions as the torrent page's ⋯ menu.
 - **Menus** open upward inside the video, use the shared `menu()` from `lib/ui.ts` (extended to open upward and stay inside the stage), and close with Escape. Subtitles and Audio list the same choices as today's selects. Choosing an audio track still restarts the session at the current position, as `start(position())` does today.
 - **Seek bar.** The full duration, with four layers drawn on one track from bottom to top:
-  1. *On the NAS*: `status.file.ranges` (fractions of the file's bytes, used as an approximation of time).
+  1. *On the server*: `status.file.ranges` (fractions of the file's bytes, used as an approximation of time).
   2. *Converted by ffmpeg* (remux and transcode only): from `cur.offset` to `cur.offset + produced`.
   3. *In the browser*: `video.buffered` ranges, shifted by `cur.offset` in HLS modes.
   4. *Played*: 0 to `position()`, in the accent colour.
 
   `#pieces` and its 2 s background-gradient update are removed.
 - **Seek tooltip.** On hover or drag, show the time under the pointer and what a jump there will do. The rules mirror `seekTo()`:
-  - Inside the browser buffer, or anywhere in `direct` mode when that part is on the NAS: just the time.
+  - Inside the browser buffer, or anywhere in `direct` mode when that part is on the server: just the time.
   - Inside the session's browser-seekable range (`video.seekable` shifted by `offset`): just the time.
-  - Outside the converted range but on the NAS: "Restarts conversion here".
-  - Not on the NAS: "Not downloaded yet. Starts when peers send it."
+  - Outside the converted range but on the server: "Restarts conversion here".
+  - Not on the server: "Not downloaded yet. Starts when peers send it."
 - **Seek feedback.** When a seek restarts ffmpeg, the overlay says "Starting at 14:20…" with the spinner instead of the generic "Buffering…".
 - **Title overlay.** In fullscreen only, the top of the video shows the title (see step 2) on a gradient that fades with the controls.
 - **End of video.** The existing 10 s countdown to the next file stays on the video, as a card with **Play now** and **Cancel**.
@@ -150,12 +150,12 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 ### 3. Playback performance graph
 
-**Why.** ⓘ Details shows one snapshot of ffmpeg speed, peers and buffer. When playback stalls, nothing shows whether the swarm, the NAS CPU or the browser was to blame, or whether a release can keep up before you commit to it.
+**Why.** ⓘ Details shows one snapshot of ffmpeg speed, peers and buffer. When playback stalls, nothing shows whether the swarm, the server CPU or the browser was to blame, or whether a release can keep up before you commit to it.
 
 **Design.** A **Performance** disclosure next to ⓘ Details with three lanes on one 3-minute time axis:
 
 1. **Swarm:** download speed as an area, with the peer count as a label.
-2. **Transcoder:** ffmpeg speed as a line against a dashed 1× realtime line, with ffmpeg CPU as a faint area behind it and shaded spans where ffmpeg is paused 240 s ahead. CPU is a share of all cores, so 100% means the NAS is saturated.
+2. **Transcoder:** ffmpeg speed as a line against a dashed 1× realtime line, with ffmpeg CPU as a faint area behind it and shaded spans where ffmpeg is paused 240 s ahead. CPU is a share of all cores, so 100% means the server is saturated.
 3. **Buffer:** seconds converted ahead of the playhead as an area, the browser buffer as a line, and red spans for stalls (`waiting` until `playing`).
 
 Each lane's label shows the current value. In `direct` mode the Transcoder lane is hidden and the Buffer lane shows only the browser buffer.
@@ -170,7 +170,7 @@ Each lane's label shows the current value. In `direct` mode the Transcoder lane 
 - [x] Draw the three lanes as inline SVG with the shared sparkline helper, using theme colours and the existing tokens, and redraw only while the disclosure is open.
 - [x] Hide the Transcoder lane in `direct` mode and the CPU area when `cpu` is `null`.
 - [x] Keep the "converts slower than playback" warning, and link it to the Performance disclosure.
-- [ ] Check it with a healthy remux, a transcode that falls behind, and a direct file. Healthy remux and direct were checked (screenshots in `docs/checkpoints/2026-10-17-player-redesign/`); a transcode that falls behind still needs a slow NAS, and CPU only shows on Linux.
+- [ ] Check it with a healthy remux, a transcode that falls behind, and a direct file. Healthy remux and direct were checked (screenshots in `docs/checkpoints/2026-10-17-player-redesign/`); a transcode that falls behind still needs a slow server, and CPU only shows on Linux.
 
 ### Later, if use calls for it
 
@@ -178,7 +178,7 @@ These were mocked alongside the steps above and are not scheduled.
 
 - **Server-side history** (150 samples per loaded torrent, returned as `history` from `/status`). This lets the graph start filled after a reload, and it is a prerequisite for the next item.
 - **Throughput chart on the Torrent page.** Download and upload areas, the peer count and an ETA for downloads that aren't being streamed.
-- **"Now" panel on the home page.** A new `GET /api/activity` returns loaded torrents with their state and sparklines, live sessions, NAS load and cache use. Worth it once more than one person watches at a time.
+- **"Now" panel on the home page.** A new `GET /api/activity` returns loaded torrents with their state and sparklines, live sessions, server load and cache use. Worth it once more than one person watches at a time.
 - **Stats overlay** toggled with I, reusing the graph's samples, for fullscreen and TV use.
 - **Side rail** on wide screens with the season's episodes and the graph in miniature. It suits series but leaves the rail empty for single films.
 - **Immersive layout** toggled with T: the video fills the viewport and the top bar fades with the chrome. It needs an exception to the shared top bar rule above.

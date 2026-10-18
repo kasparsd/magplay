@@ -195,7 +195,7 @@ table.peers tr.choking { opacity: 0.55; }
    Everything on the stage sits on video, so it uses fixed light-on-dark colours in both themes. */
 #stage {
   --ov-fg: #f5f5f4; --ov-muted: #d6d3d1; --ov-accent: #60a5fa; --ov-focus: #93c5fd; --ov-panel: rgb(20 18 16 / 0.96); --ov-line: #44403c; --ov-hover: rgb(255 255 255 / 0.12);
-  --seek-track: rgb(255 255 255 / 0.12); --seek-nas: rgb(255 255 255 / 0.26); --seek-conv: rgb(255 255 255 / 0.42); --seek-buf: rgb(255 255 255 / 0.7);
+  --seek-track: rgb(255 255 255 / 0.12); --seek-server: rgb(255 255 255 / 0.26); --seek-conv: rgb(255 255 255 / 0.42); --seek-buf: rgb(255 255 255 / 0.7);
   position: relative; display: grid; grid-template: minmax(0, auto) / minmax(0, 1fr); container-type: inline-size; background: #000; color: var(--ov-fg);
   /* Theater layout: the largest box that fits both the band's width and the viewport height left by the top bar and title row.
      --ar comes from the probe (16:9 until then); --topbar-h and --title-row-h are measured by player.js */
@@ -258,7 +258,7 @@ a.pill-link:hover { text-decoration: none; background: var(--ov-hover); }
 #volume::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: #fff; }
 #volume::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; }
 
-/* Seek bar: four layers on one track (on the NAS, converted, in the browser, played) under a transparent range input.
+/* Seek bar: four layers on one track (on the server, converted, in the browser, played) under a transparent range input.
    The track is inset by half the thumb so the played layer ends where the thumb's centre is. */
 .seekbar { position: relative; height: 22px; margin: 0 4px; }
 .seekbar .track { position: absolute; left: 7px; right: 7px; top: 9px; height: 4px; border-radius: 2px; background: var(--seek-track); overflow: hidden; transition: top 0.1s, height 0.1s; }

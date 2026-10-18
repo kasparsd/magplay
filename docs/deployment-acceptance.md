@@ -11,11 +11,11 @@ The script generates original small media, starts an isolated non-root container
 
 ## Recorded local results
 
-The latest local validation is recorded in [the dated checkpoint](checkpoints/2026-10-17-local-validation.md). Results from the tiny warm synthetic fixture do not establish real-world playback latency, sustained throughput, browser rendering, large-file hashing behavior, or NAS capacity. The container check also verifies that frontend modules are served and colocated test files are excluded from the image.
+The latest local validation is recorded in [the dated checkpoint](checkpoints/2026-10-17-local-validation.md). Results from the tiny warm synthetic fixture do not establish real-world playback latency, sustained throughput, browser rendering, large-file hashing behavior, or server capacity. The container check also verifies that frontend modules are served and colocated test files are excluded from the image.
 
-## Still required on the NAS
+## Still required on the server
 
-Use the NAS's normal Docker deployment and representative media. Record:
+Use the server's normal Docker deployment and representative media. Record:
 
 - Cold and warm startup/seek latency for MP4 direct and MKV/AC3 remux.
 - Peak and sustained process CPU/memory, ffmpeg speed and free disk space.
@@ -24,4 +24,4 @@ Use the NAS's normal Docker deployment and representative media. Record:
 - Browser/device behavior, including Firefox/Safari or external players actually used.
 - A source URL with a `.local` name, with the host's `/run/avahi-daemon` mounted: the startup log says `Resolving .local names through the host’s avahi-daemon` and the source check passes ([plan](plans/mdns-resolution.md)).
 
-No NAS address or access has been provided, so this remains a manual acceptance gate, not a claimed completed test.
+No server address or access has been provided, so this remains a manual acceptance gate, not a claimed completed test.
