@@ -14,4 +14,5 @@ Goal: source URLs such as `http://bitmagnet.local:3333/torznab/api` work from th
 - [x] Resolver, tests, startup log line
 - [x] Socket mount in `compose.yml` and the README example; README indexer-address note
 - [x] Docker check on the rebuilt image; end-to-end in the image with a fake avahi socket
+- [x] Document macOS terminal Local Network permissions, the `EHOSTUNREACH` symptom and a same-terminal Node connectivity check in the README (2026-10-18 followup).
 - [ ] Confirm against a real avahi-daemon on the server

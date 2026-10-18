@@ -311,6 +311,16 @@ npm install
 npm start                 # builds the client, then serves; cache lands in ./data; set TORZNAB_URL etc. to configure an indexer
 ```
 
+**macOS local-network permission:** if startup succeeds but source requests or Explore count warming fail with `EHOSTUNREACH` (for example, `can't reach bitmagnet.local:3333 (EHOSTUNREACH)`), check **System Settings → Privacy & Security → Local Network**. Enable access for the app hosting your terminal if it is listed (Terminal, iTerm, or your editor for an integrated terminal), then quit and reopen that app and run `npm start` again. Allow local-network access if macOS prompts. See [Apple's local-network permission guide](https://support.apple.com/guide/mac-help/mchla4f49138/mac).
+
+Check connectivity from the same terminal, replacing the example URL with your BitMagnet address:
+
+```bash
+node -e 'fetch("http://bitmagnet.local:3333/torznab/api?t=caps", { signal: AbortSignal.timeout(5000) }).then(r => console.log(r.status)).catch(console.error)'
+```
+
+`200` confirms an HTTP response from the endpoint; `401` or `403` means it is reachable but requires authentication. If `EHOSTUNREACH` persists after allowing access, check the host address, LAN connection, VPN routing and firewall. This error can have causes other than macOS permissions.
+
 ```bash
 npm run dev               # rebuilds the client and restarts the server on change
 ```
