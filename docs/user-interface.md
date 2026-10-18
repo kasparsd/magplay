@@ -146,7 +146,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 - [x] Build the title row with the parsed title, back link, Open in and Details. Move the file name into Details.
 - [ ] Check the layout at 1440 × 900, 1280 × 800, 800 × 600, and 375 × 812 in both orientations, with a 2.39:1 and a 16:9 file. Nothing scrolls sideways, and the title row is above the fold on laptops.
 - [x] e2e: the video box keeps its aspect ratio and fits the viewport at desktop and phone sizes.
-- [ ] Close the related cleanup items below (Player fit, Player gutter, Open in without Download).
+- [x] Close the related cleanup items below (Player fit, Player gutter, Open in without Download).
 
 ### 3. Playback performance graph
 
