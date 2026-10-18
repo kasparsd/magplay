@@ -164,6 +164,10 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
   }
   const render = (): void => {
     const lockedItems = ctx.locked ?? []
+    if (!lockedItems.length && !own.length) {
+      items.replaceChildren(el('p', { className: 'muted list-empty', textContent: `No ${def.itemLabel}s yet.` }))
+      return
+    }
     items.replaceChildren(
       ...lockedItems.map((item, i) => card(item, i, true, () => {})),
       ...own.map((item, i) => card(item, lockedItems.length + i, false, (next, committed = true) => {

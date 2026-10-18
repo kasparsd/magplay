@@ -40,7 +40,7 @@ test('the top bar has a status button with a panel of checks, and a gear that li
 
 test('a broken source turns the dot red and its action deep-links to Sources', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings#sources`)
-  await expect(page.locator('#section-sources')).toBeVisible()
+  await expect(page.locator('#sources')).toBeVisible()
   // The env source is listed first and read-only
   await expect(page.locator('#setting-sources-0-url')).toBeDisabled()
   await page.getByRole('button', { name: '+ Add source' }).click()
@@ -53,7 +53,7 @@ test('a broken source turns the dot red and its action deep-links to Sources', a
   const failing = page.locator('.status-check.lvl-error')
   await expect(failing).toContainText(/can.t reach/i)
   await expect(failing.getByRole('link')).toHaveAttribute('href', '/settings#sources')
-  await expect(page.locator('.settings-nav a[href="#sources"] .status-dot')).toHaveClass(/lvl-error/)
+  await expect(page.locator('#sources-title .status-dot')).toHaveClass(/lvl-error/)
 
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Remove source 2' }).click()
@@ -102,7 +102,7 @@ test('writes from another site are refused', async ({ page, app }) => {
 
 test('the connection test runs, and a slow result warns on every page', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings#connection`)
-  await expect(page.locator('#section-connection')).toContainText('Not tested in this browser yet')
+  await expect(page.locator('#connection')).toContainText('Not tested in this browser yet')
   await page.getByRole('button', { name: 'Test now' }).click()
   await expect(page.locator('#setting-connection-result')).toContainText('download', { timeout: 20_000 })
 
@@ -127,4 +127,17 @@ test('browser preferences save at once, under the keys the Player reads', async 
   await expect(page.locator('#savebar')).toBeHidden()
   const stored = await page.evaluate(() => ['speed', 'subtitleLanguage', 'autoplayNext'].map(k => localStorage.getItem(`magplay:player:${k}`)))
   expect(stored).toEqual(['1.25', '"en"', 'false'])
+})
+
+test('Settings is one page with every section stacked in order, and #section links scroll to it', async ({ page, app }) => {
+  await page.goto(`${app.origin}/settings#debug`)
+  const sections = page.locator('main.settings > #settings-body > section.settings-section')
+  await expect(sections).toHaveCount(5)
+  expect(await sections.evaluateAll(list => list.map(s => s.id))).toEqual(['sources', 'playback', 'connection', 'server', 'debug'])
+  for (const id of ['sources', 'playback', 'connection', 'server', 'debug']) await expect(page.locator(`#${id}`)).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Debug' })).toBeInViewport()
+  await expect(page.getByRole('heading', { level: 2, name: 'Sources' })).not.toBeInViewport()
+  // A fix link from the status panel, on the same page, scrolls without leaving it
+  await page.evaluate(() => { location.hash = 'sources' })
+  await expect(page.getByRole('heading', { level: 2, name: 'Sources' })).toBeInViewport()
 })

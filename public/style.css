@@ -353,19 +353,20 @@ details.status-menu .menu-items { width: min(380px, calc(100vw - 32px)); max-wid
 @media (max-width: 480px) { .status-count { display: none; } }
 
 /* Settings page */
-main.settings { max-width: 1100px; display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; align-items: start; }
-.settings-nav { position: sticky; top: 70px; display: flex; flex-direction: column; gap: 2px; }
-.settings-nav a { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-radius: 6px; color: var(--muted); }
-.settings-nav a:hover { background: var(--hover); text-decoration: none; }
-.settings-nav a[aria-current="page"] { background: var(--hover); color: var(--fg); font-weight: 600; }
-.settings-section .intro { color: var(--muted); margin: 0 0 8px; }
-.scope-note { margin: 16px 0 6px; font-size: 13px; color: var(--muted); }
+/* One column of sections, each a <section id> that #sources links scroll to (below the sticky top bar) */
+main.settings { max-width: 760px; padding-top: 24px; }
+main.settings > h1 { font-size: 26px; margin: 0 0 8px; }
+.settings-section { scroll-margin-top: 72px; padding: 28px 0 8px; }
+.settings-section + .settings-section { border-top: 1px solid var(--line); margin-top: 20px; }
+.section-head h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; margin: 0 0 4px; }
+.settings-section .intro { color: var(--muted); margin: 0 0 4px; max-width: 60ch; }
+.scope-note { margin: 18px 0 8px; font-size: 13px; color: var(--muted); }
 .scope-note strong { color: var(--fg); }
 .card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-.card-head h2 { font-size: 15px; margin: 0; }
+.card-head h3 { font-size: 15px; margin: 0; }
 .card-head .muted { font-size: 13px; }
-.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; padding: 10px 14px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 20px; align-items: center; padding: 12px 16px; }
 .row + .row { border-top: 1px solid var(--line); }
 .row.wide { grid-template-columns: minmax(0, 1fr); }
 .row-label { font-weight: 600; }
@@ -373,13 +374,14 @@ main.settings { max-width: 1100px; display: grid; grid-template-columns: 180px m
 .env-note code { font-size: 12px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; }
 .row-control { min-width: 0; justify-self: end; }
 .row.wide .row-control { justify-self: stretch; }
-.row-control input[type="text"], .row-control input[type="url"], .row-control input[type="password"], .row-control select { width: min(320px, 60vw); }
+.row-control input[type="text"], .row-control input[type="url"], .row-control input[type="password"], .row-control select { width: min(300px, 50vw); }
 .row-control input:disabled, .row-control select:disabled { color: var(--muted); background: var(--hover); }
 .field-error { grid-column: 1 / -1; margin: 0; color: var(--bad); font-size: 13px; }
 .field-error:empty { display: none; }
 .number { display: inline-flex; align-items: center; gap: 6px; }
 .number input { width: 96px; text-align: right; }
-.number .unit { color: var(--muted); font-size: 13px; }
+.number .unit { min-width: 2.2em; color: var(--muted); font-size: 13px; }
+.list-empty { margin: 0; }
 .control-note { color: var(--muted); }
 .secret { display: inline-flex; align-items: center; gap: 10px; }
 button.switch { position: relative; width: 44px; height: 24px; padding: 0; border-radius: 999px; background: var(--line); border: 0; }
@@ -417,15 +419,15 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
 .log-line time { color: var(--muted); }
 .log-line.lvl-warn { color: var(--warn); }
 .log-line.lvl-error { color: var(--bad); }
-.savebar { position: sticky; bottom: 12px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; max-width: 860px; margin: 0 auto 12px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); }
+.savebar { position: sticky; bottom: 12px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0 0; padding: 10px 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); }
 .savebar #savebar-status { flex: 1; margin: 0; }
 .savebar.saved button { display: none; }
 .savebar.saved #savebar-count { color: var(--good); }
 @media (max-width: 720px) {
-  main.settings { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .settings-nav { position: static; flex-direction: row; overflow-x: auto; }
-  .settings-nav a { flex: none; gap: 6px; }
-  .row { grid-template-columns: minmax(0, 1fr); }
+  main.settings { padding-top: 16px; }
+  main.settings > h1 { font-size: 22px; }
+  .settings-section { padding-top: 20px; }
+  .row { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
   .row-control { justify-self: start; }
   .row-control input[type="text"], .row-control input[type="url"], .row-control input[type="password"], .row-control select { width: 100%; }
   .row-control:has(> input, > select, > .secret) { justify-self: stretch; }
