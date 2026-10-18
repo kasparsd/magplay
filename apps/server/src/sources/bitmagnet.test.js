@@ -13,7 +13,7 @@ test('groups releases into titles, skipping unmatched and adult ones', () => {
   assert.equal(titles.length, matched.size)
   assert.ok(!titles.some(t => t.title === 'Adult Title'))
   const bunny = titles.find(t => t.title === 'Big Buck Bunny')
-  assert.equal(bunny.releaseCount, 1)
+  assert.equal('releaseCount' in bunny, false) // a page holds only some releases, so no count is claimed
   assert.equal(bunny.source, 'tmdb')
   assert.ok(bunny.genres.length > 0)
   assert.ok(bunny.links.some(l => l.source === 'imdb'))
@@ -47,10 +47,25 @@ test('facets aggregate under the current filters, from BitMagnet\'s cache, sorte
   const { query, variables: { input } } = JSON.parse(fetch.calls[0].opts.body)
   assert.match(query, /aggregations/)
   assert.equal(input.cached, true)
-  assert.deepEqual(input.facets.genre, { filter: ['tmdb:35'], aggregate: true })
-  assert.deepEqual(input.facets.releaseYear, { aggregate: true })
+  const { facets } = input
+  assert.deepEqual(facets.genre, { filter: ['tmdb:35'], aggregate: true })
+  assert.deepEqual(facets.releaseYear, { aggregate: true })
   assert.ok(f.genres[0].label && f.genres[0].count >= f.genres.at(-1).count)
   assert.ok(f.years[0].value >= f.years.at(-1).value)
+})
+
+test('facets mark counts BitMagnet only estimated', async () => {
+  const aggregations = { genre: [{ value: 'tmdb:18', label: 'Drama', count: 675, isEstimate: true }, { value: 'tmdb:35', label: 'Comedy', count: 59785, isEstimate: false }], releaseYear: [], videoResolution: [] }
+  const fetch = mockFetch(() => ({ body: JSON.stringify({ data: { torrentContent: { search: { aggregations } } } }) }))
+  const f = await createBitmagnetBrowser({ url: 'http://bitmagnet:3333' }, { fetch }).facets({ type: 'movie' })
+  assert.deepEqual(f.genres, [{ value: 'tmdb:35', label: 'Comedy', count: 59785 }, { value: 'tmdb:18', label: 'Drama', count: 675, estimate: true }])
+})
+
+test('title says when the search had more hits than it read', async () => {
+  const bunny = items.find(i => i.content?.title === 'Big Buck Bunny')
+  const fetch = mockFetch(() => ({ body: JSON.stringify({ data: { torrentContent: { search: { hasNextPage: true, items: [bunny] } } } }) }))
+  const t = await createBitmagnetBrowser({ url: 'http://bitmagnet:3333' }, { fetch }).title({ type: 'movie', source: bunny.content.source, id: bunny.content.id, title: 'Big Buck Bunny' })
+  assert.equal(t.truncated, true)
 })
 
 test('latest keeps unmatched releases but hides adult ones', async () => {
@@ -72,6 +87,8 @@ test('title keeps only releases of that exact title', async () => {
   const t = await browser.title({ type: 'movie', source: bunny.source, id: bunny.id, title: bunny.title, year: bunny.releaseYear })
   assert.equal(t.title, 'Big Buck Bunny')
   assert.equal(t.releases.length, 1)
+  assert.equal(t.truncated, false)
+  assert.equal(JSON.parse(fetch.calls[0].opts.body).variables.input.hasNextPage, true)
   assert.equal(JSON.parse(fetch.calls[0].opts.body).variables.input.queryString, `Big Buck Bunny ${bunny.releaseYear}`)
   assert.equal(await browser.title({ type: 'movie', source: 'tmdb', id: '0', title: 'Nothing' }), null)
 })

@@ -11,8 +11,9 @@ One person (or a household) on a trusted local network, on a laptop, phone or TV
 ### Pages and URLs
 
 - Five pages, each with its own URL: Search (`/?q=`), Explore (`/explore`), Title (`/title/…`), Torrent (`/t/<infohash>`) and Player (`/play/<infohash>/<file>`). Back, reload, bookmarks and new tabs must all work, so state that matters (query, filters, selected file) lives in the URL, not only in memory.
-- Every page shares the same top bar: the `magplay` home link, Explore, and a search box. The search box keeps the current query where there is one.
-- Back links name where they go ("← Big Buck Bunny", "← Results") and only appear when that destination is the real previous step.
+- Every page shares the same top bar: the `magplay` home link, Explore, and a search box. The search box keeps the last query in this tab (`sessionStorage`), except on the home page.
+- Back links name where they go ("← Gladiator", "← Results", "← Explore") and only appear when that destination is the real previous step (`lib/back.ts`). After a direct visit the torrent page has none; the title page falls back to Explore.
+- History is intentional: a new search and each Explore filter change (type, sort, genre, year, quality) is its own entry, so Back steps back through them before leaving the page. Switching a search's category replaces the entry, and "Show more" adds none.
 - Malformed URLs fall back to defaults (for example an unknown Explore `type` becomes `movie`) instead of showing a validation error.
 
 ### Honest states
@@ -21,10 +22,10 @@ Every list or panel has four states, and each is visible and distinct:
 
 - **Loading:** a short label with a spinner. Controls that depend on the result (Show more, filters for the other type) are hidden or cleared, never left showing stale data from the previous request.
 - **Empty:** a sentence that says what is empty and what to try next. A first-run page is never blank.
-- **Error:** plain language, not raw API validation text. Offer a retry only when retrying can help; a permanent error (no such file) offers the way back instead.
+- **Error:** plain language, not raw API validation text, and visible without hovering (a failed search source says why under the chips). Offer a retry only when retrying can help; it reruns the request on the page (`setError` in `lib/ui.ts`) instead of reloading. A permanent error (no such file) offers the way back instead.
 - **Ready:** the content.
 
-Numbers shown side by side must mean the same thing. A seeder count, a release count or a genre count on one page should match what the next page shows for the same thing, or be labelled so the difference is obvious.
+Numbers shown side by side must mean the same thing. A seeder count, a release count or a genre count on one page should match what the next page shows for the same thing, or be labelled so the difference is obvious. A count the source only estimated is left out rather than shown as exact, and a list cut short by a limit says so.
 
 ### Playback first
 
@@ -196,28 +197,36 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 
 - [x] **HTML entities appear in titles** (`Beltesassar&#39;s Short Animation Festival`). Decode them in the source adapters (`src/sources/`), once, before normalizing.
 - [x] **"1 seeders".** The plural is hard-coded in `apps/client/src/lib/ui.ts` (`releaseRow`) and `apps/client/src/explore.js` (`renderTile`). Add a shared count formatter.
-- [ ] **The Explore tile and the Title page disagree about seeders.** The Gladiator tile says 446 seeders, but the Title page sorts browser-playable releases first, so the top rows have 1–5 seeders and the 446-seeder release (the one **Best release** picks) is far down a 73-row list. Show the release count in the Releases heading, and say what Best release chose (or show it at the top).
-- [ ] **Explore tiles report `releaseCount: 1`** for titles with many releases (Gladiator has 73). Nothing displays it yet; fix or drop the field before something does.
-- [ ] **Film genre counts don't add up.** Drama shows 670 while the year menu shows 13,371 films for 2026 alone, and TV genres are in the tens of thousands. Find out whether film genre counts come from a capped sample or a different query, and make them comparable or label them.
+- [x] **The Explore tile and the Title page disagree about seeders.** The Gladiator tile says 446 seeders, but the Title page sorts browser-playable releases first, so the top rows have 1–5 seeders and the 446-seeder release (the one **Best release** picks) is far down a 73-row list. Show the release count in the Releases heading, and say what Best release chose (or show it at the top). *Done: the Title page lists releases most seeded first, like the tile; the heading reads "73 releases", the chosen row has a **best** badge and a line under the buttons says what Best release picked and why.*
+- [x] **Explore tiles report `releaseCount: 1`** for titles with many releases (Gladiator has 73). Nothing displays it yet; fix or drop the field before something does. *Dropped: a page of 100 releases only holds some of a title's releases, so no count is claimed; the Title page has the full list.*
+- [x] **Film genre counts don't add up.** Drama shows 670 while the year menu shows 13,371 films for 2026 alone, and TV genres are in the tens of thousands. Find out whether film genre counts come from a capped sample or a different query, and make them comparable or label them. *Cause: BitMagnet answers within an aggregation budget and returns Postgres planner estimates (`isEstimate`) past it; film genre estimates were about 100× low (Drama ≈675, exact 82,587). Exact counts take 35–50 s per type and starved searches when both types warmed at once, so the server marks estimated counts and Explore shows those without a number.*
 - [x] **No H.264 badge for one title.** `big_buck_bunny_1080p_h264.mov` gets no badge, probably because the name uses underscores, while another result in the same search does. Check the badge parser's separators.
 
 ### P3: consistency
 
-- [ ] **Release lists look different on each page.** Search uses a table with Size/Seeders columns (`renderResult` in `public/search.js`); Explore "Just added" and Title use `releaseRow`. Use `releaseRow` everywhere and delete `renderResult`.
-- [ ] **The header search box empties on every page except Search,** so the query disappears after opening a torrent. Keep the last query (URL or `sessionStorage`).
-- [ ] **"← Results" appears on torrent pages not reached from a search** (direct links, Explore, recent list). Show it only when there is a search to go back to; otherwise link to where the user came from.
+- [x] **Release lists look different on each page.** Search uses a table with Size/Seeders columns (`renderResult` in `public/search.js`); Explore "Just added" and Title use `releaseRow`. Use `releaseRow` everywhere and delete `renderResult`.
+- [x] **The header search box empties on every page except Search,** so the query disappears after opening a torrent. Keep the last query (URL or `sessionStorage`).
+- [x] **"← Results" appears on torrent pages not reached from a search** (direct links, Explore, recent list). Show it only when there is a search to go back to; otherwise link to where the user came from.
 - [x] **The Player page has a different side gutter** from the other pages. Fixed by [Theater layout](#2-theater-layout-by-default).
 - [x] **Open in on the Player has no Download file option,** while the torrent page's ⋯ menu does. Offer the same file actions in both. Fixed by the More menu in [One player chrome](#1-one-player-chrome-for-every-mode).
-- [ ] **More → Copy infohash does the same thing as the clickable ID** next to the torrent's metadata. Keep one.
-- [ ] **Screen readers hear "tv_show"** for the Explore Movies/TV switch. Give the radios proper labels.
+- [x] **More → Copy infohash does the same thing as the clickable ID** next to the torrent's metadata. Keep one. *Already done in e19b257: only the ID button remains.*
+- [x] **Screen readers hear "tv_show"** for the Explore Movies/TV switch. Give the radios proper labels.
 
 ### P4: polish
 
 - [x] **The Player doesn't fit the viewport.** At 800×600 the full-width video pushes Audio/Subtitles/Open in below the fold. Fixed by the sizing rule in [Theater layout](#2-theater-layout-by-default).
-- [ ] **ⓘ Details shows raw ffprobe values.** Container reads `mov,mp4,m4a,3gp,3g2,mj2` and unnamed audio tracks read "1. Track (mp3 2ch)". Map them to "MP4" and "MP3 stereo".
-- [ ] **The source label repeats on every search row** ("BitMagnet") with a single source configured. Show it only with more than one source.
-- [ ] **Odd spacing on the Torrent and Title pages.** The torrent page has an empty band between the title and "3 files · 276 MB", and the Title page has a large gap above "Releases".
-- [ ] **An unknown torrent's heading is the 40-character infohash** until metadata arrives. Shorten it (`dd8255ec…`).
-- [ ] **The Search home page is blank on first run.** With an empty cache there is nothing under the search bar. Add a line of help or a link to Explore. Recent items also can't be removed.
-- [ ] **Mobile wrapping.** At 375 px "last played just now" wraps under the file name on the torrent page, and Explore's "Just added" meta line (time · size · seeders) squeezes release names until they break mid-word. Put meta under the name on narrow screens.
-- [ ] **Explore tiles are tall blocks of colour with only a name.** Without posters the 2:3 shape wastes most of the screen. Try a shorter tile or a dense list view so more titles fit.
+- [ ] **ⓘ Details shows raw ffprobe values.** Container reads `mov,mp4,m4a,3gp,3g2,mj2` and unnamed audio tracks read "1. Track (mp3 2ch)". Map them to "MP4" and "MP3 stereo". *Audio now reads "MP3 stereo" via `audioFormat` (Player step 1). `containerLabel` in `lib/naming.ts` (tested) maps the container; using it in `player.js` is left to the Player work.*
+- [x] **The source label repeats on every search row** ("BitMagnet") with a single source configured. Show it only with more than one source.
+- [x] **Odd spacing on the Torrent and Title pages.** The torrent page has an empty band between the title and "3 files · 276 MB", and the Title page has a large gap above "Releases".
+- [x] **An unknown torrent's heading is the 40-character infohash** until metadata arrives. Shorten it (`dd8255ec…`).
+- [x] **The Search home page is blank on first run.** With an empty cache there is nothing under the search bar. Add a line of help or a link to Explore. Recent items also can't be removed. *A removed item is hidden in this browser until it is opened again; the cache is untouched.*
+- [x] **Mobile wrapping.** At 375 px "last played just now" wraps under the file name on the torrent page, and Explore's "Just added" meta line (time · size · seeders) squeezes release names until they break mid-word. Put meta under the name on narrow screens.
+- [x] **Explore tiles are tall blocks of colour with only a name.** Without posters the 2:3 shape wastes most of the screen. Try a shorter tile or a dense list view so more titles fit. *Tiles are now 88 px cards, about twice as many per screen.*
+
+### Discovery friction (roadmap item 7)
+
+- [x] **Filter history.** Each Explore filter change and each new search is a history entry; Back steps back through them, and the page follows the URL on Back/Forward.
+- [x] **Visible local retries.** Failed searches, Explore pages, genre counts, title and torrent loads show **Try again**, which reruns the request on the page.
+- [x] **Selected genres outside the top chips.** A genre chosen from a link or a narrower filter keeps its chip even when it isn't among the 14 most common.
+- [x] **Useful source errors.** A failed search source says why under the chips, with **Search again**, instead of a red chip with the reason on hover. A server with no sources configured says so (503) instead of an empty 502.
+- [x] **Honest title-list truncation.** The Title page reads only the 100 most-seeded search hits for a name; when BitMagnet had more, the list says so and links to Search all sources.

@@ -42,6 +42,10 @@ test('one failing and one hanging source still return the others, with reasons',
   ])
 })
 
+test('no configured source is a readable 503, not an empty 502', async () => {
+  await assert.rejects(createSearch([]).search('x'), err => err.status === 503 && /No search sources/.test(err.message))
+})
+
 test('all sources failing is a 502 naming each', async () => {
   const searcher = createSearch([
     fakeSource('a', async () => { throw new SourceError('HTTP 401: check the API key') }),
