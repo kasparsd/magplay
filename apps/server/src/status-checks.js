@@ -6,9 +6,8 @@ import { settingDef } from '@magplay/api-contract'
 import config, { settings } from './config-instance.js'
 import { createStatus } from './status.ts'
 import { createBitmagnetBrowser, createSources } from '@magplay/indexers'
-import { runProbeJob, runSubtitleJob } from './media.js'
+import { hls, media } from './playback-instance.js'
 import { engine } from './engine-instance.js'
-import { sessionSummary } from './sessions.js'
 
 export const status = createStatus()
 
@@ -144,7 +143,7 @@ const { version } = JSON.parse(readFileSync(new URL('../../../package.json', imp
 
 /** GET /api/debug: versions, what's busy, and the log tail. */
 export async function debugInfo (log) {
-  const sessions = sessionSummary()
+  const sessions = hls.summary()
   return {
     version,
     node: process.versions.node,
@@ -155,8 +154,8 @@ export async function debugInfo (log) {
       { id: 'conversions', label: 'Conversions', used: sessions.active, limit: config.maxHlsSessions },
       { id: 'torrentLoads', label: 'Torrents loading', ...engine.stats().loads },
       { id: 'torrents', label: 'Torrents loaded', used: engine.stats().loaded, limit: 0 },
-      { id: 'probes', label: 'Probes', ...runProbeJob.stats() },
-      { id: 'subtitles', label: 'Subtitle jobs', ...runSubtitleJob.stats() },
+      { id: 'probes', label: 'Probes', ...media.stats().probes },
+      { id: 'subtitles', label: 'Subtitle jobs', ...media.stats().subtitles },
       { id: 'hls', label: 'Conversion storage', used: sessions.bytes, limit: config.hlsMaxBytes, unit: 'bytes' },
     ],
     disk: await diskInfo(),

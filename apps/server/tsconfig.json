@@ -23,6 +23,9 @@
     },
     {
       "path": "../../packages/torrent-engine"
+    },
+    {
+      "path": "../../packages/playback"
     }
   ]
 }

@@ -4,13 +4,14 @@ import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import config, { settings } from './config-instance.js'
-import { HttpError, toHttpError } from './errors.ts'
+import { HttpError, toHttpError } from './http/errors.ts'
 import { createRouter, isSameOrigin, route, sendCached, serveFile } from '@magplay/http-kit'
 import { createBitmagnetBrowser, createSearch, createSources, resolveLink, TYPES } from '@magplay/indexers'
 import { engine } from './engine-instance.js'
 import { serveRaw, serveTar } from './http/media.ts'
-import { probe, decide, subtitleToVtt } from './media.js'
-import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls, stopAllSessions } from './sessions.js'
+import { decide } from '@magplay/playback'
+import { hls, media, rawUrl, tabs } from './playback-instance.js'
+import { serveHls } from './http/hls.ts'
 import { checkSource, debugInfo, status as statusChecks } from './status-checks.js'
 import { serveSpeedtest } from './speedtest.ts'
 import { sourceConfigs } from './config.ts'
@@ -117,11 +118,11 @@ async function play (body, cancelled) {
   check()
   const file = await engine.file(ih, idx)
   check()
-  const info = await probe(ih, idx, file.name)
+  const info = await media.probe(rawUrl(ih, idx), file.name)
   check()
   let decision
   try {
-    decision = decide(info, caps, audio)
+    decision = decide(info, caps, { allowTranscode: config.allowTranscode, transcodeMaxHeight: config.transcodeMaxHeight }, audio)
   } catch (err) {
     console.log(`[play] refused ${ih}/${idx} ${file.name}: ${err.message}`)
     throw err
@@ -129,10 +130,10 @@ async function play (body, cancelled) {
   console.log(`[play] ${decision.mode} ${ih}/${idx} ${file.name} @${start.toFixed(0)}s: ${decision.reason}`)
   const out = { ...decision, duration: info.duration }
   if (decision.mode === 'direct') {
-    stopTab(tab)
+    tabs.stop(tab)
     return { ...out, url: `/raw/${ih}/${idx}`, offset: 0 }
   }
-  const s = startSession({ ih, idx, info, audio, start, mode: decision.mode, tab })
+  const s = tabs.start(tab, { input: rawUrl(ih, idx), info, audio, start, mode: decision.mode })
   return {
     ...out,
     url: `/hls/${s.id}/index.m3u8`,
@@ -169,7 +170,7 @@ async function subtitles ({ req, res, params }) {
   if (!subtitleCache.has(key)) {
     const job = (async () => {
       await engine.file(params.ih, Number(params.idx))
-      return subtitleToVtt(params.ih, Number(params.idx), track === 'file' ? null : Number(track))
+      return media.subtitleToVtt(rawUrl(params.ih, Number(params.idx)), track === 'file' ? null : Number(track))
     })()
     job.catch(() => subtitleCache.delete(key))
     subtitleCache.set(key, job)
@@ -200,7 +201,7 @@ async function probeRoute ({ req, res, params }) {
   const torrent = await engine.get(params.ih)
   const file = torrent.files[Number(params.idx)]
   if (!file) throw new HttpError(404, 'No such file in this torrent')
-  const info = await probe(params.ih, Number(params.idx), file.name)
+  const info = await media.probe(rawUrl(params.ih, Number(params.idx)), file.name)
   const { files } = engine.describe(torrent)
   sendCached(req, res, JSON.stringify({ ...info, externalSubtitles: files.filter(f => f.isSub).map(f => ({ idx: f.idx, name: f.name })) }), { 'Content-Type': 'application/json' })
 }
@@ -208,8 +209,8 @@ async function probeRoute ({ req, res, params }) {
 /** Torrent activity; the player adds idx (its file) and session/pos (its ffmpeg session, kept alive by this poll). */
 function statusRoute ({ res, params, query }) {
   const out = engine.status(params.ih, { idx: query.has('idx') ? Number(query.get('idx')) : undefined })
-  const s = query.get('session') && touchSession(query.get('session'), Number(query.get('pos')))
-  json(res, 200, { ...out, session: s ? sessionStats(s) : null })
+  const s = query.get('session') && hls.touch(query.get('session'), Number(query.get('pos')))
+  json(res, 200, { ...out, session: s ? hls.stats(s) : null })
 }
 
 /** Writes change the server for everyone, so only this site's own pages may make them. */
@@ -257,7 +258,7 @@ const match = createRouter([
   route('GET', '/api/debug', async ({ res }) => json(res, 200, await debugInfo(logTail()))),
   route('POST', '/api/debug/clear-hls', ({ req, res }) => {
     sameOriginOnly(req)
-    const stopped = stopAllSessions()
+    const stopped = hls.stopAll()
     console.log(`[debug] cleared the conversion cache, stopped ${stopped} session(s)`)
     json(res, 200, { stopped })
   }),
@@ -290,11 +291,11 @@ const match = createRouter([
   route('GET', '/api/probe/:ih/:idx', probeRoute),
   route('POST', '/api/play', async ({ req, res }) => json(res, 200, await play(await readJson(req), () => res.destroyed))),
   route('POST', '/api/play/tab/:tab', ({ res, params }) => {
-    closeTab(params.tab)
+    tabs.close(params.tab)
     json(res, 200, { ok: true })
   }),
   route('DELETE|POST', '/api/play/:session', ({ res, params }) => { // POST too, for navigator.sendBeacon
-    stopSession(params.session)
+    hls.stop(params.session)
     json(res, 200, { ok: true })
   }),
 
@@ -303,7 +304,7 @@ const match = createRouter([
   route('GET|HEAD', '/raw/:ih/:idx/:name?', ({ req, res, params, query }) => serveRaw(req, res, engine, params.ih, Number(params.idx), { download: query.has('download') })),
   route('GET|HEAD', '/tar/:ih/:name?', ({ req, res, params }) => serveTar(req, res, engine, params.ih)),
   route('GET', '/playlist.m3u', ({ req, res, query }) => playlist(req, res, query.get('ih'), query.get('idx'))),
-  route('GET', '/hls/:session/:file', ({ req, res, params }) => serveHls(res, params.session, params.file, req)),
+  route('GET', '/hls/:session/:file', ({ req, res, params }) => serveHls(req, res, hls, params.session, params.file)),
   route('GET', '/subs/:ih/:idx/:track', subtitles),
 ])
 

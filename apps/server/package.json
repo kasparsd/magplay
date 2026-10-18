@@ -7,6 +7,7 @@
     "@magplay/api-contract": "*",
     "@magplay/http-kit": "*",
     "@magplay/indexers": "*",
+    "@magplay/playback": "*",
     "@magplay/release-info": "*",
     "@magplay/seekable-tar": "*",
     "@magplay/torrent-engine": "*"

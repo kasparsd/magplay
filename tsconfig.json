@@ -20,6 +20,9 @@
       "path": "packages/torrent-engine"
     },
     {
+      "path": "packages/playback"
+    },
+    {
       "path": "apps/server"
     },
     {

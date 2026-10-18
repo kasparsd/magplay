@@ -1,5 +1,8 @@
-// Keep these probes aligned with the server's codec keys. These are support
-// hints, not guarantees about a file's profile, bit depth or hardware decoding.
+import { CODEC_KEYS } from '@magplay/api-contract'
+
+// One MIME probe per codec key the server's playback decision reads. These are
+// support hints, not guarantees about a file's profile, bit depth or hardware decoding.
+/** @type {Record<import('@magplay/api-contract').CodecKey, string>} */
 const TYPES = {
   h264: 'video/mp4; codecs="avc1.640028"',
   hevc: 'video/mp4; codecs="hvc1.1.6.L120.90"',
@@ -25,7 +28,7 @@ const TYPES = {
 export function measureCaps (video, { ManagedMediaSource, MediaSource } = {}) {
   const MS = ManagedMediaSource || MediaSource
   return /** @type {import('@magplay/api-contract').BrowserCapabilities} */ (Object.fromEntries(
-    Object.entries(TYPES).map(([key, type]) =>
-      [key, !!(MS?.isTypeSupported?.(type) || video.canPlayType(type) === 'probably')])
+    CODEC_KEYS.map(key =>
+      [key, !!(MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably')])
   ))
 }
