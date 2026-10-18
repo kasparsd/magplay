@@ -70,6 +70,12 @@ Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [
 
 Before public/untrusted exposure, authentication, media/API access protection and Origin/CSRF handling become mandatory deployment gates. They are intentionally not account features on the local-only roadmap.
 
+## Backburner
+
+These items are planned for later and are not part of the active sequence above. Reprioritize explicitly before starting implementation.
+
+- [ ] **Electron desktop distribution for Windows, macOS and Linux** ([finalized plan](plans/desktop-packaging.md), [architecture](architecture.md#desktop-distribution-direction)). Package the existing UI in its own application window with a supervised Node backend and bundled FFmpeg/ffprobe; retain the headless/Docker distribution. First prove packaged playback and native torrent dependencies on each OS, then implement portable paths, Windows throttling/process cleanup, desktop behavior, installers and signing. No implementation has started; no release date is scheduled. Automatic updates, tray/background mode and a browser-only launcher are outside the first release scope.
+
 ## Boundaries to preserve
 
 - `/raw` remains the single source of torrent bytes for direct playback, downloads, external players and ffmpeg/ffprobe. Keep Range, validators and cancellation consistent with `/tar`.

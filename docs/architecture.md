@@ -102,6 +102,12 @@ Requirements for the client build, kept from the earlier Vite criteria:
 
 Vite remains an option if a dev server, fingerprinted assets or bundled browser-media/WASM dependencies become a need; the requirements above apply to it too. No build system makes decoding or server remuxing faster by itself.
 
+## Desktop distribution direction
+
+Desktop packaging is a backburner item, not implemented or scheduled. Electron is the selected shell, with the existing interface in a dedicated BrowserWindow, bundled FFmpeg/ffprobe and target-specific native torrent dependencies. Electron main/preload code stays in TypeScript; the backend retains indexer, torrent, settings and media responsibilities in a supervised utility process using Electron's Node runtime. A separately bundled Node child is the fallback only if the packaged native-dependency spike requires it. Headless Node/Docker remains a separate launch mode of the shared backend.
+
+The window loads pages, APIs and media from one loopback HTTP origin after readiness. The renderer has Node integration disabled, context isolation and sandboxing enabled, and only a narrow validated preload bridge. Electron is preferred over Tauri's system webviews and a browser-only launcher for a controlled Chromium playback runtime and an established Node desktop stack; actual codecs and native modules still require packaged tests on every target. Desktop resources resolve independently of the checkout, application data uses writable user directories, and persisted client preferences must survive a changed loopback port. [The desktop packaging plan](plans/desktop-packaging.md) owns the release matrix, Forge packaging, implementation phases, process containment and acceptance criteria; [the roadmap](roadmap.md#backburner) owns its deferred priority.
+
 ## Static delivery
 
 A frontend proxy is not a cross-origin client. Nginx can serve the static pages and built client and proxy `/api`, `/raw`, `/tar`, `/hls`, `/subs` and playlists under the same origin. This needs neither CORS nor authentication. Node-only serving stays supported.
