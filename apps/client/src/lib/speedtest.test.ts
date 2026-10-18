@@ -64,5 +64,5 @@ test('results and preferences round-trip through storage, and bad stored values 
   assert.equal(setPreference('player.audioLanguage', '', store), true)
   assert.equal(store.getItem('magplay:player:audioLanguage'), 'null')
   assert.equal(setPreference('player.subtitleLanguage', 'not a language', store), false)
-  assert.equal(getPreference('player.autoplayNext', null), true)
+  assert.equal(getPreference('player.speed', null), 1)
 })

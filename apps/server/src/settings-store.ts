@@ -42,9 +42,9 @@ function fromEnv (def: ValueDef, env: Env, readers: EnvReaders): { value: unknow
  * Resolves every server setting. An invalid env value throws (startup fails loudly, naming the
  * variable); an invalid value in the file is ignored with a warning, so a hand edit can't brick the server.
  */
-export function resolve (env: Env, file: Record<string, unknown>, readers: EnvReaders = {}): Resolved {
+export function resolve (env: Env, file: Record<string, unknown>, readers: EnvReaders = {}, defs: readonly ValueDef[] = serverDefs): Resolved {
   const out: Resolved = { values: {}, meta: {}, effective: {} }
-  for (const def of serverDefs) {
+  for (const def of defs) {
     const envHit = fromEnv(def, env, readers)
     let envValue: unknown
     if (envHit) {
@@ -137,20 +137,13 @@ export interface SettingsStore {
   update: (patch: Record<string, unknown>) => UpdateResult
   /** A list item with unsaved values, its masked secrets filled from the saved item with the same id. */
   unsavedItem: (key: string, item: Record<string, unknown>) => { ok: true, item: ListItem } | { ok: false, error: string }
-  /** Keys saved with a new value that only applies after a restart. */
-  pendingRestart: () => string[]
   on: (event: 'changed', listener: (changed: string[]) => void) => void
 }
 
 export function createSettingsStore ({ file, env, readers = {} }: { file: string, env: Env, readers?: EnvReaders }): SettingsStore {
   let saved = readSettingsFile(file)
   let resolved = resolve(env, saved, readers)
-  const startup = structuredClone(resolved.effective)
   const emitter = new EventEmitter()
-
-  const pendingRestart = (): string[] => serverDefs
-    .filter(d => d.apply === 'restart' && !same(resolved.effective[d.key], startup[d.key]))
-    .map(d => d.key)
 
   /** Puts saved secrets back where the browser sent `{ set: true }` (unchanged). */
   function unmask (def: ValueDef, value: unknown): unknown {
@@ -170,11 +163,7 @@ export function createSettingsStore ({ file, env, readers = {} }: { file: string
 
   return {
     get effective () { return resolved.effective },
-    response () {
-      const out = mask(resolved)
-      for (const key of pendingRestart()) out.meta[key] = { ...out.meta[key]!, pendingRestart: true }
-      return out
-    },
+    response: () => mask(resolved),
     update (patch) {
       const fields: Record<string, string> = {}
       const next: Record<string, unknown> = {}
@@ -209,7 +198,6 @@ export function createSettingsStore ({ file, env, readers = {} }: { file: string
       const result = validate(def, unmask(def, [item]))
       return result.ok ? { ok: true, item: (result.value as ListItem[])[0]! } : { ok: false, error: result.error }
     },
-    pendingRestart,
     on (event, listener) { emitter.on(event, listener) },
   }
 }

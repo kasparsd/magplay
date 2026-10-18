@@ -1,59 +1,80 @@
-// Runtime configuration, resolved from the settings schema: env vars, then data/settings.json, then defaults.
-// Callers read `config.x` when they need it, so live settings apply as soon as they're saved;
-// restart-only settings keep their startup value here until the server restarts.
+// Runtime configuration. Settings the page edits resolve from env vars, then data/settings.json, then defaults;
+// callers read `config.x` when they need it, so a saved setting applies on its next use.
+// Knobs the page doesn't show (ports, limits, timeouts, trackers, programs) come from env vars only,
+// validated the same way.
 import path from 'node:path'
 import { bitmagnetUrl, sourceConfigs, sourceItemsFromEnv } from './sources/index.js'
-import { createSettingsStore, serverDefs } from './settings-store.ts'
+import { createSettingsStore, resolve } from './settings-store.ts'
 
 const env = process.env
 
-/** Settings whose env vars need more than "first non-empty variable". */
-const readers = {
-  sources: sourceItemsFromEnv,
-  // Set but empty means "no extra trackers", which differs from unset (the defaults)
-  'torrents.trackers': e => e.EXTRA_TRACKERS === undefined
-    ? null
-    : e.EXTRA_TRACKERS.split(',').map(s => s.trim()).filter(Boolean).map((url, i) => ({ id: `env-${i}`, url })),
-}
+const DEFAULT_TRACKERS = [
+  'udp://tracker.opentrackr.org:1337/announce',
+  'udp://open.stealth.si:80/announce',
+  'udp://tracker.torrent.eu.org:451/announce',
+  'udp://explodie.org:6969/announce',
+  'udp://exodus.desync.com:6969/announce',
+]
 
-// The settings file lives where CACHE_DIR (or ./data) points at startup, even if the cache folder setting moves the cache
-export const settingsFile = path.resolve(env.CACHE_DIR || 'data', 'settings.json')
-export const settings = createSettingsStore({ file: settingsFile, env, readers })
+const count = (key, envName, fallback, max) => ({ key, env: [envName], type: 'number', default: fallback, min: 1, max, integer: true })
+const seconds = (key, envName, fallback) => ({ key, env: [envName], type: 'number', default: fallback, min: 1 })
+/** Env-only knobs, in the settings schema's shape so they validate (and fail at startup) like the rest. */
+const ENV_ONLY = [
+  { key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true },
+  { key: 'torrentPort', env: ['TORRENT_PORT'], type: 'number', default: 6881, min: 0, max: 65535, integer: true },
+  { key: 'cacheDir', env: ['CACHE_DIR'], type: 'text', default: 'data' },
+  { key: 'ffmpegPath', env: ['FFMPEG_PATH'], type: 'text', default: 'ffmpeg' },
+  { key: 'ffprobePath', env: ['FFPROBE_PATH'], type: 'text', default: 'ffprobe' },
+  { key: 'dhtEnabled', env: ['DHT_ENABLED'], type: 'toggle', default: true },
+  { key: 'lsdEnabled', env: ['LSD_ENABLED'], type: 'toggle', default: true },
+  count('maxHlsSessions', 'MAX_HLS_SESSIONS', 2, 16),
+  count('maxTorrentLoads', 'MAX_TORRENT_LOADS', 4, 64),
+  count('maxProbes', 'MAX_PROBES', 2, 16),
+  count('maxSubtitleJobs', 'MAX_SUBTITLE_JOBS', 1, 16),
+  seconds('metadataTimeoutS', 'METADATA_TIMEOUT_S', 60),
+  seconds('checkTimeoutS', 'TORRENT_CHECK_TIMEOUT_S', 7200),
+  { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1 },
+]
+const fixed = resolve(env, {}, {}, ENV_ONLY).effective
+// Set but empty means "no extra trackers", which differs from unset (the defaults)
+const extraTrackers = env.EXTRA_TRACKERS === undefined ? DEFAULT_TRACKERS : env.EXTRA_TRACKERS.split(',').map(s => s.trim()).filter(Boolean)
 
-const restartKeys = serverDefs.filter(d => d.apply === 'restart').map(d => d.key)
-const boot = structuredClone(settings.effective)
+// The settings file lives where CACHE_DIR (or ./data) points
+export const settingsFile = path.resolve(fixed.cacheDir, 'settings.json')
+export const settings = createSettingsStore({ file: settingsFile, env, readers: { sources: sourceItemsFromEnv } })
 
 function derive (v) {
   const sources = sourceConfigs(v.sources)
   return {
-    port: v['server.port'],
     sources,
     bitmagnetUrl: bitmagnetUrl({ BITMAGNET_URL: v['explore.bitmagnetUrl'] }, sources),
     searchTimeoutMs: v['search.timeoutS'] * 1000,
-    cacheDir: path.resolve(v['server.cacheDir']),
-    ffmpegPath: v['tools.ffmpegPath'],
-    ffprobePath: v['tools.ffprobePath'],
     cacheMaxBytes: v['cache.maxGb'] * 1024 ** 3,
-    maxHlsSessions: v['limits.hlsSessions'],
-    maxTorrentLoads: v['limits.torrentLoads'],
-    maxProbes: v['limits.probes'],
-    maxSubtitleJobs: v['limits.subtitleJobs'],
     hlsMaxBytes: v['cache.hlsMaxGb'] * 1024 ** 3,
     minFreeBytes: v['cache.minFreeGb'] * 1024 ** 3,
-    torrentPort: v['torrents.port'],
-    dhtEnabled: v['torrents.dht'],
-    lsdEnabled: v['torrents.lsd'],
-    extraTrackers: v['torrents.trackers'].map(t => t.url),
-    metadataTimeoutMs: v['torrents.metadataTimeoutS'] * 1000,
-    checkingTimeoutMs: v['torrents.checkTimeoutS'] * 1000,
-    idleTorrentMs: v['torrents.idleMin'] * 60_000,
     allowTranscode: v['transcode.allow'],
     transcodeMaxHeight: v['transcode.maxHeight'],
   }
 }
 
-const inUse = () => ({ ...settings.effective, ...Object.fromEntries(restartKeys.map(key => [key, boot[key]])) })
-const config = derive(inUse())
-settings.on('changed', () => Object.assign(config, derive(inUse())))
+const config = {
+  port: fixed.port,
+  torrentPort: fixed.torrentPort,
+  cacheDir: path.resolve(fixed.cacheDir),
+  ffmpegPath: fixed.ffmpegPath,
+  ffprobePath: fixed.ffprobePath,
+  dhtEnabled: fixed.dhtEnabled,
+  lsdEnabled: fixed.lsdEnabled,
+  maxHlsSessions: fixed.maxHlsSessions,
+  maxTorrentLoads: fixed.maxTorrentLoads,
+  maxProbes: fixed.maxProbes,
+  maxSubtitleJobs: fixed.maxSubtitleJobs,
+  extraTrackers,
+  metadataTimeoutMs: fixed.metadataTimeoutS * 1000,
+  checkingTimeoutMs: fixed.checkTimeoutS * 1000,
+  idleTorrentMs: fixed.idleTorrentMin * 60_000,
+  ...derive(settings.effective),
+}
+settings.on('changed', () => Object.assign(config, derive(settings.effective)))
 
 export default config

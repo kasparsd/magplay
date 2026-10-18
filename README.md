@@ -175,7 +175,7 @@ response may need a hard reload/cache clear. No Node/proxy speedup has been benc
 
 ## Configuration
 
-Open **Settings** from the gear at the right of the top bar (`/settings`). It edits sources, playback, storage, limits and network settings, saved to `settings.json` in the data folder (`CACHE_DIR`, `./data` by default), and most apply without a restart; the web port, torrent port, cache folder, DHT and LSD apply after one. The status button next to the gear shows whether sources, Explore, ffmpeg and the disk are healthy.
+Open **Settings** from the gear at the right of the top bar (`/settings`). It edits sources, playback and storage limits, saved to `settings.json` in the data folder (`CACHE_DIR`, `./data` by default), and they apply without a restart. The rest of the variables below (ports, cache folder, job limits, timeouts, trackers, ffmpeg paths, DHT and LSD) are set only in the environment. The status button next to the gear shows whether sources, Explore, ffmpeg and the disk are healthy.
 
 Env vars still work and win over saved settings: a field set by one is read-only in Settings and names its variable. magplay never writes `.env`. Sources from env vars are listed first and locked; sources added in Settings follow them.
 
@@ -228,7 +228,7 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 | `POST /api/play/tab/:tab` | Closes a page activation, including a session whose POST result has not reached the browser yet; late requests for that activation are fenced briefly. |
 | `GET /subs/:ih/:idx/:track.vtt` | Embedded text subtitle `track` as WebVTT (direct mode; reads the whole file), or `file.vtt` to convert a `.srt`/`.vtt`/`.ass` file in the torrent |
 | `GET /api/status` | `{level, checks:[{id, label, level, required, value, message, action}]}`. Checks run when asked and are cached (sources and Explore 60 s, disk 30 s, ffmpeg once). |
-| `GET /api/settings` | Server settings in use, secrets masked as `{set}`, with `meta[key] = {source: env\|file\|default, env, locked, pendingRestart}` |
+| `GET /api/settings` | Server settings in use, secrets masked as `{set}`, with `meta[key] = {source: env\|file\|default, env, locked}` |
 | `PATCH /api/settings` | A partial update, validated as a whole (400 with `fields` per key, nothing saved) and written atomically. Same-origin only (403 otherwise), like every write below. |
 | `POST /api/settings/test` `{key: 'sources', item}` | Checks a source with unsaved values; returns a check result |
 | `GET /api/debug` | Version, uptime, ffmpeg versions, busy slots and limits, disk and cache use, and the last 200 log lines |

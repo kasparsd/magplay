@@ -2,7 +2,6 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
-import { settingDef } from '@magplay/api-contract'
 import config, { settings } from './config.js'
 import { createStatus } from './status.ts'
 import { createSources } from './sources/index.js'
@@ -77,7 +76,7 @@ status.registerCheck({
     const [ffmpeg, ffprobe] = await Promise.all([binaryVersion(config.ffmpegPath), binaryVersion(config.ffprobePath)])
     Object.assign(versions, { ffmpeg, ffprobe })
     const missing = [!ffmpeg && config.ffmpegPath, !ffprobe && config.ffprobePath].filter(Boolean)
-    if (missing.length) return { level: 'error', value: 'Missing', message: `Playback needs ffmpeg and ffprobe; "${missing.join('", "')}" didn’t run.`, action: { label: 'Open Server', href: '/settings#server' } }
+    if (missing.length) return { level: 'error', value: 'Missing', message: `Playback needs ffmpeg and ffprobe; "${missing.join('", "')}" didn’t run. Install them, or set FFMPEG_PATH and FFPROBE_PATH.`, action: { label: 'Open Debug', href: '/settings#debug' } }
     return { level: 'ok', value: ffmpeg === ffprobe ? ffmpeg : `${ffmpeg} / ${ffprobe}` }
   },
 })
@@ -102,24 +101,12 @@ status.registerCheck({
   required: true,
   async run () {
     const disk = await diskInfo()
-    const action = { label: 'Open Server', href: '/settings#server' }
+    const action = { label: 'Open Storage', href: '/settings#storage' }
     if (!disk) return { level: 'error', message: `Can’t read the cache folder ${config.cacheDir}.`, action }
     const value = `${formatGb(disk.free)} free`
     if (disk.free < config.minFreeBytes) return { level: 'error', value, message: 'Below the free-space floor: conversions stop until space is freed.', action }
     if (disk.free < Math.max(2 * config.minFreeBytes, config.minFreeBytes + 2 * GB)) return { level: 'warn', value, message: 'Near the free-space floor; conversions will stop soon.', action }
     return { level: 'ok', value }
-  },
-})
-
-status.registerCheck({
-  id: 'restart',
-  label: 'Restart needed',
-  ttl: 0,
-  run () {
-    const keys = settings.pendingRestart()
-    if (!keys.length) return null
-    const names = keys.map(key => settingDef(key)?.label.toLowerCase() ?? key).join(', ')
-    return { level: 'warn', value: 'Pending', message: `Restart magplay to apply: ${names}.`, action: { label: 'Open Server', href: '/settings#server' } }
   },
 })
 
@@ -129,8 +116,7 @@ registerSourceChecks()
 settings.on('changed', changed => {
   if (changed.includes('sources')) registerSourceChecks()
   if (changed.includes('explore.bitmagnetUrl')) status.invalidate('explore')
-  if (changed.some(key => key.startsWith('tools.'))) status.invalidate('ffmpeg')
-  if (changed.some(key => key.startsWith('cache.') || key === 'server.cacheDir')) status.invalidate('disk')
+  if (changed.some(key => key.startsWith('cache.'))) status.invalidate('disk')
 })
 
 const started = Date.now()

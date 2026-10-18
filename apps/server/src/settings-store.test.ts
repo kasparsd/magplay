@@ -13,27 +13,27 @@ const tempFile = (t: { after: (fn: () => void) => void }): string => {
 }
 
 test('env wins over the file, the file over the default, and each value says where it came from', () => {
-  const r = resolve({ CACHE_MAX_GB: '20' }, { 'cache.maxGb': 80, 'limits.probes': 3 })
+  const r = resolve({ CACHE_MAX_GB: '20' }, { 'cache.maxGb': 80, 'search.timeoutS': 45 })
   assert.equal(r.values['cache.maxGb'], 20)
   assert.deepEqual(r.meta['cache.maxGb'], { source: 'env', env: 'CACHE_MAX_GB' })
-  assert.equal(r.values['limits.probes'], 3)
-  assert.deepEqual(r.meta['limits.probes'], { source: 'file' })
-  assert.equal(r.values['limits.hlsSessions'], 2)
-  assert.deepEqual(r.meta['limits.hlsSessions'], { source: 'default' })
+  assert.equal(r.values['search.timeoutS'], 45)
+  assert.deepEqual(r.meta['search.timeoutS'], { source: 'file' })
+  assert.equal(r.values['cache.hlsMaxGb'], 8)
+  assert.deepEqual(r.meta['cache.hlsMaxGb'], { source: 'default' })
 })
 
 test('an invalid env value throws with the variable name; an invalid saved value falls back with a warning', (t) => {
-  assert.throws(() => resolve({ MAX_PROBES: '0' }, {}), /MAX_PROBES must be at least 1/)
+  assert.throws(() => resolve({ SEARCH_TIMEOUT_S: '0' }, {}), /SEARCH_TIMEOUT_S must be at least 1/)
   assert.throws(() => resolve({ ALLOW_VIDEO_TRANSCODE: 'maybe' }, {}), /ALLOW_VIDEO_TRANSCODE must be on or off/)
   t.mock.method(console, 'warn', () => {})
-  assert.equal(resolve({}, { 'limits.probes': -4 }).values['limits.probes'], 2)
+  assert.equal(resolve({}, { 'search.timeoutS': -4 }).values['search.timeoutS'], 30)
 })
 
 test('env strings parse like the browser’s values: numbers, toggles and choices', () => {
-  const r = resolve({ ALLOW_VIDEO_TRANSCODE: 'yes', TRANSCODE_MAX_HEIGHT: '1080', DHT_ENABLED: 'off' }, {})
+  const r = resolve({ ALLOW_VIDEO_TRANSCODE: 'yes', TRANSCODE_MAX_HEIGHT: '1080', MIN_FREE_GB: '0.5' }, {})
   assert.equal(r.values['transcode.allow'], true)
   assert.equal(r.values['transcode.maxHeight'], 1080)
-  assert.equal(r.values['torrents.dht'], false)
+  assert.equal(r.values['cache.minFreeGb'], 0.5)
 })
 
 test('list env items are locked and listed before the saved ones', () => {
@@ -43,8 +43,6 @@ test('list env items are locked and listed before the saved ones', () => {
   assert.deepEqual((r.values.sources as ListItem[]).map(i => i.id), ['a'])
   assert.deepEqual(r.meta.sources?.locked?.map(i => i.id), ['env-0'])
   assert.deepEqual((r.effective.sources as ListItem[]).map(i => i.id), ['env-0', 'a'])
-  // Without env or file, list defaults are editable values
-  assert.equal((resolve({}, {}).values['torrents.trackers'] as ListItem[]).length, 5)
 })
 
 test('secrets never leave masked: { set } only', () => {
@@ -56,14 +54,14 @@ test('secrets never leave masked: { set } only', () => {
 
 test('updates validate the whole patch, save atomically, keep unchanged secrets and report changes', (t) => {
   const file = tempFile(t)
-  const store = createSettingsStore({ file, env: { MAX_PROBES: '3' } })
+  const store = createSettingsStore({ file, env: { SEARCH_TIMEOUT_S: '20' } })
   const changes: string[][] = []
   store.on('changed', keys => changes.push(keys))
 
   // Nothing is half-applied: one bad field rejects the patch
-  const bad = store.update({ 'cache.maxGb': 90, 'limits.hlsSessions': 0, 'limits.probes': 4 })
+  const bad = store.update({ 'cache.maxGb': 90, 'cache.hlsMaxGb': 0, 'search.timeoutS': 40 })
   assert.equal(bad.ok, false)
-  assert.deepEqual(Object.keys(bad.ok ? {} : bad.fields).sort(), ['limits.hlsSessions', 'limits.probes'])
+  assert.deepEqual(Object.keys(bad.ok ? {} : bad.fields).sort(), ['cache.hlsMaxGb', 'search.timeoutS'])
   assert.equal(fs.existsSync(file), false)
 
   assert.deepEqual(store.update({ 'cache.maxGb': 90, sources: [{ type: 'prowlarr', url: 'http://prowlarr:9696', apiKey: 'secret' }] }), { ok: true, changed: ['sources', 'cache.maxGb'] })
@@ -85,11 +83,9 @@ test('updates validate the whole patch, save atomically, keep unchanged secrets 
   assert.equal(createSettingsStore({ file, env: {} }).effective['cache.maxGb'], 90)
 })
 
-test('restart-only settings are flagged until the value in use matches again', (t) => {
-  const store = createSettingsStore({ file: tempFile(t), env: {} })
-  store.update({ 'server.port': 8090 })
-  assert.deepEqual(store.pendingRestart(), ['server.port'])
-  assert.equal(store.response().meta['server.port']?.pendingRestart, true)
-  store.update({ 'server.port': 8080 })
-  assert.deepEqual(store.pendingRestart(), [])
+test('env-only knobs resolve with the same validation, outside the page’s schema', () => {
+  const defs = [{ key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true }] as unknown as Parameters<typeof resolve>[3]
+  assert.equal(resolve({}, {}, {}, defs).effective.port, 8080)
+  assert.equal(resolve({ PORT: '9000' }, {}, {}, defs).effective.port, 9000)
+  assert.throws(() => resolve({ PORT: '0' }, {}, {}, defs), /PORT must be at least 1/)
 })

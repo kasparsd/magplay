@@ -61,7 +61,7 @@ Initial checks:
 - Explore: BitMagnet's GraphQL endpoint, or `warn` "Explore needs BitMagnet's address" when it isn't set.
 - ffmpeg and ffprobe: present and their versions (run once at startup).
 - Disk: free space against `MIN_FREE_GB` and the cache limit. `warn` near the floor.
-- Restart needed: raised when a restart-only setting is saved.
+- Restart needed: built first, removed 2026-10-18 together with the restart-only settings.
 - Later: transcode below realtime (from `sessions.js`), cache pressure.
 
 **Events** (removed 2026-10-18): the first build kept a 50-entry ring buffer of level changes for a Recent section; the panel no longer has one, so `/api/status` returns only the checks.
@@ -80,12 +80,11 @@ type SettingDef = {
   help?: string
   default?: unknown
   env?: string | string[]        // env var(s) that override and lock it
-  apply?: 'live' | 'restart'     // server scope only
   // type-specific: unit, min, max, step, options, item (for list), test (for a Test button)
 }
 ```
 
-**Resolution (server scope):** env var, then `data/settings.json`, then the default. A value set by env shows read-only with the variable's name, so compose setups keep working and the page explains why a field is locked. `config.js` becomes `resolve(schema, env, file)` and keeps its current shape for callers, plus a `settings:changed` event. The sources registry, limits and timeouts rebuild on that event. Restart-only keys (`PORT`, `TORRENT_PORT`, `CACHE_DIR`) are saved, and they raise the restart check.
+**Resolution (server scope):** env var, then `data/settings.json`, then the default. A value set by env shows read-only with the variable's name, so compose setups keep working and the page explains why a field is locked. `config.js` becomes `resolve(schema, env, file)` and keeps its current shape for callers, plus a `settings:changed` event. The sources registry, limits and timeouts rebuild on that event. Ports, the cache folder and other knobs people don't tune are env-only (see As built).
 
 **Browser scope:** saved in `localStorage`, one key per setting (`magplay:player:speed`, shared with the Player's `recall()`/`remember()`), and parsed from `unknown` against the same schema. Changes apply immediately, with no save bar.
 
@@ -95,13 +94,14 @@ type SettingDef = {
 
 ### Settings page
 
-Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settings.ts` (picked up by the esbuild entry glob; the page route is in `server.js`). It is one page with every section stacked in order (Sources, Playback, Connection, Server, Debug) in a single readable column, not panes with a side nav: there is too little in each section for panes (changed 2026-10-18 at the owner's request; the mockup shows the side nav). Each section is its own `<section id>` rendered from `SECTIONS`, so `/settings#debug` scrolls to it and status actions deep-link, and the list can later become top tabs without a rewrite. Each section says where values are saved ("on the server, applies to everyone" or "in this browser"). A section with a failing check shows a dot next to its heading.
+Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settings.ts` (picked up by the esbuild entry glob; the page route is in `server.js`). It is one page with every section stacked in order (Sources, Playback, Connection, Storage, Debug) in a single readable column, not panes with a side nav: there is too little in each section for panes (changed 2026-10-18 at the owner's request; the mockup shows the side nav). Each section is its own `<section id>` rendered from `SECTIONS`, so `/settings#debug` scrolls to it and status actions deep-link, and the list can later become top tabs without a rewrite. Each section says quietly where its values are saved ("on the server, for everyone" or "in this browser only"), under its intro, or above each part when a section mixes both. A section with a failing check shows a dot next to its heading.
 
 - **Sources:** one group per source with type, address and API key, a Test button (`POST /api/settings/test` runs the check against unsaved values), and its live status. Also Add source, the BitMagnet address and the search timeout.
-- **Playback:** on the server, allow transcoding, transcode resolution and simultaneous conversions. In this browser, preferred subtitles and audio, default speed, and autoplay next.
+- **Sources:** (as above) the list is labelled Indexers with a one-line help; with no sources, a blank source form is already open.
+- **Playback:** on the server, allow transcoding and transcode resolution. In this browser, preferred subtitles and audio, and default speed.
 - **Connection:** the speed test (below).
-- **Server:** cache limit with a usage meter, free-space floor, idle torrent timeout, DHT/LSD and trackers, and a "Needs a restart" group (web port, torrent port, cache folder).
-- **Debug:** versions and uptime, resource meters (conversions, torrents, probes, HLS cache), a log tail filtered by level (`GET /api/debug`, the last 200 log lines in a ring buffer), and Copy diagnostics (JSON, secrets redacted). In this browser, toggles for a playback stats overlay and console request logging. Also Clear conversion cache, which asks for a second click before it runs.
+- **Storage** (was Server): torrent cache limit with a usage meter, free-space floor and conversion storage.
+- **Debug:** versions and uptime, resource meters (conversions, torrents, probes, HLS cache), a log tail filtered by level (`GET /api/debug`, the last 200 log lines in a ring buffer), and Copy diagnostics (JSON, secrets redacted). Also Clear conversion cache, which asks for a second click before it runs.
 
 **Saving server settings:** edits collect in a sticky save bar ("2 unsaved changes · Discard · Save"). `PATCH /api/settings` validates the whole patch and returns field errors, which show inline under the field. Nothing is half-applied.
 
@@ -118,7 +118,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 | `number` | numeric input with unit, min/max | cache GB, timeouts, limits |
 | `toggle` | switch (`role="switch"`) | transcoding, DHT, debug overlays |
 | `select`, `segmented` | select, or 2–4 segmented buttons | transcode height, languages, speed |
-| `list` | repeatable group of other types | sources, extra trackers |
+| `list` | repeatable group of other types | sources |
 | `action` | button with inline busy/done/failed | Test, speed test, clear cache, copy diagnostics |
 | `readout` | read-only value or meter, optionally live | disk use, sessions, versions |
 
@@ -144,7 +144,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 ## Implementation checklist
 
 - [x] `SettingDef` schema and the initial entries in `packages/api-contract/src/settings.ts`, with a `validate(def, value)` used by both sides. Status types and `overallLevel()` are in `status.ts` next to it.
-- [x] `config.js` on top of `apps/server/src/settings-store.ts` (`resolve(env, file, readers)`), `<CACHE_DIR>/settings.json` read/atomic write, and a `changed` event. Sources, Explore, limits and timeouts rebuild on change. Unit tests for precedence, locking, masking, atomic saves and restart tracking (`settings-store.test.ts`, `settings-schema.test.ts`, `config.test.js`).
+- [x] `config.js` on top of `apps/server/src/settings-store.ts` (`resolve(env, file, readers)`), `<CACHE_DIR>/settings.json` read/atomic write, and a `changed` event. Sources, Explore, limits and timeouts rebuild on change. Unit tests for precedence, locking, masking, atomic saves and env-only knobs (`settings-store.test.ts`, `settings-schema.test.ts`, `config.test.js`).
 - [x] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with secret masking and the same-origin write guard (`isSameOrigin` in `http-kit`).
 - [x] `status.ts` check registry with TTL cache, the initial checks (`status-checks.js`), and `GET /api/status` (the event ring buffer was built, then removed with the Recent section). Unit tests with fake checks and clocks (`status.test.ts`).
 - [x] `GET /api/debug` with a log ring buffer (`logs.ts` copies console output) and redacted diagnostics (Copy diagnostics).
@@ -152,7 +152,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 - [x] `lib/controls.ts` renderers for every type, with keyboard and accessible names.
 - [x] Status button and panel in `lib/status-menu.ts` (built on the shared `menu()`), and a separate Settings gear link, mounted by `lib/topbar.ts`, which every page script imports. Client-check merging. Checked at desktop and 375 px. The Player page gets it once `player.js` imports `lib/topbar.ts`.
 - [x] `/settings` page (`public/settings.html`, `apps/client/src/settings.ts`): one page of stacked sections with `#section` deep links, the save bar, inline field errors and env-locked rows.
-- [ ] Player reads its defaults (subtitle/audio language, speed, autoplay next) from browser settings. Volume, mute, speed and languages are shared already (same keys); autoplay next, the stats overlay and the status menu import are left to the Player chrome session, which owns `player.js`; see [Player integration](#player-integration).
+- [x] Player reads its defaults (subtitle/audio language, speed) from browser settings: they share keys with what the Player remembers. Autoplay next and the stats overlay were dropped, since the Player doesn't read them. The status menu import is left to the Player chrome session; see [Player integration](#player-integration).
 - [x] e2e (`tests/e2e/settings.test.js`): a broken source turns the dot red and its action deep-links to Sources. Saving a live setting applies without a restart, and the save bar says what was saved. An env-set value is read-only. Cross-origin writes are refused. The speed test runs, and a slow result produces a warning on another page. Browser preferences save at once.
 - [x] On ship: updated [user-interface.md](../user-interface.md) (six pages, the top bar's right side, the configuration wording), the README configuration section and API table (UI first, env as override), and [architecture.md](../architecture.md) (settings resolution and the status registry).
 
@@ -161,9 +161,10 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 Decisions made while building, where they differ from or add to the design above:
 
 - **Where the file lives.** `settings.json` is in the folder `CACHE_DIR` names at startup (`./data` by default). The Cache folder setting moves torrent and HLS data, not the settings file, so startup never depends on a saved value to find its settings.
-- **Restart-only settings** are the web port, torrent port, cache folder, DHT and LSD (WebTorrent's client is created once at startup). `config` keeps their startup values until a restart, and the "Restart needed" check names them. There is no Restart button: exiting only restarts under Docker's restart policy, and would just stop a plain `npm start`.
-- **Live settings** apply on next use: limits are functions read per job (`createLimiter(() => config.maxProbes)`), and search and Explore are rebuilt when sources, the search timeout or BitMagnet's address change.
-- **List settings** (sources, extra trackers): env items are locked and listed first; items saved in the browser follow. With neither, the schema default is editable (the five default trackers). An empty `EXTRA_TRACKERS` means no env trackers, which differs from unset.
+- **Trimmed to what people tune** (2026-10-18, owner's review): extra trackers, idle and metadata/check timeouts, job limits, simultaneous conversions, ffmpeg/ffprobe paths, and the restart-only web port, torrent port, DHT, LSD and cache folder left the page and the schema. Their env vars work as before (README) and are validated at startup like page settings (`ENV_ONLY` in `config.js`). With no restart-only settings left, the restart check and its handling went too. The Server section became Storage.
+- **Saved settings apply on next use**; search and Explore are rebuilt when sources, the search timeout or BitMagnet's address change.
+- **The sources list:** env items are locked and listed first; items saved in the browser follow.
+- **Env notes** appear only on a row an env var actually sets (read-only, naming the variable).
 - **Sources** are items `{ id, type, name, url, apiKey, indexer }`; `indexer` is Jackett's indexer or filter, or Prowlarr's comma-separated ids. Every adapter has a cheap `check()` (Torznab `t=caps`, Prowlarr `/api/v1/health`, BitMagnet GraphQL `{ __typename }`). Secrets go out as `{ set }`; the browser sends `{ set: true }` back to keep one, matched by item id.
 - **Volume and mute** are browser settings marked `hidden`: stored and validated, not shown on the page.
 - **Units.** GB settings are binary gigabytes (1024³), as before, and the page's readouts use the same unit.
@@ -174,8 +175,8 @@ Decisions made while building, where they differ from or add to the design above
 The Player chrome session owns `apps/client/src/player.js` and `public/player.html`. Its step 1 (merged as `66b29cf`) already remembers volume, mute, speed, and audio and subtitle language with `recall()`/`remember()` under `magplay:player:volume`, `magplay:player:muted`, `magplay:player:speed`, `magplay:player:audioLanguage` and `magplay:player:subtitleLanguage`. Browser settings use those same keys (`preferenceStorageKey('player.speed')` is `magplay:player:speed`), so Settings and the Player read and change the same values: Settings shows a language code the Player remembered from a file ("lav") as that language, accepts `'off'` and `'any'` for subtitles, stores `null` for "first track" audio, and offers the Player's speeds (0.5× to 2×). To finish this feature in the Player:
 
 1. Add `import './lib/topbar.ts'` to `player.js`, which puts the status button and Settings gear in the Player's top bar.
-2. Honour `getPreference(PREFERENCE.autoplayNext)` from `lib/preferences.ts` before counting down to the next episode (stored as `magplay:player:autoplayNext`, default on).
-3. Show the playback stats overlay when `getPreference(PREFERENCE.statsOverlay)` is true (`magplay:debug:statsOverlay`). "Log requests to the browser console" already works on every page through `lib/topbar.ts`.
+
+Autoplay next, the stats overlay and console request logging were removed from Settings on 2026-10-18 (the Player doesn't read them); add a setting back only together with the Player code that uses it.
 
 The connection test result is `magplay:connection` (`STORAGE_KEYS` in `lib/preferences.ts`).
 

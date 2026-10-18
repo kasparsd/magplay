@@ -25,6 +25,8 @@ export interface ControlContext {
   itemExtras?: (item: ListItem, index: number) => Child[]
   /** list: items from env vars, shown read-only first. */
   locked?: readonly ListItem[]
+  /** list: with no items at all, show one blank item to fill in (it becomes a change only once edited). */
+  startWithOne?: boolean
 }
 
 type Field = TextDef | SecretDef | NumberDef | ChoiceDef | ItemFieldDef
@@ -129,11 +131,13 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
   const own = Array.isArray(value) ? [...value as ListItem[]] : []
   const box = el('div', { id: ctx.id, className: 'list' })
   const items = el('div', { className: 'list-items' })
-  const title = (item: ListItem, i: number): string => (def.titleField && text(item[def.titleField])) || `${def.itemLabel[0]!.toUpperCase()}${def.itemLabel.slice(1)} ${i + 1}`
+  // Its name, else its address's host, else "New source" while it's being filled in
+  const host = (url: unknown): string => /^https?:\/\/([^/:?#]+)/i.exec(text(url))?.[1] ?? ''
+  const title = (item: ListItem): string => (def.titleField && text(item[def.titleField])) || host(item.url) || `New ${def.itemLabel}`
   const card = (item: ListItem, i: number, locked: boolean, update: (next: ListItem | null, committed?: boolean) => void): HTMLElement => {
     const n = `${def.itemLabel} ${i + 1}`
     const head = el('div', { className: 'list-head' },
-      el('strong', { textContent: title(item, i) }),
+      el('strong', { textContent: title(item) }),
       el('span', { className: 'list-extras' },
         ...(ctx.itemExtras?.(item, i) ?? []),
         locked
@@ -144,13 +148,6 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
               remove.addEventListener('click', () => update(null))
               return remove
             })()))
-    // A list of one-field items (trackers) is a list of inputs, without a card per item
-    if (def.item.length === 1) {
-      const [only] = def.item
-      return el('div', { className: 'list-row' },
-        field(only!, item[only!.key], { id: `${ctx.id}-${i}-${only!.key}`, label: `${only!.label} ${i + 1}`, disabled: locked, onChange: (v, committed) => update({ ...item, [only!.key]: v }, committed) }),
-        head.lastElementChild)
-    }
     // Not a disabled fieldset: that would also disable the item's Test button
     return el('fieldset', { className: `list-item${locked ? ' locked' : ''}` }, head,
       ...def.item.map(f => el('div', { className: 'row' },
@@ -162,17 +159,26 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
           onChange: (v, committed) => update({ ...item, [f.key]: v }, committed),
         })))))
   }
+  const blank = (): ListItem => ({ id: `new-${Date.now().toString(36)}`, ...Object.fromEntries(def.item.map(f => [f.key, f.default])) })
+  // Removing the blank starter item shows the empty state instead of bringing it back
+  let dismissed = false
   const render = (): void => {
     const lockedItems = ctx.locked ?? []
     if (!lockedItems.length && !own.length) {
-      items.replaceChildren(el('p', { className: 'muted list-empty', textContent: `No ${def.itemLabel}s yet.` }))
-      return
+      if (!ctx.startWithOne || dismissed) {
+        items.replaceChildren(el('p', { className: 'muted list-empty', textContent: `No ${def.itemLabel}s yet.` }))
+        return
+      }
+      own.push(blank())
     }
     items.replaceChildren(
       ...lockedItems.map((item, i) => card(item, i, true, () => {})),
       ...own.map((item, i) => card(item, lockedItems.length + i, false, (next, committed = true) => {
         if (next) own[i] = next
-        else own.splice(i, 1)
+        else {
+          own.splice(i, 1)
+          dismissed = true
+        }
         ctx.onChange?.([...own], committed)
         if (!next) render()
       })))
@@ -180,7 +186,7 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
   render()
   const add = el('button', { type: 'button', className: 'button add', textContent: `+ Add ${def.itemLabel}` })
   add.addEventListener('click', () => {
-    own.push({ id: `new-${Date.now().toString(36)}`, ...Object.fromEntries(def.item.map(f => [f.key, f.default])) })
+    own.push(blank())
     ctx.onChange?.([...own], false)
     render()
     items.lastElementChild?.querySelector<HTMLElement>('input, select')?.focus()

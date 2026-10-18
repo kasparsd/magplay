@@ -22,10 +22,11 @@ test('invalid env values stop the server at startup, naming the variable', () =>
 
 test('saved settings feed config, and env vars win over them', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'magplay-config-'))
-  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ 'cache.maxGb': 80, 'limits.probes': 3 }))
-  const script = 'const { default: c } = await import("./apps/server/src/config.js"); console.log(JSON.stringify([c.cacheMaxBytes, c.maxProbes]))'
-  const result = load({ CACHE_DIR: dir, MAX_PROBES: '5' }, script)
+  // limits.probes isn't a page setting any more, so a saved value is ignored and the env var still sets it
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ 'cache.maxGb': 80, 'cache.hlsMaxGb': 4, 'limits.probes': 3 }))
+  const script = 'const { default: c } = await import("./apps/server/src/config.js"); console.log(JSON.stringify([c.cacheMaxBytes, c.hlsMaxBytes, c.maxProbes]))'
+  const result = load({ CACHE_DIR: dir, MAX_PROBES: '5', HLS_MAX_GB: '6' }, script)
   assert.equal(result.status, 0, result.stderr)
-  assert.deepEqual(JSON.parse(result.stdout.trim().split('\n').at(-1)), [80 * 1024 ** 3, 5])
+  assert.deepEqual(JSON.parse(result.stdout.trim().split('\n').at(-1)), [80 * 1024 ** 3, 6 * 1024 ** 3, 5])
   fs.rmSync(dir, { recursive: true, force: true })
 })
