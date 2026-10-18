@@ -26,6 +26,7 @@ import { serialLatest, delay as sleep } from './lib/requests.ts'
 import { explainPlayback } from './lib/playback-status.ts'
 import type { PlaybackAction, PlaybackPhase, PlaybackProblem } from './lib/playback-status.ts'
 import { playbackStatusView } from './lib/playback-status-view.ts'
+import './lib/topbar.ts'
 
 /** The server's decision for the current session; `complete` is set once its ffmpeg has finished. */
 type Current = PlaybackDecision & { complete?: boolean }
@@ -914,7 +915,10 @@ function fitStage (): void {
   root.setProperty('--topbar-h', `${$('.topbar').offsetHeight}px`)
   root.setProperty('--title-row-h', landscapePhone.matches ? '0px' : `${$('#titlerow').offsetHeight}px`)
 }
-new ResizeObserver(fitStage).observe($('#titlerow'))
+// The top bar's status button changes width as checks come in, which can wrap the bar on a phone
+const rowObserver = new ResizeObserver(fitStage)
+rowObserver.observe($('#titlerow'))
+rowObserver.observe($('.topbar'))
 addEventListener('resize', fitStage)
 fitStage()
 
