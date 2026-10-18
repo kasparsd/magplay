@@ -2,7 +2,7 @@
 import { decide } from '@magplay/playback'
 import type { MediaTools, PlaybackPolicy } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
-import type { PlaybackDecision, PlayRequest, ProbeResult } from '@magplay/api-contract'
+import type { PlaybackDecision, PlaybackPreparation, PlayRequest, ProbeResult } from '@magplay/api-contract'
 import { HttpError } from '../http/errors.ts'
 import type { Tabs } from './tabs.ts'
 
@@ -20,16 +20,34 @@ export interface Play {
   play: (request: PlayRequest, cancelled: () => boolean) => Promise<PlaybackDecision>
   /** GET /api/probe: the file's tracks and the torrent's external subtitle files. */
   probe: (ih: string, idx: number) => Promise<ProbeResult>
+  preparation: (ih: string, idx: number) => PlaybackPreparation | null
 }
 
 export function createPlay ({ engine, media, tabs, policy, input }: PlayOptions): Play {
+  // Requests share file/probe work. Reference counts keep one caller finishing
+  // from clearing another caller's phase; entries disappear even on failure.
+  const pending = new Map<string, Record<PlaybackPreparation, number>>()
+  async function during<T> (ih: string, idx: number, phase: PlaybackPreparation, job: () => Promise<T>): Promise<T> {
+    const key = `${ih}/${idx}`
+    const counts = pending.get(key) ?? { 'loading-file': 0, probing: 0 }
+    pending.set(key, counts)
+    counts[phase]++
+    try { return await job() } finally {
+      counts[phase]--
+      if (!counts['loading-file'] && !counts.probing) pending.delete(key)
+    }
+  }
   return {
+    preparation (ih, idx) {
+      const counts = pending.get(`${ih}/${idx}`)
+      return counts?.probing ? 'probing' : counts?.['loading-file'] ? 'loading-file' : null
+    },
     async play ({ ih, idx, audio = 0, start = 0, tab, caps = {} }, cancelled) {
       const check = (): void => { if (cancelled()) throw new HttpError(499, 'Playback request cancelled') }
       check()
-      const file = await engine.file(ih, idx)
+      const file = await during(ih, idx, 'loading-file', () => engine.file(ih, idx))
       check()
-      const info = await media.probe(input(ih, idx), file.name)
+      const info = await during(ih, idx, 'probing', () => media.probe(input(ih, idx), file.name))
       check()
       let decision
       try {
@@ -57,10 +75,10 @@ export function createPlay ({ engine, media, tabs, policy, input }: PlayOptions)
       }
     },
     async probe (ih, idx) {
-      const torrent = await engine.get(ih)
+      const torrent = await during(ih, idx, 'loading-file', () => engine.get(ih))
       const file = torrent.files[idx]
       if (!file) throw new HttpError(404, 'No such file in this torrent')
-      const info = await media.probe(input(ih, idx), file.name)
+      const info = await during(ih, idx, 'probing', () => media.probe(input(ih, idx), file.name))
       const { files } = engine.describe(torrent)
       return { ...info, externalSubtitles: files.filter(f => f.isSub).map(f => ({ idx: f.idx, name: f.name })) }
     },

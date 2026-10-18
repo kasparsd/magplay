@@ -17,6 +17,23 @@ const AHEAD_RESUME_S = 120
 // /proc/<pid>/stat counts CPU time in clock ticks; Linux uses 100 per second on every common platform
 const CLOCK_TICKS = 100
 
+/** ffmpeg publishes segments before atomically publishing their playlist.
+ * Progress timestamps may be ahead of that playlist, so they are not readiness. */
+function publishedSeconds (dir: string): number {
+  try {
+    const playlist = fs.readFileSync(path.join(dir, 'index.m3u8'), 'utf8')
+    let seconds = 0
+    let last = ''
+    for (const match of playlist.matchAll(/#EXTINF:([\d.]+),[^\n]*\r?\n(seg_\d+\.m4s)/g)) {
+      const duration = Number(match[1])
+      if (!Number.isFinite(duration) || duration <= 0) return 0
+      seconds += duration
+      last = match[2] ?? ''
+    }
+    return last && fs.existsSync(path.join(dir, 'init.mp4')) && fs.existsSync(path.join(dir, last)) ? seconds : 0
+  } catch { return 0 }
+}
+
 /** CPU seconds a process has used (user + system), from Linux's /proc/<pid>/stat, or null where there is no /proc (macOS). */
 export function readProcCpu (pid: number | undefined): number | null {
   if (!pid) return null
@@ -354,6 +371,7 @@ export function createHlsSessions ({
         fps: s.fps,
         cpu: sampleCpu(s, now),
         produced: s.outTime,
+        readyUntil: publishedSeconds(s.dir),
         paused: s.paused,
         running: s.exitCode === null,
         failed: s.exitCode !== null && s.exitCode !== 0,

@@ -163,3 +163,17 @@ test('cpu is null where /proc does not exist', async t => {
   assert.equal(hls.stats(s).cpu, null)
   assert.equal(hls.stats(s).fps, null)
 })
+
+test('published readiness requires the playlist, init and final atomic segment, not encoder progress', async t => {
+  const { hls, start } = await setup(t)
+  const { s, proc } = start()
+  proc.stdout.write('out_time_us=90000000\nspeed=2.0x\nprogress=continue\n')
+  assert.equal(hls.stats(s).produced, 90)
+  assert.equal(hls.stats(s).readyUntil, 0)
+  await fs.writeFile(path.join(s.dir, 'index.m3u8'), '#EXTM3U\n#EXTINF:6.000000,\nseg_00000.m4s\n#EXTINF:4.500000,\nseg_00001.m4s\n')
+  await fs.writeFile(path.join(s.dir, 'init.mp4'), 'init')
+  await fs.writeFile(path.join(s.dir, 'seg_00000.m4s'), 'one')
+  assert.equal(hls.stats(s).readyUntil, 0)
+  await fs.writeFile(path.join(s.dir, 'seg_00001.m4s'), 'two')
+  assert.equal(hls.stats(s).readyUntil, 10.5)
+})

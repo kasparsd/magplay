@@ -129,7 +129,7 @@ test('direct playback can load external subtitles without an HLS session', async
 test('failed playback request offers retry and recovers', async ({ page, app }) => {
   await page.route('**/api/play', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Fixture startup failure' }) }), { times: 1 })
   await page.goto(app.player(direct))
-  await expect(page.locator('#overlay')).toContainText('Fixture startup failure')
+  await expect(page.locator('#playback-status')).toContainText('Fixture startup failure')
   await page.getByRole('button', { name: 'Try again', exact: true }).click()
   await expectPlaying(page)
 })
@@ -137,7 +137,7 @@ test('failed playback request offers retry and recovers', async ({ page, app }) 
 test('a malformed successful playback response is visible and retryable', async ({ page, app }) => {
   await page.route('**/api/play', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Proxy error page</html>' }), { times: 1 })
   await page.goto(app.player(direct))
-  await expect(page.locator('#overlay')).toContainText('Invalid JSON response')
+  await expect(page.locator('#playback-status')).toContainText('Invalid JSON response')
   await page.getByRole('button', { name: 'Try again', exact: true }).click()
   await expectPlaying(page)
 })

@@ -35,7 +35,17 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 - The external-player route (Open in, ⋯ menus, Copy stream link) is a first-class alternative, not an error path, and offers the same actions everywhere a file appears.
 - On the Player page the video, its controls and the title row fit in the viewport together on common laptop and phone sizes. The video is as large as the viewport allows for its aspect ratio (see [Theater layout](#2-theater-layout-by-default)).
 - Every playback mode (direct, remux, transcode) uses the same player chrome, and every control, including Audio and Subtitles, works in fullscreen (see [One player chrome](#1-one-player-chrome-for-every-mode)).
-- Technical detail (codecs, container, peers, ffmpeg speed) lives behind ⓘ Details and uses human labels ("MP4", "MP3 stereo"), not raw ffprobe strings.
+- Technical detail (codecs, container, peers) lives behind ⓘ Details and uses human labels ("MP4", "MP3 stereo"), not raw ffprobe strings. During a playback wait, show the evidence that explains the wait directly on the video, including file availability, conversion speed and buffered seconds.
+
+### Playback wait explanations
+
+The player uses the Reason first design: a centered cause, one short explanation, measured evidence and relevant recovery actions, with a Why disclosure for the playback decision and current diagnostics. The panel belongs to the video stage, so it and its external-player choices work in fullscreen. A quiet immediate preparation label expands after one second. Elapsed waiting time is shown without inventing a completion estimate or preparation percentage. Why and keyboard focus survive routine metric updates; assistive technology announces reason changes rather than every timer tick.
+
+Reasons distinguish loading/checking a file, selecting a playback mode, waiting for torrent data or peers, converting/preparing playable segments, and waiting for the browser to buffer. Unsupported formats, failed/lost sessions and blocked autoplay have specific actions. Stale or inconclusive diagnostics say that the cause is not yet known. A deliberately paused or normally playing video has no blocking explanation. If sustained conversion capacity falls below the selected playback speed with little video prepared ahead, a compact advisory remains while playback continues.
+
+Diagnostics use exact file completion and published HLS segment readiness, not rounded percentages or ffmpeg output timestamps alone. Low conversion speed does not establish CPU saturation. Partial input with peers is described as a possible source-data wait; zero peers does not mean a torrent is dead. Browser buffering does not establish whether delivery or decoding is responsible. The server reports active file-loading/probing phases, and the player polls status before a playback decision as well as during playback. Old-session responses cannot update the current explanation after an audio change or seek restart.
+
+Playback explanations have a separate channel from transient speed, subtitle and mute notices. Explicit failures offer retry; ordinary buffering does not restart healthy conversion. External playback is offered for incompatible or slow conversion and browser delivery trouble, while source-data waits offer another release because external players also need the missing torrent data. Resume prompts and next-episode questions keep their existing actions.
 
 ### Shared building blocks
 

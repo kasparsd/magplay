@@ -82,7 +82,7 @@ test('a seek outside the converted range is predicted, restarts the session and 
   await expect(page.locator('#seektip span')).toHaveText('Restarts conversion here')
   const restarting = playResponse(page)
   await page.mouse.click(...at(60 / 90))
-  await expect(page.locator('#overlay')).toContainText(/Starting at (0:59|1:00)…/)
+  await expect(page.locator('#playback-status')).toContainText(/Starting at (0:59|1:00)…/)
   const decision = await (await restarting).json()
   expect(decision.offset).toBeGreaterThanOrEqual(58)
   await expectPlaying(page)

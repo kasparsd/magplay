@@ -472,3 +472,49 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
   .row-control input[type="text"], .row-control input[type="url"], .row-control input[type="password"], .row-control select { width: 100%; }
   .row-control:has(> input, > select, > .secret) { justify-self: stretch; }
 }
+
+/* Playback explanations own their channel; transient notices cannot replace them. */
+#playback-status { position: relative; z-index: 3; min-width: 0; min-height: 0; padding: 22px 28px 86px; display: grid; align-content: center; pointer-events: none; }
+#playback-status .playback-reason { pointer-events: auto; width: min(100%, 540px); justify-self: center; max-height: max(140px, calc(100dvh - var(--topbar-h, 0px) - var(--title-row-h, 0px) - 120px)); overflow: auto; scrollbar-width: thin; padding: 4px; }
+#stage.has-playback-wait { min-height: min(440px, calc(100dvh - var(--topbar-h, 0px) - var(--title-row-h, 0px))); }
+#stage.has-playback-wait > video { height: 100%; min-height: 0; }
+#stage.has-playback-wait #overlay .toast { display: none; }
+#playback-status.waiting:not(.brief)::before, #playback-status.error::before { content: ""; position: absolute; inset: 0; background: rgb(0 0 0 / 0.88); z-index: -1; }
+#playback-status h2 { font-size: 23px; line-height: 1.2; font-weight: 550; letter-spacing: -0.3px; margin: 0 0 12px; }
+.playback-elapsed { color: var(--ov-muted); font-size: 12px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.playback-description { color: var(--ov-muted); margin: 0 0 16px; font-size: 14px; overflow-wrap: anywhere; }
+.playback-evidence { display: flex; flex-wrap: wrap; gap: 5px 16px; font-size: 12px; font-variant-numeric: tabular-nums; margin: 0 0 16px; }
+#playback-status .actions { display: flex; flex-wrap: wrap; align-items: start; gap: 8px; }
+#playback-status .button { color: var(--ov-fg); border-color: var(--ov-line); background: var(--ov-panel); font-size: 13px; padding: 7px 11px; border-radius: 6px; }
+#playback-status button.primary { color: #201c19; background: #e8e1da; border-color: #e8e1da; font-weight: 500; }
+#playback-status .playback-external { padding: 0; }
+#playback-status .playback-external summary { padding: 7px 11px; }
+#playback-status .playback-external .menu-items { position: static; min-width: 0; width: min(280px, 70cqw); background: var(--ov-panel); color: var(--ov-fg); border-color: var(--ov-line); box-shadow: none; }
+#playback-status .menu-items a, #playback-status .menu-items button { color: var(--ov-fg); }
+#playback-status .menu-items a:hover, #playback-status .menu-items button:hover { background: var(--ov-hover); }
+.playback-why { margin-top: 14px; font-size: 13px; }
+.playback-why > summary { width: fit-content; color: var(--ov-muted); padding: 5px 0; cursor: pointer; }
+.playback-facts { display: grid; grid-template-columns: minmax(80px, max-content) minmax(0, 1fr); gap: 7px 16px; border-top: 1px solid var(--ov-line); padding-top: 12px; margin: 8px 0 0; font-size: 12px; }
+.playback-facts dt { color: var(--ov-muted); }
+.playback-facts dd { margin: 0; overflow-wrap: anywhere; }
+#playback-status.brief h2 { font-size: 14px; font-weight: 400; margin: 0; }
+#playback-status.brief .playback-elapsed { display: none; }
+#playback-status.warning { align-self: start; padding: 12px 18px; }
+#playback-status.warning .playback-reason { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; width: auto; max-width: 100%; justify-self: start; max-height: none; overflow: visible; background: var(--ov-panel); padding: 6px 10px; border-left: 2px solid #edba72; }
+#playback-status.warning h2 { font-size: 13px; letter-spacing: normal; margin: 0; }
+#playback-status.warning .playback-description, #playback-status.warning .playback-elapsed { display: none; }
+#playback-status.warning .playback-evidence { margin: 0; }
+#playback-status.warning .playback-external summary { padding: 3px 6px; font-size: 12px; }
+#stage:fullscreen #playback-status .playback-reason { max-height: calc(100dvh - 155px); }
+#stage:fullscreen #playback-status.warning { padding-top: 72px; }
+@container (max-width: 520px) {
+  #playback-status { padding: 18px 14px 76px; }
+  #playback-status h2 { font-size: 20px; }
+  #playback-status .playback-description { font-size: 13px; margin-bottom: 12px; }
+  #playback-status .playback-evidence { gap: 4px 12px; margin-bottom: 12px; }
+  #playback-status .playback-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  #playback-status .playback-facts dd { margin-bottom: 6px; }
+}
+@media (pointer: coarse) {
+  #playback-status .button, #playback-status .playback-external summary, .playback-why > summary { min-height: 44px; }
+}

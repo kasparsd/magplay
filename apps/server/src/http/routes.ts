@@ -95,7 +95,7 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       const out = engine.status(params.ih, { idx: query.has('idx') ? Number(query.get('idx')) : undefined })
       const id = query.get('session')
       const s = id ? hls.touch(id, Number(query.get('pos'))) : null
-      json<TorrentStatus>(res, 200, { ...out, session: s ? hls.stats(s) : null })
+      json<TorrentStatus>(res, 200, { ...out, preparation: query.has('idx') ? play.preparation(params.ih, Number(query.get('idx'))) : null, session: s ? hls.stats(s) : null })
     }),
     route('GET', '/api/probe/:ih/:idx', async ({ req, res, params }) => {
       const info: ProbeResult = await play.probe(params.ih, index(params.idx))

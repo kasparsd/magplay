@@ -13,6 +13,8 @@ import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as cloc
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 
 import { serialLatest, delay as sleep } from './lib/requests.ts'
+import { explainPlayback } from './lib/playback-status.ts'
+import { playbackStatusView } from './lib/playback-status-view.ts'
 
 const requestPlayback = serialLatest()
 const video = $('#video')
@@ -35,6 +37,7 @@ let audio = 0
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
 let starting = '' // what the busy spinner says until playback resumes ("Starting at 14:20…")
+let searchTitle = ''
 let file = null // this file's entry from the torrent's file list
 let next = null // the next video in the torrent, if any
 /** @type {import('@magplay/api-contract').TorrentStatus | null} */
@@ -42,7 +45,64 @@ let lastStatus = null // the latest /status poll, for the details panel and the 
 const history = [] // the last 3 minutes of status polls, for the Performance lanes
 let stalled = false // waiting for data right now
 let stallSeen = false // waited at some point since the last sample
+/** @type {import('./lib/playback-status.ts').PlaybackPhase} */
+let playbackPhase = 'loading'
+/** @type {import('./lib/playback-status.ts').PlaybackProblem | null} */
+let playbackProblem = null
+let waitingAt = Date.now()
+let statusAt = 0
+let slowSamples = 0
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
+const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playback-announcement'), name => {
+  if (name === 'retry') return button('Try again', () => info ? start(position()) : retryInfo(), true)
+  if (name === 'play') return button('Play', togglePlay, true)
+  if (name === 'release') return linkButton('Choose another release', urls.search(searchTitle))
+  if (!file) return null
+  return menu('Open in player', [
+    ...playerApps(ih, idx, file.name).map(([text, href]) => el('a', { textContent: text, href })),
+    copyButton('Copy stream link', streamUrl(ih, idx, file.name)),
+  ], { className: 'button playback-external' })
+})
+
+function setPlaybackPhase (phase) {
+  if (!['playing', 'paused', 'idle', 'error'].includes(phase) && ['playing', 'paused', 'idle', 'error'].includes(playbackPhase)) waitingAt = Date.now()
+  playbackPhase = phase
+  renderPlaybackStatus()
+}
+
+function failPlayback (title, description, actions = ['retry', 'external']) {
+  playbackProblem = { title, description, actions }
+  setPlaybackPhase('error')
+}
+
+function renderPlaybackStatus () {
+  if (pageLife.signal.aborted) return
+  const now = Date.now()
+  const model = explainPlayback({
+    phase: playbackPhase,
+    decision: cur,
+    status: lastStatus,
+    statusAge: statusAt ? now - statusAt : now - waitingAt,
+    waitingMs: now - waitingAt,
+    buffer: bufferedAhead(),
+    position: video.currentTime,
+    rate: video.playbackRate,
+    slowSamples,
+    problem: playbackProblem,
+  })
+  if (model && !file) model.actions = model.actions.filter(name => name !== 'external' && name !== 'release')
+  showPlaybackStatus(model, now - waitingAt, starting ? `${starting} · Waiting ${Math.floor((now - waitingAt) / 1000)} s` : '')
+  renderPlayButton()
+  stage.classList.toggle('has-playback-wait', !!model && model.kind !== 'warning' && model.key !== 'brief')
+  if (model && model.kind !== 'warning') stage.classList.remove('idle')
+}
+
+async function tickPlaybackStatus (signal = pageLife.signal) {
+  while (!signal.aborted) {
+    renderPlaybackStatus()
+    try { await sleep(1000, signal) } catch { return }
+  }
+}
 
 // Remembered choices, in localStorage through recall()/remember() (stored as "magplay:<key>"):
 //   player:volume            0–1
@@ -60,22 +120,15 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2]
 function notify (text, kind = 'notice', actions = []) {
   const overlay = $('#overlay')
   if (!text) return fill(overlay)
-  if (kind === 'error') return fill(overlay, el('div', { className: 'card' }, el('p', { textContent: text }), actions.length > 0 && el('p', { className: 'actions' }, ...actions)))
+  if (kind === 'error') {
+    setPlaybackPhase('idle') // resume/countdown prompts own the stage until answered
+    return fill(overlay, el('div', { className: 'card' }, el('p', { textContent: text }), actions.length > 0 && el('p', { className: 'actions' }, ...actions)))
+  }
   fill(overlay, el('div', { className: `toast ${kind}` }, text, ...actions))
 }
 
 const button = (label, onclick, primary) => el('button', { type: 'button', className: `button${primary ? ' primary' : ''}`, textContent: label, onclick })
 const linkButton = (label, href, primary) => el('a', { className: `button${primary ? ' primary' : ''}`, href, textContent: label })
-
-/** Actions offered when the browser can't play this file: the first external player, the stream link, back to the files. */
-function refusalActions () {
-  const [label, href] = file ? playerApps(ih, idx, file.name)[0] : []
-  return [
-    label && linkButton(label, href, true),
-    file && copyButton('Copy stream link', streamUrl(ih, idx, file.name)),
-    linkButton('Back to files', urls.torrent(ih)),
-  ].filter(Boolean)
-}
 
 /** A file number this torrent doesn't have: retrying can't help, so offer only the way back and hide the empty controls. */
 function missingFile (err) {
@@ -91,7 +144,7 @@ async function loadTitle (signal = pageLife.signal) {
   const t = await api(`/api/torrents/${ih}`, { signal }).catch(() => null)
   if (signal.aborted) return
   file = t?.files.find(x => x.idx === idx)
-  if (t) $('#back').textContent = `← ${t.name}`
+  if (t) { $('#back').textContent = `← ${t.name}`; searchTitle = releaseName(t.name) }
   if (!file) return
   // The title is the release's name and episode ("Fleabag · S01E01"); the file name is in Details
   const title = [releaseName(t.name), episodeLabel(file)].filter(Boolean).join(' · ')
@@ -117,6 +170,7 @@ async function loadTitle (signal = pageLife.signal) {
   renderMore()
   setMediaSession(t)
   renderFacts()
+  renderPlaybackStatus()
 }
 
 /** At the end of a video: play the next one after 10 s unless cancelled. */
@@ -211,8 +265,14 @@ async function start (at = 0, message = '') {
   const requestTab = tab
   const pageSignal = pageLife.signal
   const current = () => gen === generation && !signal.aborted
-  notify(message || 'Starting…', 'busy')
   cur = null
+  lastStatus = null
+  statusAt = 0
+  slowSamples = 0
+  playbackProblem = null
+  waitingAt = Date.now()
+  notify('')
+  setPlaybackPhase('starting')
   const selectedAudio = audio
   try {
     const decision = await requestPlayback(async current => {
@@ -226,11 +286,14 @@ async function start (at = 0, message = '') {
     })
     if (gen !== generation || !decision) return
     cur = decision
+    lastStatus = null // discard polls from before this session existed
+    statusAt = 0
   } catch (err) {
     if (!current()) return
     cur = null
     if (err.status === 404) return missingFile(err)
-    return notify(err.message, 'error', err.status === 422 ? refusalActions() : [button('Try again', () => start(at), true), linkButton('Back to files', urls.torrent(ih))])
+    return failPlayback(err.status === 422 ? 'This browser cannot play this video' : 'Playback could not start', err.message,
+      err.status === 422 ? ['external', 'release'] : ['retry', 'external'])
   }
   if (gen !== generation) return
   updateTimeline()
@@ -239,11 +302,11 @@ async function start (at = 0, message = '') {
     video.src = cur.url
     if (at) video.currentTime = at
   } else {
-    notify(message || (cur.mode === 'transcode' ? 'Converting the video…' : 'Preparing the stream…'), 'busy')
+    setPlaybackPhase('playlist')
     try {
       await waitForPlaylist(cur.url, gen, signal)
     } catch (err) {
-      return current() && notify(err.message, 'error', [button('Try again', () => start(at), true), ...refusalActions().slice(0, 1)])
+      return current() && failPlayback('The stream did not become ready', err.message)
     }
     if (gen !== generation) return
     // Safari plays HLS (and HEVC) natively; other browsers use hls.js
@@ -251,19 +314,24 @@ async function start (at = 0, message = '') {
       video.src = cur.url
     } else {
       hls = new Hls({ startPosition: 0, maxBufferLength: 60 })
-      hls.on(Hls.Events.ERROR, (_, data) => current() && data.fatal && notify(`Playback error: ${data.details}`, 'error', [button('Try again', () => start(position()), true)]))
+      hls.on(Hls.Events.ERROR, (_, data) => current() && data.fatal && failPlayback('Playback stopped', `Playback error: ${data.details}`))
       hls.loadSource(cur.url)
       hls.attachMedia(video)
     }
   }
   renderFacts()
   // Browsers may block autoplay with sound until the page has been clicked; start muted then
-  video.play().then(() => current() && notify(''), () => {
+  video.play().catch(err => {
     if (!current()) return
+    if (err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err.message)
     video.muted = true
     autoMuted = true
     video.play().then(() => current() && notify('Muted: autoplay with sound was blocked. Click the video or press M to unmute.'),
-      () => current() && notify('Press play to start.'))
+      err => {
+        if (!current()) return
+        if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
+        else failPlayback('Playback could not start', err.message)
+      })
   })
   loadSubtitles(gen)
 }
@@ -276,7 +344,7 @@ async function waitForPlaylist (url, gen, signal) {
     if (res.ok && /\.m4s/.test(await res.text())) return
     await sleep(1000, signal)
   }
-  throw new Error('ffmpeg produced nothing in 45 s. The torrent may be too slow; try again or pick another release.')
+  throw new Error('No playable segment became available within 45 s. Source data, conversion or stream delivery may be delayed. Try again or open the original file in another player.')
 }
 
 /** Jumps to absolute time `t`. The seek tooltip predicts the same outcome through seekOutcome(). */
@@ -409,6 +477,8 @@ function setSpeed (rate, save = true) {
   if (save) remember(PREF.speed, rate)
   renderSpeedMenu()
   renderMore()
+  slowSamples = 0
+  renderPlaybackStatus()
 }
 
 /** < and >: one step slower or faster. */
@@ -456,6 +526,13 @@ function togglePip () {
   action.catch(err => notify(`Picture in picture: ${err.message}`, 'warn'))
 }
 
+function retryInfo () {
+  playbackProblem = null
+  waitingAt = Date.now()
+  setPlaybackPhase('loading')
+  loadInfo()
+}
+
 async function loadInfo (signal = pageLife.signal) {
   try {
     const result = await api(`/api/probe/${ih}/${idx}`, { signal })
@@ -464,7 +541,7 @@ async function loadInfo (signal = pageLife.signal) {
   } catch (err) {
     if (signal.aborted) return
     if (err.status === 404) return missingFile(err)
-    return notify(err.message, 'error', [button('Try again', () => location.reload(), true), linkButton('Back to files', urls.torrent(ih))])
+    return failPlayback('Could not read the file', err.message, ['retry', 'external'])
   }
   setAspect()
   // The remembered audio language picks the track, else track 1
@@ -503,41 +580,38 @@ async function loadInfo (signal = pageLife.signal) {
 
 /** Every 2 s: keeps the ffmpeg session alive, updates the seek bar and details, and warns when ffmpeg can't keep up. */
 async function pollStatus (signal = pageLife.signal) {
-  let slow = false
   while (!signal.aborted) {
-    try { await sleep(2000, signal) } catch { return }
-    if (!cur) continue
-    const q = new URLSearchParams({ idx, session: cur.session ?? '', pos: video.currentTime })
+    const session = cur?.session
+    const q = new URLSearchParams({ idx, session: session ?? '', pos: video.currentTime })
     const gen = generation
     const st = await api(`/api/torrents/${ih}/status?${q}`, { signal }).catch(() => null)
-    if (signal.aborted || gen !== generation || !cur || !st?.loaded) continue
-    lastStatus = st
-    const s = st.session
-    if (s) {
-      cur.complete = !s.running
-      const nowSlow = s.running && !s.paused && s.speed && s.speed < 1 && s.produced - video.currentTime < 30
-      if (s.failed) notify(`ffmpeg failed: ${s.error}`, 'error', [button('Try again', () => start(position()), true)])
-      else if (nowSlow) {
-        notify(`The server converts at ${s.speed.toFixed(1)}x, slower than playback, so this will stall. Try another release.`, 'warn',
-          [el('button', { type: 'button', className: 'link', textContent: 'Performance', onclick: showPerformance })])
-      } else if (slow) notify('')
-      slow = nowSlow
-    }
-    record(history, {
-      download: st.downloadSpeed,
-      peers: st.peers.length,
-      speed: s?.speed ?? null,
-      fps: s?.fps ?? null,
-      cpu: s?.cpu ?? null,
-      paused: !!s?.paused,
-      ahead: s ? Math.max(0, s.produced - video.currentTime) : null,
-      buffer: bufferedAhead(),
-      stalled: stalled || stallSeen,
-    })
-    stallSeen = false
-    if (!$('#details').hidden) renderFacts()
-    if (!$('#performance').hidden) renderPerformance()
-    drawSeekbar()
+    if (signal.aborted) return
+    if (gen === generation && cur?.session === session && st) {
+      lastStatus = st
+      statusAt = Date.now()
+      const s = st.session
+      slowSamples = st.loaded && st.file?.progress === 1 && s?.running && !s.paused && s.speed != null && s.speed < video.playbackRate ? slowSamples + 1 : 0
+      if (s && cur) cur.complete = !s.running
+      if (st.loaded && cur) {
+        record(history, {
+          download: st.downloadSpeed,
+          peers: st.peers.length,
+          speed: s?.speed ?? null,
+          fps: s?.fps ?? null,
+          cpu: s?.cpu ?? null,
+          paused: !!s?.paused,
+          ahead: s ? Math.max(0, s.produced - video.currentTime) : null,
+          buffer: bufferedAhead(),
+          stalled: stalled || stallSeen,
+        })
+        stallSeen = false
+      }
+      if (!$('#details').hidden) renderFacts()
+      if (!$('#performance').hidden) renderPerformance()
+      drawSeekbar()
+    } else if (!st) slowSamples = 0
+    renderPlaybackStatus()
+    try { await sleep(2000, signal) } catch { return }
   }
 }
 
@@ -625,16 +699,26 @@ function wake () {
   idleTimer = setTimeout(sleepChrome, 2500)
 }
 function sleepChrome () {
-  if (video.paused || !cur || $('#chrome details.menu[open]') || !$('#keys').hidden || $('#chrome :focus-visible') || dragging) return
+  if (video.paused || !cur || stage.classList.contains('has-playback-wait') || $('#stage details.menu[open]') || !$('#keys').hidden || $('#stage :focus-visible') || dragging) return
   stage.classList.add('idle')
   hideTip()
 }
 stage.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') wake() })
 stage.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') { clearTimeout(idleTimer); sleepChrome() } })
-$('#chrome').addEventListener('toggle', wake, true)
-$('#chrome').addEventListener('focusin', wake)
+stage.addEventListener('toggle', wake, true)
+stage.addEventListener('focusin', wake)
 
-const togglePlay = () => video.paused ? video.play() : video.pause()
+const togglePlay = () => {
+  if (['loading', 'starting', 'playlist', 'error', 'idle'].includes(playbackPhase) && video.readyState === 0) return
+  if (video.paused) {
+    if (playbackPhase === 'paused' || playbackPhase === 'blocked') setPlaybackPhase('buffering')
+    video.play().catch(err => {
+      if (pageLife.signal.aborted) return
+      if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
+      else failPlayback('Playback could not start', err.message)
+    })
+  } else video.pause()
+}
 // A tap on faded chrome shows it first; with the chrome showing, a tap or click plays or pauses
 let tapWoke = false
 video.addEventListener('pointerdown', e => {
@@ -644,7 +728,7 @@ video.addEventListener('pointerdown', e => {
 })
 video.addEventListener('click', () => {
   if (tapWoke) return
-  if ($('#chrome details.menu[open]')) return // the click only closes the menu
+  if ($('#stage details.menu[open]')) return // the click only closes the menu
   if (autoMuted && video.muted) { video.muted = false; autoMuted = false; return }
   togglePlay()
 })
@@ -656,6 +740,7 @@ function renderPlayButton () {
   fill(b, icon(video.paused ? 'play' : 'pause'))
   b.setAttribute('aria-label', label)
   b.title = `${label} (K)`
+  b.disabled = ['loading', 'starting', 'playlist', 'error', 'idle'].includes(playbackPhase) && video.readyState === 0
 }
 $('#playpause').addEventListener('click', togglePlay)
 $('#back10').addEventListener('click', () => seekTo(position() - 10))
@@ -778,24 +863,32 @@ video.addEventListener('timeupdate', () => {
 video.addEventListener('progress', drawSeekbar)
 video.addEventListener('durationchange', updateTimeline)
 video.addEventListener('play', () => { renderPlayButton(); wake() })
-video.addEventListener('pause', () => { renderPlayButton(); wake(); persistProgress(true) })
-video.addEventListener('seeked', () => persistProgress(true))
+video.addEventListener('pause', () => {
+  renderPlayButton(); wake(); persistProgress(true)
+  if (video.readyState >= 2 && !video.ended && ['playing', 'buffering'].includes(playbackPhase)) {
+    stalled = false
+    setPlaybackPhase('paused')
+  }
+})
+video.addEventListener('seeked', () => { persistProgress(true); renderPlaybackStatus() })
+video.addEventListener('ratechange', () => { slowSamples = 0; renderPlaybackStatus() })
 video.addEventListener('waiting', () => {
-  if (!cur) return
+  if (!cur || ['paused', 'error', 'idle'].includes(playbackPhase)) return
   stalled = stallSeen = true
-  notify(starting || 'Buffering…', 'busy')
+  setPlaybackPhase('buffering')
 })
 video.addEventListener('playing', () => {
-  if (pageLife.signal.aborted) return
+  if (pageLife.signal.aborted || playbackPhase === 'error') return
   starting = ''
   stalled = false
   persistProgress(true)
-  if ($('#overlay .toast.busy')) notify('')
+  playbackProblem = null
+  setPlaybackPhase('playing')
   // For "Continue" on the torrent page and the home page
   if (file) remember(`last:${ih}`, { idx, label: fileLabel(file), at: Date.now() })
 })
-video.addEventListener('error', () => cur?.mode === 'direct' && notify(`Playback error: ${video.error?.message || video.error?.code}`, 'error', refusalActions()))
-video.addEventListener('ended', () => { persistProgress(true, true); countdownToNext() })
+video.addEventListener('error', () => cur?.mode === 'direct' && failPlayback('Playback stopped', video.error?.message || `Media error ${video.error?.code}`))
+video.addEventListener('ended', () => { persistProgress(true, true); setPlaybackPhase('idle'); countdownToNext() })
 video.addEventListener('volumechange', () => {
   renderVolume()
   if (!video.muted && $('#overlay .toast.notice')) notify('')
@@ -816,13 +909,6 @@ disclosure($('#perf-toggle'), $('#performance'), renderPerformance)
 /** Redrawn on each poll, only while the disclosure is open. */
 function renderPerformance () {
   fill($('#performance'), ...performanceView(history, { direct: cur?.mode === 'direct' }))
-}
-
-/** From the "converts slower than playback" warning: open the graph and bring it into view. */
-function showPerformance () {
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-  if ($('#performance').hidden) $('#perf-toggle').click()
-  $('#performance').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
 
 // Theater layout: the stage takes the largest box that fits the band's width and the viewport height
@@ -863,6 +949,7 @@ addEventListener('pageshow', e => {
   else loadInfo()
   if (!file) loadTitle()
   pollStatus()
+  tickPlaybackStatus()
 })
 
 // Remembered volume, mute and speed; native controls stay off in every mode
@@ -880,7 +967,8 @@ renderAudioMenu()
 
 if (!/^[a-f0-9]{40}$/.test(ih ?? '') || !Number.isInteger(idx) || idx < 0) notify('This player link is incomplete. Open the file from its torrent page.', 'error', [linkButton('Search', '/')])
 else {
-  notify('Reading file info…', 'busy')
+  renderPlaybackStatus()
+  tickPlaybackStatus()
   loadTitle()
   loadInfo()
   pollStatus()

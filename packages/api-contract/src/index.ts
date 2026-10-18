@@ -128,6 +128,8 @@ export interface SessionStats {
   cpu: number | null
   /** Seconds generated relative to this session's start. */
   produced: number
+  /** End of published playable HLS segments, relative to this session's start. */
+  readyUntil: number
   /** Paused ahead of playback, not the video's play/pause state. */
   paused: boolean
   running: boolean
@@ -153,13 +155,15 @@ export interface PeerStats {
   choking: boolean
 }
 
+export type PlaybackPreparation = 'loading-file' | 'probing'
+
 /**
  * GET /api/torrents/:ih/status. Unloaded responses omit torrent statistics.
  * `idx` adds file ranges and keeps the torrent active; `session` and session-relative
  * `pos` keep ffmpeg alive and drive its ahead-of-playback throttle. Polling must not
  * be cached or automatically retried by the transport.
  */
-export type TorrentStatus = {
+export type TorrentStatus = { preparation: PlaybackPreparation | null } & ({
   loaded: false
   session: SessionStats | null
 } | {
@@ -174,4 +178,4 @@ export type TorrentStatus = {
   files: Array<{ idx: number, progress: number }>
   peers: PeerStats[]
   file?: { idx: number, progress: number, ranges: Array<[number, number]> }
-}
+})
