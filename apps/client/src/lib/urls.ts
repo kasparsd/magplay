@@ -21,9 +21,11 @@ const params = (entries: Record<string, Id | null | undefined>): URLSearchParams
 
 export const urls = {
   search: (q: string, cat?: Optional): string => `/?${new URLSearchParams({ q, ...(cat && { cat }) })}`,
-  /** The torrent page. `title` shows while the file list loads; `link` is a search result's download-link id. */
-  torrent: (infoHash: Optional, { title, link }: { title?: Optional, link?: Optional } = {}): string =>
-    `/t${infoHash ? `/${infoHash}` : ''}${title || link ? `?${new URLSearchParams({ ...(link && { link }), ...(title && { title }) })}` : ''}`,
+  /** The torrent page. `title` shows while loading; `link` is a private download-link id; `magnet` retains discovery hints. */
+  torrent: (infoHash: Optional, { title, link, magnet }: { title?: Optional, link?: Optional, magnet?: Optional } = {}): string => {
+    const q = params({ title, link, magnet })
+    return `/t${infoHash ? `/${infoHash}` : ''}${q.size ? `?${q}` : ''}`
+  },
   player: (ih: string, idx: Id): string => `/play/${ih}/${idx}`,
   raw: (ih: string, idx: Id, name: string): string => `/raw/${ih}/${idx}/${enc(baseName(name))}`,
   download: (ih: string, idx: Id, name: string): string => `/raw/${ih}/${idx}/${enc(baseName(name))}?download=1`,

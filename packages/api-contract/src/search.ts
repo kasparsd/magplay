@@ -23,7 +23,7 @@ export type SourceReport =
   | { name: string, ok: true, count: number, ms: number }
   | { name: string, ok: false, error: string, ms: number }
 
-/** GET /api/search?q&cat. */
+/** GET /api/search?q&cat. A magnet query returns one result without querying sources. */
 export interface SearchResponse {
   results: SearchResult[]
   sources: SourceReport[]

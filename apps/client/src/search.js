@@ -13,7 +13,7 @@ const results = $('#results')
 
 /** One result. Where it came from is only worth a line when more than one source is configured. */
 function renderResult (item, sourceCount) {
-  const href = item.infoHash ? urls.torrent(item.infoHash, { title: item.title }) : urls.torrent(null, { link: item.linkId, title: item.title })
+  const href = urls.torrent(item.infoHash, { title: item.title, link: item.linkId, magnet: item.magnet })
   return releaseRow({ ...item, name: item.title }, href, { note: sourceCount > 1 && item.sources.join(', ') })
 }
 
@@ -26,7 +26,7 @@ function renderSources (sources, retry) {
 }
 
 function show ({ results: items, sources }, retry) {
-  setStatus(status, items.length ? `${items.length} results` : 'Nothing found.')
+  setStatus(status, items.length ? `${items.length} result${items.length === 1 ? '' : 's'}` : 'Nothing found.')
   renderSources(sources, retry)
   fill(results, ...items.map(item => renderResult(item, sources.length)))
   results.hidden = !items.length
@@ -103,7 +103,7 @@ async function showRecent () {
         row.append(el('button', { type: 'button', className: 'remove', textContent: '✕', title: 'Remove from this list (the files stay on the server)', ariaLabel: `Remove ${t.name} from this list`, onclick: () => remove(t, row) }))
         return row
       }))]
-    : [el('p', { className: 'help' }, 'Search every configured source for a film, show or anything else with a torrent, or ', el('a', { href: urls.explore(), textContent: 'explore what BitMagnet has found' }), '. Torrents you open are listed here.')]))
+    : [el('p', { className: 'help' }, 'Search every configured source for a film, show or anything else with a torrent, paste a magnet link, or ', el('a', { href: urls.explore(), textContent: 'explore what BitMagnet has found' }), '. Torrents you open are listed here.')]))
   $('#recent').hidden = false
 }
 

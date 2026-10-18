@@ -1,5 +1,6 @@
 // The torrent page, /t/<infohash>: file list, downloads, external players and live activity.
 // /t?link=<id> opens a search result that only had a download link, then switches to /t/<infohash>.
+// A magnet parameter adds the full URI, retaining trackers and web seeds.
 import './lib/topbar.ts'
 import { api } from './lib/api.ts'
 import { $, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setError, setStatus, shortHash, sleep, timeAgo } from './lib/ui.ts'
@@ -32,9 +33,11 @@ async function load () {
   const timer = setInterval(tick, 1000)
   let t
   try {
-    t = params.get('link')
-      ? await api('/api/torrents', { json: { linkId: params.get('link') } })
-      : await api(`/api/torrents/${infoHash}`)
+    t = params.get('magnet')
+      ? await api('/api/torrents', { json: { magnet: params.get('magnet') } })
+      : params.get('link')
+        ? await api('/api/torrents', { json: { linkId: params.get('link') } })
+        : await api(`/api/torrents/${infoHash}`)
   } catch (err) {
     setError(status, err.message, load)
     return

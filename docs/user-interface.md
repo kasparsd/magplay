@@ -51,6 +51,7 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 - Same side gutter on every page, including the Player. The Player's video band is the one exception: it runs edge to edge, and everything under it keeps the gutter.
 - Nothing is loaded from outside the server: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
 - Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized.
+- Search accepts a title or a pasted magnet link. A valid BitTorrent v1 magnet produces one result without contacting indexers, using its display name (or info hash when unnamed), with size and seeder counts left unknown. Opening it retains its trackers and web seeds. Category filters do not restrict a direct magnet lookup; malformed or unsupported magnets show a readable error.
 - Search filters (All, Movies, TV) appear only once there is a query; the home page shows just the search bar and recent items.
 - Labels hide only what the source can't add to: show the source name on search results only when more than one source is configured.
 
