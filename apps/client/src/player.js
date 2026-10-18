@@ -4,7 +4,7 @@ import Hls from 'hls.js'
 import { api } from './lib/api.ts'
 import { measureCaps } from './lib/capabilities.js'
 import { icon } from './lib/icons.ts'
-import { audioFormat, languageFromName, languageName, pickByLanguage, releaseName } from './lib/naming.ts'
+import { audioFormat, containerLabel, languageFromName, languageName, pickByLanguage, releaseName } from './lib/naming.ts'
 import { performanceView, record } from './lib/performance.ts'
 import { parseVtt } from './lib/subtitles.ts'
 import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
@@ -204,7 +204,7 @@ function renderFacts () {
   const rows = [
     ['Mode', cur ? `${cur.mode}: ${cur.reason}` : null],
     ['File', file ? `${baseName(file.name)} (${formatBytes(file.size)})` : null],
-    ['Container', info?.container],
+    ['Container', containerLabel(info?.container, file?.name)],
     ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.width}×${v.height}, ${(v.width * (v.sampleAspect || 1) / v.height).toFixed(2)}:1, ${v.bitDepth}-bit`],
     ['Audio', a && [audioFormat(a.codec, a.channels), languageName(a.language)].filter(Boolean).join(', ')],
     ['Peers', st?.loaded ? `${st.peers.length} · ↓ ${formatSpeed(st.downloadSpeed)}` : null],

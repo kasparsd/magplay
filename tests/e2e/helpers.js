@@ -5,27 +5,28 @@ import { expect } from './fixtures.js'
 
 export const direct = 'Playback.S01E01.mp4'
 export const remux = 'Playback.S01E02.mkv'
+export const scope = 'Playback.S01E04.mp4' // 478×200, 2.39:1
 export const playResponse = page => page.waitForResponse(r => r.url().endsWith('/api/play') && r.request().method() === 'POST')
 
-export async function expectPlaying (page) {
+export async function expectPlaying (page, width = 320) {
   await expect.poll(() => page.locator('#video').evaluate(v => ({
     ready: v.readyState >= 2,
     playing: !v.paused,
     width: v.videoWidth,
     frames: v.getVideoPlaybackQuality().totalVideoFrames > 0,
     error: v.error?.message ?? null,
-  }))).toEqual({ ready: true, playing: true, width: 320, frames: true, error: null })
+  }))).toEqual({ ready: true, playing: true, width, frames: true, error: null })
   const frames = await page.locator('#video').evaluate(v => v.getVideoPlaybackQuality().totalVideoFrames)
   await expect.poll(() => page.locator('#video').evaluate(v => v.getVideoPlaybackQuality().totalVideoFrames)).toBeGreaterThan(frames)
 }
 
-export async function openPlayer (page, app, file) {
+export async function openPlayer (page, app, file, width = 320) {
   const response = playResponse(page)
   await page.goto(app.player(file))
   const res = await response
   expect(res.ok(), await res.text()).toBeTruthy()
   const decision = await res.json()
-  await expectPlaying(page)
+  await expectPlaying(page, width)
   return decision
 }
 
