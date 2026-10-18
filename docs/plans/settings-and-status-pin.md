@@ -144,7 +144,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 ## Implementation checklist
 
 - [x] `SettingDef` schema and the initial entries in `packages/api-contract/src/settings.ts`, with a `validate(def, value)` used by both sides. Status types and `overallLevel()` are in `status.ts` next to it.
-- [x] `config.js` on top of `apps/server/src/settings-store.ts` (`resolve(env, file, readers)`), `<CACHE_DIR>/settings.json` read/atomic write, and a `changed` event. Sources, Explore, limits and timeouts rebuild on change. Unit tests for precedence, locking, masking, atomic saves and env-only knobs (`settings-store.test.ts`, `settings-schema.test.ts`, `config.test.js`).
+- [x] `config.ts` (`loadConfig`) on top of `apps/server/src/settings-store.ts` (`resolve(env, file, readers)`), `<CACHE_DIR>/settings.json` read/atomic write, and a `changed` event. Sources, Explore, limits and timeouts rebuild on change. Unit tests for precedence, locking, masking, atomic saves and env-only knobs (`settings-store.test.ts`, `settings-schema.test.ts`, `config.test.ts`).
 - [x] `GET`/`PATCH /api/settings` and `POST /api/settings/test`, with secret masking and the same-origin write guard (`isSameOrigin` in `http-kit`).
 - [x] `status.ts` check registry with TTL cache, the initial checks (`status-checks.js`), and `GET /api/status` (the event ring buffer was built, then removed with the Recent section). Unit tests with fake checks and clocks (`status.test.ts`).
 - [x] `GET /api/debug` with a log ring buffer (`logs.ts` copies console output) and redacted diagnostics (Copy diagnostics).
@@ -161,7 +161,7 @@ Sixth page, `/settings`, with `public/settings.html` and `apps/client/src/settin
 Decisions made while building, where they differ from or add to the design above:
 
 - **Where the file lives.** `settings.json` is in the folder `CACHE_DIR` names at startup (`./data` by default). The Cache folder setting moves torrent and HLS data, not the settings file, so startup never depends on a saved value to find its settings.
-- **Trimmed to what people tune** (2026-10-18, owner's review): extra trackers, idle and metadata/check timeouts, job limits, simultaneous conversions, ffmpeg/ffprobe paths, and the restart-only web port, torrent port, DHT, LSD and cache folder left the page and the schema. Their env vars work as before (README) and are validated at startup like page settings (`ENV_ONLY` in `config.js`). With no restart-only settings left, the restart check and its handling went too. The Server section became Storage.
+- **Trimmed to what people tune** (2026-10-18, owner's review): extra trackers, idle and metadata/check timeouts, job limits, simultaneous conversions, ffmpeg/ffprobe paths, and the restart-only web port, torrent port, DHT, LSD and cache folder left the page and the schema. Their env vars work as before (README) and are validated at startup like page settings (`ENV_ONLY` and `envOnlyConfig` in `config.ts`). With no restart-only settings left, the restart check and its handling went too. The Server section became Storage.
 - **Saved settings apply on next use**; search and Explore are rebuilt when sources, the search timeout or BitMagnet's address change.
 - **The sources list:** env items are locked and listed first; items saved in the browser follow.
 - **Env notes** appear only on a row an env var actually sets (read-only, naming the variable).

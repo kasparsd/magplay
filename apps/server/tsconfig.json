@@ -17,6 +17,15 @@
     },
     {
       "path": "../../packages/http-kit"
+    },
+    {
+      "path": "../../packages/indexers"
+    },
+    {
+      "path": "../../packages/torrent-engine"
+    },
+    {
+      "path": "../../packages/playback"
     }
   ]
 }

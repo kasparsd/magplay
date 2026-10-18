@@ -4,7 +4,7 @@ data
 **/*.test.js
 **/*.test.ts
 **/test-fixtures
-**/test-helpers.js
+**/test-helpers.*
 tests
 .dev
 tools
