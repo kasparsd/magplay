@@ -16,7 +16,13 @@ The Player chrome, theater layout and performance graph (roadmap items 5–6) ru
 
 ## Wave 3
 
-- [ ] **Boundary/error hardening and long-session behaviour** (roadmap items 8–9), built on the Wave 2 factories.
+- [x] **Boundary/error hardening and long-session behaviour** (roadmap items 8–9), built on the Wave 2 factories. Branch `claude/wave3-hardening`.
+  - [x] Same-server redirect policy and 16 MiB body cap for indexer requests and download links.
+  - [x] Secrets redacted from console output, the Debug log and copied diagnostics; the startup line redacts source URLs.
+  - [x] Upper bounds for the env-only timeouts; `EXTRA_TRACKERS` entries must be tracker URLs.
+  - [x] LRU bounds for probe results (256) and subtitle tracks (64 / 64 MiB); cache sizes in Debug.
+  - [x] `/health` answers 503 once shutdown begins; shutdown test with a hanging search and a loading torrent.
+  - [ ] NAS numbers for cache sizes over a long session (needs the real deployment; nothing measured yet).
 
 ## Log
 

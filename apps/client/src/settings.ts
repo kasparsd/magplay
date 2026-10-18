@@ -1,6 +1,6 @@
 // The settings page, /settings#<section>: a loop over the settings schema, one control per entry.
 // Server settings collect in a save bar and are saved together; browser settings apply as they change.
-import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, validate } from '@magplay/api-contract'
+import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
 import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, renderControl } from './lib/controls.ts'
@@ -35,6 +35,8 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 
 const GB = 1024 ** 3
 const gb = (n: number): string => `${(n / GB).toFixed(1)} GB`
+/** Sizes below a gigabyte read in MB, so a 64 MB cache isn't "0.1 GB". */
+const size = (n: number): string => n < GB ? `${Math.round(n / 1024 ** 2)} MB` : gb(n)
 function uptime (s: number): string {
   const d = Math.floor(s / 86400)
   const h = Math.floor(s / 3600) % 24
@@ -99,7 +101,7 @@ const READOUTS: Record<string, () => ReadoutValue> = {
     : 'Loading…',
   'debug.resources': () => debug
     ? grid(debug.resources.map(r => [r.label, r.unit === 'bytes'
-      ? { text: `${gb(r.used)} of ${gb(r.limit)}`, fraction: r.used / r.limit }
+      ? { text: `${size(r.used)} of ${size(r.limit)}`, fraction: r.used / r.limit }
       : r.limit ? { text: `${r.used} of ${r.limit}`, fraction: r.used / r.limit } : String(r.used)]))
     : 'Loading…',
   'debug.log': logView,
@@ -117,8 +119,8 @@ const ACTIONS: Record<string, () => Promise<string | undefined>> = {
     const [info, settings, statusNow] = await Promise.all([
       api<DebugInfo>('/api/debug'), api<SettingsResponse>('/api/settings'), api<StatusResponse>('/api/status'),
     ])
-    // Settings come masked from the server; the browser's own preferences hold no secrets
-    await copy(JSON.stringify({ at: new Date().toISOString(), userAgent: navigator.userAgent, debug: info, settings, preferences: prefs, status: statusNow }, null, 2))
+    // Settings come with secret fields masked; redactDeep also removes keys someone put in a URL's query string or userinfo
+    await copy(JSON.stringify(redactDeep({ at: new Date().toISOString(), userAgent: navigator.userAgent, debug: info, settings, preferences: prefs, status: statusNow }), null, 2))
     return 'Copied'
   },
   'debug.clearHls': async () => {

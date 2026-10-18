@@ -29,6 +29,8 @@ export interface Explore {
   rebuild: () => void
   /** Counts for the unfiltered tabs take a while on a big index, so start them early. */
   warm: () => void
+  /** Cached answers, for the Debug page. */
+  cacheStats: () => { used: number, limit: number }
 }
 
 const unavailable = (): HttpError => new HttpError(404, 'Explore needs BitMagnet. Set its address in Settings → Sources.')
@@ -111,5 +113,6 @@ export function createExplore ({ url, timeoutMs, createBrowser = u => createBitm
       warm()
     },
     warm,
+    cacheStats: () => ({ used: cache.size, limit: CACHE_LIMIT }),
   }
 }

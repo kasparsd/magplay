@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { bitmagnetUrl, loadConfig, sourceConfigs, sourcesFromEnv } from './config.ts'
+import { bitmagnetUrl, loadConfig, sourceConfigs, sourcesFromEnv, trackersFromEnv } from './config.ts'
 
 const tempDir = (t: { after: (fn: () => void) => void }): string => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'magplay-config-'))
@@ -16,6 +16,17 @@ test('invalid env values stop the server at startup, naming the variable', t => 
   for (const [key, value, message] of [['MAX_PROBES', '0', 'at least 1'], ['MAX_HLS_SESSIONS', '-1', 'at least 1'], ['MAX_SUBTITLE_JOBS', '1.5', 'a whole number'], ['HLS_MAX_GB', 'Infinity', 'a number'], ['MIN_FREE_GB', 'bad', 'a number']] as const) {
     assert.throws(() => loadConfig({ CACHE_DIR: dir, [key]: value }), new RegExp(`${key} must be ${message}`))
   }
+  for (const [key, value] of [['PORT', '70000'], ['TORRENT_PORT', '-1'], ['METADATA_TIMEOUT_S', '99999'], ['TORRENT_CHECK_TIMEOUT_S', '0'], ['IDLE_TORRENT_MIN', '1000000']] as const) {
+    assert.throws(() => loadConfig({ CACHE_DIR: dir, [key]: value }), new RegExp(key))
+  }
+  assert.throws(() => loadConfig({ CACHE_DIR: dir, EXTRA_TRACKERS: 'udp://ok:1/announce, not a url' }), /EXTRA_TRACKERS: "not a url"/)
+})
+
+test('EXTRA_TRACKERS: unset means the defaults, empty means none, and each entry must be a tracker URL', () => {
+  assert.ok(trackersFromEnv(undefined).length > 0)
+  assert.deepEqual(trackersFromEnv(''), [])
+  assert.deepEqual(trackersFromEnv('udp://a:1/announce, wss://b/announce'), ['udp://a:1/announce', 'wss://b/announce'])
+  assert.throws(() => trackersFromEnv('magnet:?xt=1'), /EXTRA_TRACKERS/)
 })
 
 test('saved settings feed config, and env vars win over them', t => {

@@ -6,7 +6,9 @@ import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRouter } from '@magplay/http-kit'
+import { redactSecrets } from '@magplay/api-contract'
+import type { DebugResource } from '@magplay/api-contract'
+import { createRouter, route } from '@magplay/http-kit'
 import { createHlsSessions, createMediaTools } from '@magplay/playback'
 import type { HlsSessions, SpawnProcess } from '@magplay/playback'
 import { createTorrentEngine } from '@magplay/torrent-engine'
@@ -95,7 +97,16 @@ export function createApp ({ config, logs = () => [], publicDir = path.join(repo
   const explore = createExplore({ url: () => current().bitmagnetUrl, timeoutMs: () => current().searchTimeoutMs })
   const status = createStatus()
   const { version } = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { version: string }
-  const checks = createStatusChecks({ status, settings: config.settings, config: current, engine, media, hls, logs, version })
+  const caches = (): DebugResource[] => {
+    const subs = subtitles.stats()
+    return [
+      { id: 'subtitleCache', label: 'Subtitle tracks cached', used: subs.tracks, limit: subs.limit },
+      { id: 'subtitleBytes', label: 'Subtitle cache size', used: subs.bytes, limit: subs.byteLimit, unit: 'bytes' },
+      { id: 'links', label: 'Download links remembered', ...search.linkStats() },
+      { id: 'exploreCache', label: 'Explore answers cached', ...explore.cacheStats() },
+    ]
+  }
+  const checks = createStatusChecks({ status, settings: config.settings, config: current, engine, media, hls, logs, version, caches })
 
   // Saved settings apply without a restart: rebuild what was built from them
   const unsubscribe = config.onChange((_config, changed) => {
@@ -104,7 +115,13 @@ export function createApp ({ config, logs = () => [], publicDir = path.join(repo
     checks.settingsChanged(changed)
   })
 
+  const startedAt = Date.now()
+  let closing: Promise<void> | null = null
   const match = createRouter([
+    // Liveness and readiness for Docker and proxies: cheap, no upstream calls; 503 once shutdown has begun
+    route('GET', '/health', ({ res }) => {
+      json(res, closing ? 503 : 200, { ok: !closing, uptimeS: Math.round((Date.now() - startedAt) / 1000) })
+    }),
     ...staticRoutes({ publicDir, distDir }),
     ...apiRoutes({ engine, hls, tabs, play, search, explore, subtitles, settings: config.settings, status, checks }),
   ])
@@ -135,8 +152,6 @@ export function createApp ({ config, logs = () => [], publicDir = path.join(repo
   })
   server.requestTimeout = 0 // /raw streams stay open for as long as playback needs
 
-  let closing: Promise<void> | null = null
-
   return {
     server,
     hls,
@@ -148,7 +163,7 @@ export function createApp ({ config, logs = () => [], publicDir = path.join(repo
           const address = server.address()
           port = typeof address === 'object' && address ? address.port : wanted
           const { sources } = current()
-          console.log(`magplay listening on :${port}, sources: ${sources.map(c => `${c.name} (${c.type} ${c.url})`).join(', ')}`)
+          console.log(`magplay listening on :${port}, sources: ${sources.map(c => `${c.name} (${c.type} ${redactSecrets(c.url)})`).join(', ') || 'none'}`)
           resolve(port)
         })
       })

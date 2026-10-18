@@ -31,6 +31,8 @@ export interface Search {
   search: (q: string, cat?: string | null) => Promise<SearchResponse>
   /** The download link behind a result's `linkId`; throws LinkExpired when it's no longer known. */
   linkFor: (id: string) => string
+  /** Remembered download links, for the Debug page. */
+  linkStats: () => { used: number, limit: number }
   names: string[]
 }
 
@@ -92,5 +94,5 @@ export function createSearch (sources: readonly Source[], { timeoutMs = 30_000 }
     return link
   }
 
-  return { search, linkFor, names: sources.map(s => s.name) }
+  return { search, linkFor, linkStats: () => ({ used: links.size, limit: MAX_LINKS }), names: sources.map(s => s.name) }
 }

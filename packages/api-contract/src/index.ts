@@ -4,6 +4,7 @@
 
 export * from './settings.ts'
 export * from './status.ts'
+export * from './redact.ts'
 export type * from './search.ts'
 export type * from './explore.ts'
 

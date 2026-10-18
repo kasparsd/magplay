@@ -234,7 +234,7 @@ Local safeguards reject excess jobs with a retryable 503 rather than an unbounde
 | `GET /api/debug` | Version, uptime, ffmpeg versions, busy slots and limits, disk and cache use, and the last 200 log lines |
 | `POST /api/debug/clear-hls` | Stops every conversion and deletes its segments |
 | `GET /api/speedtest` | Random bytes (up to 256 MB) for the browser's connection test |
-| `GET /health` | 200 |
+| `GET /health` | 200 `{ ok, uptimeS }`; 503 once shutdown has begun |
 
 ## Dependencies
 

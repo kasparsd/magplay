@@ -1,5 +1,6 @@
 // Indexer download links: Jackett's /dl/ and Prowlarr's /{id}/download proxies answer with a .torrent file or a redirect to a magnet.
 import { SourceError, fetchFailure } from './errors.ts'
+import { readBytes } from './release.ts'
 import type { Fetch } from './release.ts'
 
 /** A magnet URI, or the .torrent file's bytes. */
@@ -18,7 +19,7 @@ export async function resolveLink (link: string, { fetch: fetchImpl = globalThis
       continue
     }
     if (!res.ok) throw new SourceError(`The download link returned HTTP ${res.status}`)
-    const body = Buffer.from(await res.arrayBuffer())
+    const body = await readBytes(res, 'The download link')
     // Some proxies send the magnet as the body instead of a redirect
     const asText = body.subarray(0, 7).toString()
     return asText === 'magnet:' ? body.toString().trim() : body
