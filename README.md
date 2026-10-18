@@ -100,6 +100,7 @@ services:
       CACHE_MAX_GB: "50"
     volumes:
       - magplay_data:/data
+      - /run/avahi-daemon:/run/avahi-daemon:ro   # optional: .local names in source URLs
 
 volumes:
   magplay_data:
@@ -115,7 +116,7 @@ Then open `http://example-host:3382/`. To build from a checkout instead of pulli
 
 Prebuilt images are published to `ghcr.io/kasparsd/magplay`. Publishing a GitHub release `vX.Y.Z` tags the image `X.Y.Z`, `X.Y` and `X`; a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to `main` moves the `edge` tag, and older edge builds are deleted. There is no `latest` tag, so pin a release or follow `edge` on purpose.
 
-**Indexer addresses:** inside the container, use Compose service names (`http://bitmagnet:3333/...`, `http://jackett:9117`) or IP addresses. `.local` mDNS names such as `example-host.local` resolve on a Mac, and inside Docker Desktop, but usually **not** inside a Linux container, because the image has no mDNS resolver.
+**Indexer addresses:** inside the container, use Compose service names (`http://bitmagnet:3333/...`, `http://jackett:9117`), IP addresses, or `.local` mDNS names such as `example-host.local`. mDNS multicast doesn't reach a container on Docker's bridge network, so magplay asks the host's avahi-daemon instead: install it on the host (`apt install avahi-daemon`; Synology and most NAS systems already run it) and mount its socket directory with `- /run/avahi-daemon:/run/avahi-daemon:ro` under `volumes:`. The log says `Resolving .local names through the host’s avahi-daemon` at startup when the socket is there. Without it, `.local` names fall through to normal DNS, which works in Docker Desktop but usually not on Linux.
 
 **Behind Nginx Proxy Manager:** turn off buffering for streams (Advanced tab: `proxy_buffering off;`). Otherwise nginx buffers `/raw` and `/hls` responses and seeking gets slow. Links in `.m3u` files honour `X-Forwarded-Proto`/`X-Forwarded-Host`.
 

@@ -15,6 +15,7 @@ import { probe, decide, subtitleToVtt } from './media.js'
 import { startSession, stopSession, stopTab, closeTab, touchSession, sessionStats, serveHls, stopAllSessions } from './sessions.js'
 import { checkSource, debugInfo, status as statusChecks } from './status-checks.js'
 import { serveSpeedtest } from './speedtest.ts'
+import { installMdnsLookup } from './mdns.ts'
 import { sourceConfigs } from './sources/index.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -328,4 +329,5 @@ const server = http.createServer(async (req, res) => {
   }
 })
 server.requestTimeout = 0 // /raw streams stay open for as long as playback needs
+if (installMdnsLookup()) console.log('Resolving .local names through the host’s avahi-daemon')
 server.listen(config.port, () => console.log(`magplay listening on :${config.port}, sources: ${config.sources.map(c => `${c.name} (${c.type} ${c.url})`).join(', ')}`))
