@@ -65,7 +65,8 @@ for (const { width, height } of [{ width: 375, height: 812 }, { width: 812, heig
     const more = page.locator('#more-slot .menu-items')
     await expect(more.getByText('Speed', { exact: true })).toBeVisible()
     await expect(more.locator('[role="menuitemradio"], .choice').filter({ visible: true }).first()).toBeVisible()
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'no sideways scroll').toBe(true)
+    // menu() moves the list inside the stage in its toggle handler, which runs after the menu opens
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), { message: 'no sideways scroll' }).toBe(true)
   })
 }
 
