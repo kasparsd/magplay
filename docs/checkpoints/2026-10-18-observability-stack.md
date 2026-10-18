@@ -24,4 +24,4 @@ The profile limits Prometheus to 7 days or 1 GB, Loki to 72 hours with capped in
 
 ## Remaining acceptance
 
-The separate real-server/device measurements in [the structured logging plan](../plans/structured-logging.md) remain pending. The isolated stack proves collection and provisioning, not sustained server performance or viewer experience.
+The separate real-server/device measurements remain pending ([roadmap](../roadmap.md#what-to-do-next) item 2). The isolated stack proves collection and provisioning, not sustained server performance or viewer experience.

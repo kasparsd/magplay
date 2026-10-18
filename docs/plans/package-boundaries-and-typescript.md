@@ -8,7 +8,7 @@ The target structure, its reasons and its rules are canonical in [architecture.m
 
 Reorganize the code into isolated internal packages with one-way dependencies, in strict TypeScript under ESLint. Each file is converted and moved once.
 
-**Scope (revised 2026-10-17, see [the roadmap](../roadmap.md#why-this-order)):** Phases 0–4 are scheduled work, because they carry the structural payoff: typed upstream parsing, factories with `close()`, graceful shutdown and a typed server. Phases 5–6 (client pages, tests, scripts, config) happen on touch: a file becomes `.ts` when it is next changed for another reason. The player is rewritten in TypeScript by the [Player roadmap](../user-interface.md#player-roadmap) rather than converted first. Phase 7's review runs once Phase 4 is done.
+**Scope (revised 2026-10-17, see [the roadmap](../roadmap.md#what-to-do-next)):** Phases 0–4 are scheduled work, because they carry the structural payoff: typed upstream parsing, factories with `close()`, graceful shutdown and a typed server. Phases 5–6 (client pages, tests, scripts, config) happen on touch: a file becomes `.ts` when it is next changed for another reason. The player is rewritten in TypeScript by the [Player roadmap](../user-interface.md#player-roadmap) rather than converted first. Phase 7's review runs once Phase 4 is done.
 
 ### Success criteria
 

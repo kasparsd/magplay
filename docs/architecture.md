@@ -4,7 +4,7 @@
 
 magplay stays a small Node service with multi-page browser clients for one person on a trusted LAN, without accounts. [The roadmap](roadmap.md) owns priorities and completion status.
 
-**Direction change (2026-10-17):** the code is reorganized into isolated packages and moved to strict TypeScript now, while the codebase is small (~5k lines) and the change is cheap. The server and packages are converted as scheduled work; client pages, tests and scripts convert when next touched ([roadmap](roadmap.md#why-this-order)). This replaces the earlier stance of deferring a TypeScript migration and factory refactors until a concrete bug required them. Reasons:
+**Direction change (2026-10-17):** the code is reorganized into isolated packages and moved to strict TypeScript now, while the codebase is small (~5k lines) and the change is cheap. The server and packages are converted as scheduled work; client pages, tests and scripts convert when next touched ([roadmap](roadmap.md#what-to-do-next)). This replaces the earlier stance of deferring a TypeScript migration and factory refactors until a concrete bug required them. Reasons:
 
 - Treating each area as if it were a standalone package exposed coupling that makes every fix and test harder: HTTP status codes thrown from the torrent/media/session logic, a global config imported for errors, configuration depending on indexer adapters, work done at import time, and modules that each hold several jobs (see Findings).
 - The browser↔server API and the codec keys shared by the capability probe and the playback decision are only aligned by JSDoc and comments. Shared types make mismatches compile errors.
@@ -64,7 +64,14 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
 ### Upstream requests and secrets
 
 - Indexer adapters fetch through `request()` in `packages/indexers/src/release.ts`. It follows redirects itself, only on the same server (an http → https upgrade included) and at most three times, so an `X-Api-Key` header or `apikey=` query never reaches another host. A redirect elsewhere is a `SourceError` asking for the new address. Bodies go through `readBytes`/`readText`/`readJson`, capped at 16 MiB by `Content-Length` and while streaming.
-- Secret settings leave the server only as `{ set }`. [Logging and observability](logging.md) owns structured logging/redaction, metrics and collection architecture. Its [implementation plan](plans/structured-logging.md) tracks delivery and verification.
+- Secret settings leave the server only as `{ set }`. [Logging and observability](logging.md) owns structured logging/redaction, metrics and collection architecture.
+
+### `.local` source names
+
+- mDNS multicast doesn't cross Docker's bridge network, so the container asks the host's avahi-daemon over its socket (`/run/avahi-daemon/socket`, mounted read-only from the host's `/run/avahi-daemon`).
+- Resolution lives in the server (`apps/server/src/mdns.ts`), not in the image's libc. Alpine's musl has no NSS, so nss-mdns can't be used. A Debian base for `libnss-mdns` was tried and rejected: Debian's `ffmpeg` pulls in Mesa and LLVM, and the image grew from 457 MB to 987 MB.
+- At startup, when the socket exists, `dns.lookup` is replaced by one that sends `.local` names to avahi (its `RESOLVE-HOSTNAME-IPV4/6` line protocol) and falls back to the original lookup for other names and failed answers. Node's `net`, and so `fetch`, reads `dns.lookup` on every connection; a unit test fetches through it so a Node change that breaks this shows up.
+- ffmpeg only reads loopback `/raw` URLs, so it needs no mDNS. Resolution against a real avahi-daemon is still unverified (roadmap item 2).
 
 ### Settings and status
 
@@ -73,6 +80,11 @@ Each package throws its own typed errors (busy, timeout, not found, cancelled, i
 - **Status registry.** `apps/server/src/services/status.ts` holds checks (`id`, `label`, `ttl`, `required`, `run`), runs stale ones when `/api/status` is asked (waiting up to 4 s, then reporting `unknown`), and turns a throw into `error`. `services/status-checks.ts` registers the checks: one per source, Explore, ffmpeg/ffprobe and disk. The client merges browser checks (the connection test) and computes the overall level with the same `overallLevel()`.
 - **Writes** (`PATCH /api/settings`, `POST /api/settings/test`, `POST /api/debug/clear-hls`) require `Sec-Fetch-Site: same-origin` or a matching `Origin` (`isSameOrigin` in `http-kit`), since there is no login.
 - **Browser preferences** live in `localStorage`, one JSON value per setting under `magplay:<key with : for .>` (`magplay:player:speed`), the same keys the Player's `recall()`/`remember()` use. `apps/client/src/lib/preferences.ts` exports the keys (`PREFERENCE`, `STORAGE_KEYS`) and parses values against the schema on read.
+
+- **Where values live.** `settings.json` is in the folder `CACHE_DIR` names at startup (`./data` by default); the Cache folder setting moves torrent and HLS data, not the settings file, so startup never depends on a saved value to find its settings. Sources are items `{ id, type, name, url, apiKey, indexer }` (`indexer` is Jackett's indexer or filter, or Prowlarr's comma-separated ids); env items are locked and listed first. Secrets go out as `{ set }` and the browser sends `{ set: true }` back to keep one, matched by item id. Volume and mute are browser settings marked `hidden`: stored and validated, not shown on the page. GB settings are binary gigabytes (1024³).
+- **Checks.** Every adapter has a cheap `check()` (Torznab `t=caps`, Prowlarr `/api/v1/health`, BitMagnet GraphQL `{ __typename }`). The status button's problem count includes warnings, so Explore without BitMagnet shows amber until its address is set.
+- **Connection test.** `GET /api/speedtest` streams one reused 1 MB buffer of random bytes (defeating compressing proxies), honours backpressure, stops on `close` and caps at about 256 MB; it is `no-store` and counts against no session limit. `measureConnection()` in `apps/client/src/lib/speedtest.ts` takes the median of five `/health` fetches for latency, then reads one `/api/speedtest` response, skips the first ~1 s as warmup and stops at ~5 s. The result is stored per browser (`magplay:connection`) and feeds the `connection` client check: `warn` below 10 MB/s or above 100 ms, `unknown` if it never ran or is older than 7 days. It runs only on demand.
+- **Undecided:** whether env values should be importable into `settings.json`; whether a worsening level deserves a toast; whether the 30 s poll and 60 s source TTL suit rate-limited Prowlarr instances; whether the connection test should ever run unprompted; and the connection thresholds, pending real-server numbers (roadmap item 2).
 
 ### Rules
 

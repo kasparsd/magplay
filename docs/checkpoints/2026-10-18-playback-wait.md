@@ -1,6 +1,6 @@
 # Playback wait implementation validation
 
-Validated on 2026-10-18 using the working checkout. Canonical behavior lives in [user interface](../user-interface.md#playback-wait-explanations), with progress in the [feature plan](../plans/playback-wait-explanations.md).
+Validated on 2026-10-18 using the working checkout. Canonical behavior lives in [user interface](../user-interface.md#playback-wait-explanations).
 
 ## Automated evidence
 
