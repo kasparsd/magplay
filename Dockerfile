@@ -20,6 +20,8 @@ FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=manifests /app ./
 RUN npm ci
+# esbuild reads each package's tsconfig.json, which extends this one.
+COPY tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
 COPY public ./public
