@@ -54,7 +54,7 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Application observability (structured logs, a small metrics baseline and bounded local collection) is implemented for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs.
+Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Application observability (structured logs, a small metrics baseline and bounded local collection) is implemented for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs. The repository Compose file also has an optional local Prometheus, Loki, Alloy and Grafana profile for development troubleshooting; it is not a deployment requirement.
 
 | # | Priority | Work | Completion evidence |
 | --- | --- | --- | --- |
