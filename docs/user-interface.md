@@ -124,7 +124,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 - [x] Add the new keys and the ? key sheet. Update the keyboard expectation above if any key changes.
 - [x] Add Media Session metadata and handlers.
 - [x] Persist volume, mute, speed and audio/subtitle language. Pick tracks by language on the next file.
-- [ ] Narrow layout below 600 px, checked at 375 px in portrait and landscape.
+- [x] Narrow layout below 600 px, checked at 375 px in portrait and landscape. *e2e at 375 × 812 and 812 × 375 (both under 600 px of stage): ±10 s, volume and Speed hidden, Next as an icon, Speed in More, every control at least 40 px and inside the stage, no sideways scroll. Checked in Chromium only; real phones are roadmap item 1.*
 - [x] e2e: the chrome appears in direct and HLS modes, Audio and Subtitles menus work in fullscreen, a seek outside the converted range restarts the session, and keys work.
 
 ### 2. Theater layout by default
@@ -155,7 +155,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 - [x] Move `#stage` out of `main.wide` in `public/player.html` into a full-width band, and keep `main.wide` for the title row and Details.
 - [x] Set `--ar` from the probe (with sample-aspect correction) and apply the sizing rule. Measure `--topbar-h` and `--title-row-h` on load and resize.
 - [x] Build the title row with the parsed title, back link, Open in and Details. Move the file name into Details.
-- [ ] Check the layout at 1440 × 900, 1280 × 800, 800 × 600, and 375 × 812 in both orientations, with a 2.39:1 and a 16:9 file. Nothing scrolls sideways, and the title row is above the fold on laptops.
+- [x] Check the layout at 1440 × 900, 1280 × 800, 800 × 600, and 375 × 812 in both orientations, with a 2.39:1 and a 16:9 file. Nothing scrolls sideways, and the title row is above the fold on laptops. *The layout e2e runs every size for a 16:9 and a 2.39:1 (478 × 200) fixture: aspect ratio kept, as large as fits, title row above the fold except in phone landscape, no sideways scroll. Chromium only.*
 - [x] e2e: the video box keeps its aspect ratio and fits the viewport at desktop and phone sizes.
 - [x] Close the related cleanup items below (Player fit, Player gutter, Open in without Download).
 
@@ -181,7 +181,7 @@ Each lane's label shows the current value. In `direct` mode the Transcoder lane 
 - [x] Draw the three lanes as inline SVG with the shared sparkline helper, using theme colours and the existing tokens, and redraw only while the disclosure is open.
 - [x] Hide the Transcoder lane in `direct` mode and the CPU area when `cpu` is `null`.
 - [x] Keep the "converts slower than playback" warning, and link it to the Performance disclosure.
-- [ ] Check it with a healthy remux, a transcode that falls behind, and a direct file. Healthy remux and direct were checked (screenshots in `docs/checkpoints/2026-10-17-player-redesign/`); a transcode that falls behind still needs a slow server, and CPU only shows on Linux.
+- [ ] Check it with a healthy remux, a transcode that falls behind, and a direct file. Healthy remux and direct were checked (screenshots in `docs/checkpoints/2026-10-17-player-redesign/`); a transcode that falls behind still needs a slow server, and CPU only shows on Linux. Moved to [roadmap item 2](roadmap.md#what-to-do-next).
 
 ### Later, if use calls for it
 
@@ -228,7 +228,7 @@ Findings from a visual walkthrough on 2026-10-17 (local server against BitMagnet
 ### P4: polish
 
 - [x] **The Player doesn't fit the viewport.** At 800×600 the full-width video pushes Audio/Subtitles/Open in below the fold. Fixed by the sizing rule in [Theater layout](#2-theater-layout-by-default).
-- [ ] **ⓘ Details shows raw ffprobe values.** Container reads `mov,mp4,m4a,3gp,3g2,mj2` and unnamed audio tracks read "1. Track (mp3 2ch)". Map them to "MP4" and "MP3 stereo". *Audio now reads "MP3 stereo" via `audioFormat` (Player step 1). `containerLabel` in `lib/naming.ts` (tested) maps the container; using it in `player.js` is left to the Player work.*
+- [x] **ⓘ Details shows raw ffprobe values.** Container reads `mov,mp4,m4a,3gp,3g2,mj2` and unnamed audio tracks read "1. Track (mp3 2ch)". Map them to "MP4" and "MP3 stereo". *Audio now reads "MP3 stereo" via `audioFormat` (Player step 1). The container now reads "MP4" via `containerLabel` (checked in the layout e2e).*
 - [x] **The source label repeats on every search row** ("BitMagnet") with a single source configured. Show it only with more than one source.
 - [x] **Odd spacing on the Torrent and Title pages.** The torrent page has an empty band between the title and "3 files · 276 MB", and the Title page has a large gap above "Releases".
 - [x] **An unknown torrent's heading is the 40-character infohash** until metadata arrives. Shorten it (`dd8255ec…`).

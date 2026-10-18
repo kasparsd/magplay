@@ -39,6 +39,7 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 14. **Magnet link search:** a pasted BitTorrent v1 magnet (hex or base32 info hash) is validated and shown as one result without contacting indexers, keeping its trackers and web seeds; malformed or v2-only magnets show a readable error. See [the plan](plans/magnet-search.md) and [user interface](user-interface.md).
 15. **Playback wait explanations:** the approved "Reason first" overlay in the video stage (also in fullscreen) with the cause, measured evidence and relevant actions, a Why disclosure, and a compact advisory when conversion capacity falls below playback speed; the server reports preparation phases and published-HLS readiness. Slow conversion was simulated with a throttled ffmpeg, not measured on the real server. See [the plan](plans/playback-wait-explanations.md), [user interface](user-interface.md#playback-wait-explanations) and [evidence](checkpoints/2026-10-18-playback-wait.md).
 16. **Deployment documentation:** an optional [Gluetun VPN deployment](vpn.md) with a standalone Compose example (configuration validated, no VPN containers run), and macOS local network permission notes in the README.
+17. **Player checklists:** ⓘ Details names the container ("MP4", "Matroska") through `containerLabel`; the layout e2e covers a 16:9 and a 2.39:1 file at 1440 × 900, 1280 × 800, 800 × 600 and 375 × 812 in both orientations, and a narrow-chrome e2e checks the under-600 px controls and 40 px targets. Chromium only; real devices remain item 1, and the transcode-that-falls-behind check moved to item 2. See [the Player roadmap](user-interface.md#player-roadmap).
 
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
@@ -46,7 +47,7 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 - Fast colocated suite: **219 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
-- Chromium: **50 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
+- Chromium: **53 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
 - `npm run test:all` runs all three suites. CI also runs `npm run typecheck` and `npm run lint` (no warnings allowed). The Node 22 validation and first Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md); the isolated Docker check was rerun on Node 24 Alpine after each reorganization step, most recently after Phases 3–4 on 2026-10-18 (arm64; remux first segment 217 ms, seek-to-30 s 221 ms).
 - Browser fixture media is fully cached; the separate peer suite covers uncached transfer. Both generate original data/media locally and require no public swarm or live indexer.
 - Local Docker acceptance is Linux/arm64 on the development machine, **not** proof of server performance, browser rendering through the container, large-file hashing latency, or amd64 compatibility.
@@ -56,21 +57,20 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Since then, application observability (13), magnet search (14), playback wait explanations (15) and the VPN guide (16) have landed, and the [Changesets](plans/changesets-changelog.md) and [desktop packaging](plans/desktop-packaging.md) plans are written but not implemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs.
+Updated 2026-10-18, after the 2026-10-17 plan (items 1–9) was delivered; see [the waves plan](plans/roadmap-waves-2026-10-17.md). Since then, application observability (13), magnet search (14), playback wait explanations (15), the VPN guide (16) and the Player checklists (17) have landed, and the [Changesets](plans/changesets-changelog.md) and [desktop packaging](plans/desktop-packaging.md) plans are written but not implemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently. Centralized monitoring infrastructure remains conditional on deployment needs.
 
-Items 1–2 need the owner's devices and server. Of the work that does not, do 3 then 4 (both touch `player.js`, and the redesign and wait overlay have now landed), with 5 in parallel since it does not touch the Player.
+Items 1–2 need the owner's devices and server. Of the work that does not, items 3 (Player in TypeScript) and 4 (Changesets) are independent of each other.
 
 | # | Priority | Work | Completion evidence |
 | --- | --- | --- | --- |
 | 1 | **P1** | Check the browsers/devices actually used | Mobile controls and fullscreen, audio/subtitle switching, wait explanations, and unsupported-format/external-player handoff on each device in use, with the new chrome. Each failure becomes a test or a Player item. |
 | 2 | **P1** | Measure on the real server | A transcode that falls behind, shown both in the Performance graph with ffmpeg CPU (Linux only) and as the wait explanation/capacity advisory (closes the open check in Player step 3); remux startup/seek timings; cache sizes in Debug over a long session (closes the open Wave 3 item); `.local` resolution against the server's real avahi-daemon. Use structured logs for server stages and device evidence for browser readiness. Record the numbers here and tune limits only if they call for it. |
-| 3 | **P2** | Finish the Player checklists | Use `containerLabel` (in `lib/naming.ts`, tested) for the container in ⓘ Details, which closes the last P4 Details item; check the layout at 1440 × 900, 1280 × 800, 800 × 600 and 375 × 812 in both orientations with 2.39:1 and 16:9 files ([Player steps 1–2](user-interface.md#player-roadmap)), which browser screenshots can cover. |
-| 4 | **P2** | Player in TypeScript | `player.js` (about 1,000 lines, now including the wait overlay) and `capabilities.js` become TypeScript after item 3, split into small modules; no behaviour change. |
-| 5 | **P2** | Changesets and application changelog ([plan](plans/changesets-changelog.md)) | One application version and generated changelog owned by the server workspace; release notes alongside changes, explicit version preparation, and CI checks for missing/invalid notes. Manual GitHub Releases reuse existing versioned Docker publishing. Planned, not implemented. |
-| 6 | **P3** | TypeScript Phase 7 review | The [plan](plans/package-boundaries-and-typescript.md)'s tighten-and-document pass; other client pages, tests and scripts still convert on touch. |
-| 7 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
-| 8 | **P3 / conditional** | Fingerprinted client assets | Only if revalidating unversioned bundles becomes a measured problem. |
-| 9 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
+| 3 | **P2** | Player in TypeScript | `player.js` (about 1,000 lines, now including the wait overlay) and `capabilities.js` become TypeScript, split into small modules; no behaviour change. |
+| 4 | **P2** | Changesets and application changelog ([plan](plans/changesets-changelog.md)) | One application version and generated changelog owned by the server workspace; release notes alongside changes, explicit version preparation, and CI checks for missing/invalid notes. Manual GitHub Releases reuse existing versioned Docker publishing. Planned, not implemented. |
+| 5 | **P3** | TypeScript Phase 7 review | The [plan](plans/package-boundaries-and-typescript.md)'s tighten-and-document pass; other client pages, tests and scripts still convert on touch. |
+| 6 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
+| 7 | **P3 / conditional** | Fingerprinted client assets | Only if revalidating unversioned bundles becomes a measured problem. |
+| 8 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
 
 **Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
 

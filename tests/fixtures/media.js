@@ -24,6 +24,12 @@ export async function generateMedia (dir) {
     '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=lav', '-metadata:s:s:0', 'language=eng',
     path.join(dir, 'Playback.S01E02.mkv')], { timeout: 60_000 })
   await fs.copyFile(direct, path.join(dir, 'Playback.S01E03.mp4'))
+  // A 2.39:1 "scope" file, for layouts that are width-bound rather than height-bound
+  await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', 'testsrc2=size=478x200:rate=24',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+    '-t', '30', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35',
+    '-pix_fmt', 'yuv420p', '-g', '48', '-c:a', 'aac', '-movflags', '+faststart', path.join(dir, 'Playback.S01E04.mp4')], { timeout: 60_000 })
 }
 
 export async function prepareCachedMedia (dir) {
