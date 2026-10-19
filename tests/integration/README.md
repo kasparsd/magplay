@@ -19,3 +19,5 @@ The status API's `activeStreams` field counts active raw/tar responses and is us
 Metadata discovery retains its separate `METADATA_TIMEOUT_S` deadline. Once metadata is known, `TORRENT_CHECK_TIMEOUT_S` bounds piece verification (default **7200 seconds**, deliberately much longer for large files on slow storage). Increase this for representative server hashing times rather than shrinking it to the peer-discovery deadline. Timeout/error/close cleanups have colocated unit tests in `packages/torrent-engine/src/ready.test.ts`.
 
 The suite is deterministic about local endpoints and test data, not network scheduling. All clients, child processes, tracker listeners and temporary files are cleaned up. It does not exercise public DHT interoperability, NAT, remote tracker behavior, or real server throughput.
+
+The torrent-engine and server implementations are strict TypeScript with type-aware linting. This external integration harness remains JavaScript and converts on touch; its real peer behavior complements the typed colocated factory/lifecycle tests.

@@ -151,7 +151,7 @@ export function timeAgo (ms: number): string {
 /** One of six tile colours, picked from the text so a title always gets the same one. */
 export function tint (text: string): string {
   let h = 0
-  for (const ch of String(text)) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
+  for (const ch of text) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
   return `tint-${(h % 6) + 1}`
 }
 

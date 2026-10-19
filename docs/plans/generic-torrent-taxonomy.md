@@ -32,4 +32,5 @@ Torznab search categories (search page):
 - [x] Update Explore UI to a type selector with grouped options.
 - [x] Add Audio, Software, Books and Other search categories.
 - [ ] Adjust playback/download UX messaging for non-media content.
-- [x] Put adult content behind `content.showAdult` (env `SHOW_ADULT_CONTENT`/`ALLOW_ADULT` or Settings toggle, default off).
+- [ ] Align the adult-setting help with its actual Explore/title coverage; generic Torznab/Prowlarr search has no adult filtering today.
+- [x] Put adult Explore/title content behind `content.showAdult` (env `SHOW_ADULT_CONTENT`/`ALLOW_ADULT` or Settings toggle, default off).

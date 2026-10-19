@@ -80,7 +80,7 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       logger.info('hls.cache.cleared', { count: stopped })
       json(res, 200, { stopped })
     }),
-    route('GET', '/api/speedtest', ({ req, res }) => serveSpeedtest(req, res)),
+    route('GET', '/api/speedtest', ({ res }) => serveSpeedtest(res)),
 
     // Search and Explore
     route('GET', '/api/search', async ({ req, res, query }) => json<SearchResponse>(res, 200, await search.search(query.get('q'), query.get('cat'), { logger: requestLogger(req) }))),

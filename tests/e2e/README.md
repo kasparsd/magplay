@@ -47,6 +47,7 @@ Coverage:
 - Retryable HLS admission overload does not disrupt other admitted players.
 
 - Cache headers, conditional GET/HEAD, raw/tar ranges, completed/progressive subtitles and HLS session freshness.
+- Cached torrent file lists without torrent activation, Settings save/lock/source-field behavior, Debug polling/focus, and connection-test warnings.
 
 The deliberately failed/malformed POST responses and delayed audio-switch response are the only playback-response interventions. Codecs, probing, streams and successful decisions are not mocked. Each test uses a fresh browser context; each worker owns its server/cache. Teardown navigates away, stops leftover sessions through the API, shuts down the child and deletes its temporary files. Failure artifacts contain a screenshot, trace and server log.
 
@@ -58,3 +59,5 @@ The deliberately failed/malformed POST responses and delayed audio-switch respon
 - Browser back/forward-cache eligibility: the test exercises Back/Forward navigation, which may reload the page depending on the browser. A restored-document lifecycle test is still useful.
 
 The default suite is Chromium-only. Keep public-network tests and device acceptance checks separate so these regressions stay deterministic.
+
+Application and package code is checked with strict TypeScript, unused-code checks and type-aware linting. Browser fixtures and tests still convert to TypeScript on touch; passing this suite does not imply they have all been converted.

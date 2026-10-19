@@ -108,6 +108,7 @@ export async function readBytes (res: Response, what: string, limit = MAX_BODY_B
   const chunks: Uint8Array[] = []
   let size = 0
   try {
+    // Node fetch bodies are async iterable; this project’s default DOM declarations omit that capability.
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
       size += chunk.byteLength
       if (size > limit) throw new SourceError(`${what} sent more than the ${limit / 1024 ** 2} MB limit`)

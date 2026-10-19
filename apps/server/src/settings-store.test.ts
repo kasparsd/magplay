@@ -83,7 +83,7 @@ test('updates validate the whole patch, save atomically, keep unchanged secrets 
 })
 
 test('env-only knobs resolve with the same validation, outside the page’s schema', () => {
-  const defs = [{ key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true }] as unknown as Parameters<typeof resolve>[3]
+  const defs = [{ key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true, section: 'debug', scope: 'server', label: 'Port' }] satisfies Parameters<typeof resolve>[3]
   assert.equal(resolve({}, {}, {}, defs).effective.port, 8080)
   assert.equal(resolve({ PORT: '9000' }, {}, {}, defs).effective.port, 9000)
   assert.throws(() => resolve({ PORT: '0' }, {}, {}, defs), /PORT must be at least 1/)

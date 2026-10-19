@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint'
 import globals from 'globals'
 import { builtinModules } from 'node:module'
 
-// Package boundaries (Decision 10 in the package-boundaries plan). A later block replaces
+// Package boundaries are documented in docs/architecture.md. A later block replaces
 // the whole rule for its files, so each list repeats the shared deep-import ban.
 const deepImports = {
   group: ['@magplay/*/**'],
@@ -41,6 +41,9 @@ export default defineConfig(
       }],
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/restrict-plus-operands': 'error',
+      '@typescript-eslint/no-unnecessary-type-conversion': 'error',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'error',
     },
   }
 )

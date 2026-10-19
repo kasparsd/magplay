@@ -6,28 +6,15 @@ magplay stays a small Node service with multi-page browser clients for one perso
 
 **Direction change (2026-10-17):** the code is reorganized into isolated packages and moved to strict TypeScript now, while the codebase is small (~5k lines) and the change is cheap. The server and packages are converted as scheduled work; client pages, tests and scripts convert when next touched ([roadmap](roadmap.md#what-to-do-next)). This replaces the earlier stance of deferring a TypeScript migration and factory refactors until a concrete bug required them. Reasons:
 
-- Treating each area as if it were a standalone package exposed coupling that makes every fix and test harder: HTTP status codes thrown from the torrent/media/session logic, a global config imported for errors, configuration depending on indexer adapters, work done at import time, and modules that each hold several jobs (see Findings).
+- Treating each area as if it were a standalone package exposed coupling that makes every fix and test harder: HTTP status codes thrown from the torrent/media/session logic, a global config imported for errors, configuration depending on indexer adapters, work done at import time, and modules that each hold several jobs (now resolved by the package boundaries below).
 - The browser↔server API and the codec keys shared by the capability probe and the playback decision are only aligned by JSDoc and comments. Shared types make mismatches compile errors.
 - Explicit factories with `close()` give tests and shutdown one owner per process, timer, port and directory, instead of module-level state.
 
-Packages are internal npm workspaces. Publishing any of them is a later, optional step, not a goal. The work is tracked in [the package boundaries and TypeScript plan](plans/package-boundaries-and-typescript.md).
-
-## Findings that motivated the change
-
-All resolved by Phases 2–4 of the plan (2026-10-18); kept as the record of why.
-
-| Problem | Where it was | Resolution |
-| --- | --- | --- |
-| HTTP concerns in core logic | `HttpError(503/504/499)` thrown from `torrents`, `media`, `sessions`, `limits`, `torrent-ready`, `search`, `sources/links` | Packages throw typed errors; `toHttpError` in `apps/server/src/http/errors.ts` is the only place they become statuses and `Retry-After` |
-| Config is a global singleton with the dependency inverted | `config.js` imported `sources/index.js` for env parsing | `apps/server/src/config.ts` parses all env, including source configs; `loadConfig(env)` returns an object the app passes down |
-| Work at import time | WebTorrent client and ports in `torrents.js`; facet loading and ffmpeg checks in `server.js`; module-level maps and timers in `sessions.js` | Factories (`createTorrentEngine`, `createHlsSessions`, `createApp`) with `close()`; `main.ts` starts and stops them |
-| Modules with several jobs | `torrents.js`, `sessions.js`, `server.js` | Engine, store and activity in `torrent-engine`; ffmpeg and the disk budget in `playback`; tab fencing, play, Explore, playlists and subtitles as app services; HTTP in `http/` |
-| Content classification split across layers | `episodes.js` and `sources/release.js` | `release-info` owns file kinds, episodes and badges |
-| Implicit cross-runtime contracts | Codec keys and response shapes aligned by comments | `api-contract` types the API handlers' responses and holds `CODEC_KEYS`, read by `decide()` and the client's capability probe |
+Packages are internal npm workspaces. Publishing any of them is a later, optional step, not a goal. The server/package extraction and tightening review are delivered. Remaining client and tooling conversions happen on touch and are tracked in [the package boundaries and TypeScript plan](plans/package-boundaries-and-typescript.md).
 
 ## Package boundaries
 
-Arrows show dependencies; nothing points back up, and no package imports an app.
+Arrows show domain dependencies; nothing points back up, and no package imports an app. Server packages also consume the shared observability interfaces (see [logging](logging.md)).
 
 ```
 apps/server ──► indexers ──────► release-info
@@ -35,6 +22,7 @@ apps/server ──► indexers ──────► release-info
      │      ──► seekable-tar
      │      ──► playback ───────► api-contract (track, capability and session types; codec keys)
      │      ──► http-kit
+     │      ──► observability ─► api-contract
      └──► api-contract ◄── apps/client
 ```
 
@@ -46,6 +34,7 @@ apps/server ──► indexers ──────► release-info
 | `seekable-tar` | PAX tar layout computed from file sizes, any byte range produced on demand | Sizes, a `read(range)` callback | Torrents, Node streams |
 | `playback` | `probe(input)`, `decide(info, caps, policy, audio)`, ffmpeg arguments, subtitle→VTT, `createMediaTools` (probe cache, process limits), `createHlsSessions(options)` with the session limit, HLS disk budget and fps/CPU sampling | An input URL or path, policy, ffmpeg paths | Tabs, routes, the app's port |
 | `http-kit` | Router, Range parsing, conditional caching, `serveFile`, JSON helpers | Requests/responses | Core logic; only apps use it |
+| `observability` | Structured logs, bounded Debug capture, metrics and runtime collectors | Logger/metrics options, lifecycle ownership | Domain operations and HTTP responses |
 | `api-contract` | Types for the server JSON API (replaces `api-types.js`), the codec keys, the settings schema with `validate()` and the status level helpers, which run on both sides | — | Node or DOM APIs |
 
 Each package throws its own typed errors (busy, timeout, not found, cancelled, invalid input). `apps/server` maps them to HTTP statuses in one place.
@@ -98,6 +87,12 @@ Torrent detail requests use `torrent-engine.info()` to describe a ready torrent 
 - A split must reduce coupling. Moving a large file into an equally coupled package is not progress.
 
 ## Build and tooling
+
+TypeScript uses `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noUnusedLocals` and `noUnusedParameters` through the shared base configuration. `noPropertyAccessFromIndexSignature` stays off: bracket-only access added noise to intentionally dynamic env, schema, dataset and upstream records without finding a defect in the tightening review. Browser application and colocated test projects remain separate so Node globals do not leak into browser code.
+
+The lint baseline is `recommendedTypeChecked`, plus exhaustive switches, consistent type imports, `restrict-plus-operands`, `no-unnecessary-type-conversion` and `use-unknown-in-catch-callback-variable`. The full strict/stylistic presets were evaluated; rules that rewrite safe numeric interpolation, void callbacks, collection syntax or defensive runtime checks are not enabled globally. Reconsider individual rules when a concrete failure warrants them, rather than maintaining hundreds of suppressions.
+
+Assertions require a nearby invariant or a documented boundary: bounded indices into nonempty collections, successful pattern captures, schema-validated values, owned static markup and deliberately partial test doubles. The sole production double cast bridges Node fetch's async-iterable body and this project's DOM declarations in `indexers/release.ts`. Vendor declarations stay minimal in the consuming package; no explicit `any` is used. Inline lint suppressions must name a rule and explain the reason; the router's `@ts-expect-error` is a deliberate negative type test. The [Phase 7 checkpoint](checkpoints/2026-10-19-typescript-review.md) records the audit and validation.
 
 - **Server:** runs `.ts` directly with Node's built-in type stripping; no emit step. Only erasable TypeScript syntax is allowed (no `enum`, `namespace` or parameter properties).
 - **Client:** TypeScript requires a browser build, so esbuild bundles each page entry and the stylesheet into gitignored `dist/client/assets/` as `[name]-[hash]` files with sourcemaps, plus a metafile (`dist/client/meta.json`). The server reads the metafile (again after each rebuild) and rewrites the pages' `/search.js`-style links to the hashed URLs. `hls.js` becomes an npm import instead of the `/vendor/hls.min.js` global. `tsc` does type checking only.

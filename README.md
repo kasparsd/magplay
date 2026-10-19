@@ -271,14 +271,16 @@ Alloy reads the Docker socket to discover this Compose project's magplay contain
 
 ## Dependencies
 
-Four direct npm dependencies, all pinned to exact versions:
+External npm dependencies are declared in their consuming workspace and pinned to exact versions:
 
 | Package | Version | Purpose | Maintainers |
 |---|---|---|---|
 | [`webtorrent`](https://github.com/webtorrent/webtorrent) | 3.0.21 | Torrent client (DHT, trackers, TCP) | WebTorrent project: Feross Aboukhadijeh, Mathias Buus, Diego Rodríguez Baquero, Alex (alxhotel) and others |
 | [`parse-torrent`](https://github.com/webtorrent/parse-torrent) | 11.0.24 | Parse magnets and .torrent files (also used inside webtorrent) | WebTorrent project |
 | [`fast-xml-parser`](https://github.com/NaturalIntelligence/fast-xml-parser) | 5.11.2 | Torznab XML | Amit Gupta (NaturalIntelligence) |
-| [`hls.js`](https://github.com/video-dev/hls.js) | 1.7.3 | HLS playback in Firefox/Chrome, served from the container | video-dev: Rob Walch, Tom Jenkinson, Guillaume du Pontavice |
+| [`hls.js`](https://github.com/video-dev/hls.js) | 1.7.3 | HLS playback in Firefox/Chrome, bundled into the client | video-dev: Rob Walch, Tom Jenkinson, Guillaume du Pontavice |
+| `pino` | 10.4.0 | Structured server logging | Pino project |
+| `@prometheus-io/client` | 0.16.1 | Metrics registry and collectors | prometheus-io |
 
 Plus `ffmpeg`/`ffprobe` from Alpine Linux.
 
@@ -362,12 +364,12 @@ npm run test:all             # Fast + peer + browser suites
 
 Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3 encoders. They use an isolated temporary torrent cache and a local indexer fixture; no public swarm or running indexer is needed. See [tests/e2e/README.md](tests/e2e/README.md) for coverage, debugging and limitations.
 
-Node 24+, ES modules, npm workspaces. The code is moving into isolated packages and strict TypeScript ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
+Node 24+, ES modules, npm workspaces. The server and packages use strict TypeScript; the tightening review is complete and remaining client/test/tooling files convert on touch ([plan](docs/plans/package-boundaries-and-typescript.md), [architecture](docs/architecture.md)); the server runs `.ts` packages directly through Node type stripping, with no compile step.
 
 - `apps/server/src/`: the Node service. `main.ts` is the entry point (config, startup checks, graceful shutdown); `app.ts` builds the server from the packages; `config.ts` parses env and saved settings; `services/` coordinates the packages (play, tabs, search, Explore, playlists, subtitles, status); `http/` holds the routes, matched by the `http-kit` router, and the media and error handling.
 - `apps/client/src/`: one script per page (`search.js`, `torrent.js`, `player.ts`, `explore.js`, `title.js`, `settings.ts`), plus `lib/ui.ts` (DOM, formatting, `menu()`, copy buttons, tiles, release rows, per-browser memory), `lib/api.ts` (DOM-independent JSON transport) and `lib/urls.ts` (every URL the pages link to, including the external-player links). esbuild (`npm run build`) bundles each page, including `hls.js`, and the stylesheet into content-hashed `dist/client/assets/`; the server links those hashed URLs into the pages from esbuild's metafile.
 - `public/`: HTML and CSS; the server rewrites the pages' script and stylesheet links to the hashed builds.
-- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `indexers` (Torznab, Jackett, Prowlarr and BitMagnet adapters, merged search, download links), `torrent-engine` (the WebTorrent client, torrent cache and eviction), `playback` (ffprobe, the direct/remux/transcode decision, HLS ffmpeg sessions), `seekable-tar` (range-addressable tar streams) and `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`).
+- `packages/`: `api-contract` (JSON wire types shared by server and client), `release-info` (file kinds, episode numbers, title badges), `indexers` (Torznab, Jackett, Prowlarr and BitMagnet adapters, merged search, download links), `torrent-engine` (the WebTorrent client, torrent cache and eviction), `playback` (ffprobe, the direct/remux/transcode decision, HLS ffmpeg sessions), `seekable-tar` (range-addressable tar streams), `http-kit` (router with typed route params, Range parsing, conditional caching and `serveFile`) and `observability` (structured logs, metrics and runtime collection).
 
 ### Test layout
 

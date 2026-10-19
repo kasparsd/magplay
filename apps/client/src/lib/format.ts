@@ -5,6 +5,6 @@ export const formatSpeed = (n: number): string => n >= 1e6 ? `${(n / 1e6).toFixe
 export function formatClock (seconds: number | null | undefined): string {
   const s = Math.max(0, Math.floor(seconds || 0))
   const [h, m, sec] = [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60]
-  return (h ? `${h}:${String(m).padStart(2, '0')}` : m) + ':' + String(sec).padStart(2, '0')
+  return `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${String(sec).padStart(2, '0')}`
 }
 export const episodeLabel = (f: { season?: number | null, episode?: number | null }): string => f.episode == null ? '' : `S${String(f.season ?? 0).padStart(2, '0')}E${String(f.episode).padStart(2, '0')}`

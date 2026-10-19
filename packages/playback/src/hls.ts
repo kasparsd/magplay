@@ -342,8 +342,8 @@ export function createHlsSessions ({
   }
 
   async function sessionBytes (s: Session): Promise<number> {
-    const entries = await fs.promises.readdir(s.dir, { withFileTypes: true }).catch((err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') return []
+    const entries = await fs.promises.readdir(s.dir, { withFileTypes: true }).catch((err: unknown) => {
+      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return []
       throw err
     })
     const present = new Set<string>()
@@ -352,8 +352,8 @@ export function createHlsSessions ({
       // Published segments never change. Only new segments, init, VTT and growing
       // temporary files need stat calls on subsequent checks.
       if (e.name.endsWith('.m4s') && s.sizes.has(e.name)) return
-      const stat = await fs.promises.stat(path.join(s.dir, e.name)).catch((err: NodeJS.ErrnoException) => {
-        if (err.code === 'ENOENT') return null // ffmpeg just renamed/deleted it
+      const stat = await fs.promises.stat(path.join(s.dir, e.name)).catch((err: unknown) => {
+        if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return null // ffmpeg just renamed/deleted it
         throw err
       })
       s.sizes.set(e.name, stat?.size || 0)

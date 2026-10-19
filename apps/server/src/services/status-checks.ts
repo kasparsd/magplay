@@ -9,7 +9,6 @@ import type { DebugInfo, DebugResource, StatusAction } from '@magplay/api-contra
 import { hostName } from '../config.ts'
 import type { Config } from '../config.ts'
 import type { LogRecord, LogLevel } from '@magplay/api-contract'
-import type { SettingsStore } from '../settings-store.ts'
 import type { CheckResult, StatusRegistry } from './status.ts'
 
 const GB = 1024 ** 3
@@ -42,7 +41,6 @@ export async function checkSource (config: SourceConfig, signal: AbortSignal = A
 
 export interface StatusChecksOptions {
   status: StatusRegistry
-  settings: SettingsStore
   config: () => Config
   engine: TorrentEngine
   media: MediaTools
@@ -65,7 +63,7 @@ export interface StatusChecks {
 }
 
 /** Registers every check on `status`. */
-export function createStatusChecks ({ status, settings, config, engine, media, hls, logs, loggingStatus = () => ({ level: 'info', dropped: 0 }), version, caches = () => [] }: StatusChecksOptions): StatusChecks {
+export function createStatusChecks ({ status, config, engine, media, hls, logs, loggingStatus = () => ({ level: 'info', dropped: 0 }), version, caches = () => [] }: StatusChecksOptions): StatusChecks {
   const started = Date.now()
   const versions: { ffmpeg: string | null, ffprobe: string | null } = { ffmpeg: null, ffprobe: null }
 

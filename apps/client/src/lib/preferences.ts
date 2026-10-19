@@ -53,7 +53,11 @@ export function readPreferences (store: PreferenceStorage | null = storage()): P
     const result = raw === null ? null : validate(def, raw)
     out[def.key] = result?.ok ? result.value : def.default
   }
-  return out as unknown as Preferences
+  // validate() above uses the schema; narrow its dynamic output before exposing the typed preference API.
+  const volume = out[PREFERENCE.volume]
+  const muted = out[PREFERENCE.muted]
+  if (typeof volume !== 'number' || typeof muted !== 'boolean') throw new Error('Browser preference schema does not match Preferences')
+  return { 'player.volume': volume, 'player.muted': muted }
 }
 
 export const getPreference = <K extends PreferenceKey>(key: K, store: PreferenceStorage | null = storage()): Preferences[K] => readPreferences(store)[key]

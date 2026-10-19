@@ -1,18 +1,19 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { connectionLevel, connectionWarning, measureConnection, readConnection, saveConnection, CONNECTION_MAX_AGE_MS } from './speedtest.ts'
+import type { PreferenceStorage } from './preferences.ts'
 import { getPreference, readPreferences, setPreference } from './preferences.ts'
 
-function memoryStorage (): Storage {
+function memoryStorage (): PreferenceStorage {
   const data = new Map<string, string>()
-  return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v) } } as unknown as Storage
+  return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v) } }
 }
 
 test('measureConnection takes the median ping and excludes the warmup from the download speed', async () => {
   let clock = 0
   const pings = [30, 10, 20, 50, 40]
   let ping = 0
-  const fetch = ((url: string) => {
+  const fetch: typeof globalThis.fetch = (url) => {
     if (url === '/health') {
       clock += pings[ping++]!
       return Promise.resolve(new Response('{}'))
@@ -26,7 +27,7 @@ test('measureConnection takes the median ping and excludes the warmup from the d
         controller.enqueue(new Uint8Array(1_000_000))
       },
     })))
-  }) as unknown as typeof globalThis.fetch
+  }
   const r = await measureConnection({ fetch, now: () => clock, warmupMs: 1000, durationMs: 4000 })
   assert.equal(r.latencyMs, 30)
   // Chunks at 500…4000 ms; measuring starts at the 1000 ms chunk and counts 6 MB over 3 s

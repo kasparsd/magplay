@@ -22,6 +22,10 @@ One person (or a household) on a trusted local network, on a laptop, phone or TV
 - History is intentional: a new search and each Explore filter change (type, sort, genre, year, quality) is its own entry, so Back steps back through them before leaving the page. Switching a search's category replaces the entry, and "Show more" adds none.
 - Malformed URLs fall back to defaults (for example an unknown Explore `type` becomes `movie`) instead of showing a validation error.
 
+### Discovery types
+
+Explore offers Movies and TV, Music and Audiobooks, Books and Comics, Games and Software, Adult and Uncategorized. BitMagnet supplies the classification. `content.showAdult` defaults to false and excludes classified adult Explore/title releases; requesting the Adult type while disabled returns a readable refusal. It does not filter generic Torznab/Prowlarr search results. Clarifying the setting's broader help text and finishing non-media download messaging remain in the [taxonomy plan](plans/generic-torrent-taxonomy.md).
+
 ### Honest states
 
 Every list or panel has four states, and each is visible and distinct:
@@ -68,7 +72,7 @@ Playback explanations have a separate channel from transient speed, subtitle and
 - Nothing is loaded from outside the server: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
 - Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized.
 - Search accepts a title or a pasted magnet link. A valid BitTorrent v1 magnet produces one result without contacting indexers, using its display name (or info hash when unnamed), with size and seeder counts left unknown. Opening it retains its trackers and web seeds. Category filters do not restrict a direct magnet lookup; malformed or unsupported magnets show a readable error.
-- Search filters (All, Movies, TV) appear only once there is a query; the home page shows just the search bar and recent items.
+- Search filters (All, Movies, TV, Audio, Software, Books, Other) appear only once there is a query; the home page shows just the search bar and recent items.
 - Labels hide only what the source can't add to: show the source name on search results only when more than one source is configured.
 
 ### Accessibility and keyboard

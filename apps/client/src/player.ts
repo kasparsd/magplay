@@ -332,16 +332,16 @@ async function start (at = 0, message = ''): Promise<void> {
     }
   }
   renderFacts()
-  const handlePlayError = (err: Failure): void => {
+  const handlePlayError = (err: unknown): void => {
     if (!current()) return
-    if (err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err.message)
+    if (!(err instanceof Error) || err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
     video.muted = true
     autoMuted = true
     video.play().then(() => { if (current()) notify('Muted: autoplay with sound was blocked. Click the video or press M to unmute.') },
-      (err: Failure) => {
+      (err: unknown) => {
         if (!current()) return
-        if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
-        else failPlayback('Playback could not start', err.message)
+        if (err instanceof Error && err.name === 'NotAllowedError') setPlaybackPhase('blocked')
+        else failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
       })
   }
   // Browsers may block autoplay with sound until the page has been clicked; start muted then
@@ -537,7 +537,7 @@ function renderMore (): void {
 
 function togglePip (): void {
   const action = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture()
-  action.catch((err: Failure) => notify(`Picture in picture: ${err.message}`, 'warn'))
+  action.catch((err: unknown) => notify(`Picture in picture: ${err instanceof Error ? err.message : String(err)}`, 'warn'))
 }
 
 function retryInfo (): void {
@@ -715,10 +715,10 @@ const togglePlay = (): void => {
   if (nothingToPlay()) return
   if (video.paused) {
     if (playbackPhase === 'paused' || playbackPhase === 'blocked') setPlaybackPhase('buffering')
-    video.play().catch((err: Failure) => {
+    video.play().catch((err: unknown) => {
       if (pageLife.signal.aborted) return
-      if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
-      else failPlayback('Playback could not start', err.message)
+      if (err instanceof Error && err.name === 'NotAllowedError') setPlaybackPhase('blocked')
+      else failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
     })
   } else video.pause()
 }

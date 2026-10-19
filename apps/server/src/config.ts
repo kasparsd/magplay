@@ -7,7 +7,7 @@ import type { Logger, LogLevel } from '@magplay/observability'
 import { noopLogger } from '@magplay/observability'
 import { SOURCE_TYPES } from '@magplay/indexers'
 import type { SourceConfig, SourceType } from '@magplay/indexers'
-import type { ListItem, ValueDef } from '@magplay/api-contract'
+import type { ListItem, NumberDef, TextDef, ToggleDef, ValueDef } from '@magplay/api-contract'
 import { createSettingsStore, resolve } from './settings-store.ts'
 import type { Env, EnvReaders, SettingsStore } from './settings-store.ts'
 
@@ -137,7 +137,7 @@ const DEFAULT_TRACKERS = [
 
 const count = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max, integer: true })
 const seconds = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max })
-type EnvOnlyDef = Pick<ValueDef, 'key' | 'env' | 'type' | 'default'> & { min?: number, max?: number, integer?: boolean }
+type EnvOnlyDef = Omit<NumberDef, 'section' | 'scope' | 'label'> | Omit<TextDef, 'section' | 'scope' | 'label'> | Omit<ToggleDef, 'section' | 'scope' | 'label'>
 /** Env-only knobs, in the settings schema's shape so they validate (and fail at startup) like page settings. */
 const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true },
@@ -179,7 +179,7 @@ export function trackersFromEnv (value: string | undefined): string[] {
 
 /** The env-only part of the configuration; an invalid value throws, naming the variable. */
 export function envOnlyConfig (env: Env): EnvOnlyConfig {
-  const v = resolve(env, {}, {}, ENV_ONLY as unknown as ValueDef[]).effective
+  const v = resolve(env, {}, {}, ENV_ONLY.map((def): ValueDef => ({ ...def, section: 'debug', scope: 'server', label: def.key }))).effective
   return {
     ...loggingConfig(env),
     port: num(v, 'port'),

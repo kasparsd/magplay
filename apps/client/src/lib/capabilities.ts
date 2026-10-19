@@ -27,5 +27,5 @@ export interface BrowserMedia { ManagedMediaSource?: TypeSupport, MediaSource?: 
 export function measureCaps (video: { canPlayType: (type: string) => string }, { ManagedMediaSource, MediaSource }: BrowserMedia = {}): BrowserCapabilities {
   const MS = ManagedMediaSource || MediaSource
   return Object.fromEntries(CODEC_KEYS.map(key =>
-    [key, !!(MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably')])) as BrowserCapabilities
+    [key, MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably'])) as BrowserCapabilities
 }

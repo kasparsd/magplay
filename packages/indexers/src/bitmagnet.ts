@@ -344,7 +344,7 @@ export function createBitmagnetBrowser ({ url, showAdult }: { url: string, showA
           hasNextPage: true,
         }
       }, signal)
-      const matches = r.items.filter(i => shown(i, showAdultFn()) && i.content?.source === source && i.content.id === String(id))
+      const matches = r.items.filter(i => shown(i, showAdultFn()) && i.content?.source === source && i.content.id === id)
       const first = matches[0]?.content
       if (!first) return null
       return { ...toTitle(first), releases: matches.map(toRelease), truncated: r.hasNextPage }

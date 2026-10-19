@@ -119,7 +119,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
       { id: 'exploreCache', label: 'Explore answers cached', ...explore.cacheStats() },
     ]
   }
-  const checks = createStatusChecks({ status, settings: config.settings, config: current, engine, media, hls, logs: logging.tail, loggingStatus: logging.status, version, caches })
+  const checks = createStatusChecks({ status, config: current, engine, media, hls, logs: logging.tail, loggingStatus: logging.status, version, caches })
 
   // Saved settings apply without a restart: rebuild what was built from them
   const unsubscribe = config.onChange((_config, changed) => {
