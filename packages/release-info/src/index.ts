@@ -27,10 +27,14 @@ export interface ListedFile extends Episode {
   isProgram: boolean
 }
 
+export type PlaybackEffort = 'direct' | 'remux' | 'transcode'
+
 export interface TitleBadges {
   badges: string[]
   /** A guess whether Firefox can play it without ffmpeg work. */
   likelyDirect: boolean
+  /** Relative ffmpeg effort to make it playable: direct (none), remux (cheap), transcode (expensive), or null when it isn't video. */
+  playbackEffort: PlaybackEffort | null
   /** A note for programs and archives, or null. */
   warning: string | null
 }
@@ -130,9 +134,22 @@ export function badges (title: string): TitleBadges {
   }
   const audioOk = !found.audio || found.audio.every(a => a === 'AAC')
   const labels = [found.res, found.video, found.hdr, found.tenBit, ...(found.audio ?? []), found.source]
+  // Effort to make this release playable in a browser, from its title alone.
+  // Direct: H.264 8-bit with AAC (or no) audio. Remux: same video, but the audio
+  // (or container) needs a cheap ffmpeg pass. Transcode: the video itself must be
+  // re-encoded, which is expensive unless a GPU encoder is available.
+  let playbackEffort: PlaybackEffort | null = null
+  if (!warning && found.video) {
+    if (found.video === 'H.264' && !found.tenBit) {
+      playbackEffort = audioOk ? 'direct' : 'remux'
+    } else {
+      playbackEffort = 'transcode'
+    }
+  }
   return {
     badges: labels.filter((label): label is string => label !== undefined),
-    likelyDirect: !warning && found.video === 'H.264' && audioOk && !found.tenBit,
+    likelyDirect: playbackEffort === 'direct',
+    playbackEffort,
     warning,
   }
 }

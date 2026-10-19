@@ -19,12 +19,13 @@ const LINK_NAMES = { imdb: 'IMDb', tmdb: 'TMDB', tvdb: 'TheTVDB' }
 /** Most seeded first, the same order as Explore's "Most seeded" and the seeders on its tile. */
 const bySeeders = releases => [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
 /** The release Best release opens: the most seeded one that plays in the browser, otherwise the most seeded. */
-const bestOf = releases => releases.find(r => r.likelyDirect) ?? releases[0]
+const effortRank = r => r.playbackEffort === 'direct' ? 0 : r.playbackEffort === 'remux' ? 1 : r.playbackEffort === 'transcode' ? 2 : 3
+const bestOf = releases => [...releases].sort((a, b) => effortRank(a) - effortRank(b) || (b.seeders ?? 0) - (a.seeders ?? 0))[0] ?? releases[0]
 
 /** What Best release chose and why, since it isn't always the top of the list. */
-const bestNote = best => best.likelyDirect
-  ? `Best release: the most seeded one that plays in the browser (${count(best.seeders ?? 0, 'seeder')}).`
-  : `Best release: the most seeded one (${count(best.seeders ?? 0, 'seeder')}). None looks like it plays in the browser, so the player converts it.`
+const bestNote = best => best.playbackEffort === 'direct' || best.playbackEffort === 'remux'
+  ? `Best release: the lowest-effort one that plays in the browser (${count(best.seeders ?? 0, 'seeder')}).`
+  : `Best release: the most seeded one (${count(best.seeders ?? 0, 'seeder')}). None looks like it plays cheaply, so the player converts it.`
 
 function renderHeader (t, best) {
   const query = [t.title, t.year].filter(Boolean).join(' ')
@@ -38,7 +39,7 @@ function renderHeader (t, best) {
       t.overview && el('p', { className: 'overview', textContent: t.overview }),
       el('p', { className: 'actions' },
         best && el('a', { className: 'button primary', href: urls.torrent(best.infoHash, { title: best.name }), title: best.name },
-          best.likelyDirect ? '▶ Best release' : 'Open best release'),
+          (best.playbackEffort === 'direct' || best.playbackEffort === 'remux') ? '▶ Best release' : 'Open best release'),
         el('a', { className: 'button', href: urls.search(query), textContent: 'Search all sources' })),
       best && el('p', { className: 'meta best-note', textContent: bestNote(best) })),
   ]

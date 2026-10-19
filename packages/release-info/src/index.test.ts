@@ -36,7 +36,7 @@ test('file list: samples, extras and small files are not videos; episodes sorted
 })
 
 test('title badges and the Firefox hint', () => {
-  assert.deepEqual(badges('Big Buck Bunny.S01.720p.BluRay.x264-OpenContent'), { badges: ['720p', 'H.264', 'AAC', 'BluRay'], likelyDirect: true, warning: null })
+  assert.deepEqual(badges('Big Buck Bunny.S01.720p.BluRay.x264-OpenContent'), { badges: ['720p', 'H.264', 'AAC', 'BluRay'], likelyDirect: true, playbackEffort: 'direct', warning: null })
   assert.equal(badges('Show.S01.1080p.WEB-DL.DDP5.1.H.264').likelyDirect, false)
   assert.equal(badges('Show.1080p.x265.10bit.AAC').likelyDirect, false)
   assert.deepEqual(badges('Movie.2160p.UHD.BluRay.REMUX.HDR.HEVC.TrueHD.Atmos').badges, ['2160p', 'HEVC', 'HDR', 'TrueHD', 'Atmos', 'Remux'])
@@ -90,7 +90,7 @@ test('content note from the file list', () => {
 })
 
 test('OpenContent releases count as H.264 with AAC', () => {
-  assert.deepEqual(badges('It Was Just An Accident (2025) [1080p] [WEBRip] [5.1] [OpenContent]'), { badges: ['1080p', 'H.264', 'AAC', 'WEBRip'], likelyDirect: true, warning: null })
+  assert.deepEqual(badges('It Was Just An Accident (2025) [1080p] [WEBRip] [5.1] [OpenContent]'), { badges: ['1080p', 'H.264', 'AAC', 'WEBRip'], likelyDirect: true, playbackEffort: 'direct', warning: null })
   assert.equal(badges('Movie.2020.1080p.BluRay.x265-OpenContent').badges.includes('HEVC'), true) // an explicit codec wins
 })
 
