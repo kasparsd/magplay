@@ -80,7 +80,7 @@ export function listFiles (torrent: TorrentLike): ListedFile[] {
 
 /** A note about a torrent's contents, judged from its file list (see listFiles), or null. */
 export function contentWarning (files: ReadonlyArray<{ isVideo: boolean }>): string | null {
-  return files.some(f => f.isVideo) ? null : 'No media file found'
+  return files.some(f => f.isVideo) ? null : 'Download only · no video files'
 }
 
 // Titles that name a program or an archive: not something magplay can play
@@ -114,8 +114,8 @@ export function badges (title: string): TitleBadges {
   const program = title.match(PROGRAM_EXT)?.[1]
   const archive = title.match(ARCHIVE_EXT)?.[1]
   const warning = program
-    ? `Not a media file (.${program.toLowerCase()})`
-    : archive ? `Archive (.${archive.toLowerCase()}), can't stream` : null
+    ? `Download (.${program.toLowerCase()})`
+    : archive ? `Download archive (.${archive.toLowerCase()})` : null
   const found: { res?: string, video?: string, hdr?: string, tenBit?: string, audio?: string[], source?: string } = {}
   const words = title.replaceAll('_', ' ') // `\b` treats underscores as letters: big_buck_bunny_h264
   for (const [kind, re, label] of RULES) {

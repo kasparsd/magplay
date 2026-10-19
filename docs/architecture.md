@@ -52,6 +52,8 @@ Torrent detail requests use `torrent-engine.info()` to describe a ready torrent 
 - **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types and codec keys from `api-contract`.
 - **`public/`**: static HTML and CSS only; the server links the pages to the hashed builds as it serves them.
 
+The torrent page is `apps/client/src/torrent.ts`, typed against the shared torrent/status contracts. It checks owned markup through `requireElement(selector, ctor)` and narrows browser history records before using them. Download-only primary actions use the existing `/raw?...download=1` or `/tar` routes; no eager torrent activation, new download job or second byte source is introduced.
+
 ### Upstream requests and secrets
 
 - Indexer adapters fetch through `request()` in `packages/indexers/src/release.ts`. It follows redirects itself, only on the same server (an http → https upgrade included) and at most three times, so an `X-Api-Key` header or `apikey=` query never reaches another host. A redirect elsewhere is a `SourceError` asking for the new address. Bodies go through `readBytes`/`readText`/`readJson`, capped at 16 MiB by `Content-Length` and while streaming.

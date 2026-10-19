@@ -12,7 +12,7 @@ npm run test:e2e
 npm run test:all
 ```
 
-Linux CI installs ffmpeg and uses `npx playwright install --with-deps chromium` for browser system dependencies. `npm test` selects colocated `*.test.js`/`*.test.ts` files under `apps/` and `packages/`; it does not require a browser or generate media. This cross-application suite lives separately in `tests/e2e/*.test.js` and is selected only by Playwright.
+Linux CI installs ffmpeg and uses `npx playwright install --with-deps chromium` for browser system dependencies. `npm test` selects colocated `*.test.js`/`*.test.ts` files under `apps/` and `packages/`; it does not require a browser or generate media. This cross-application suite lives separately in `tests/e2e/*.test.js` and `*.test.ts` and is selected only by Playwright.
 
 For interactive debugging:
 
@@ -47,6 +47,7 @@ Coverage:
 - Retryable HLS admission overload does not disrupt other admitted players.
 
 - Cache headers, conditional GET/HEAD, raw/tar ranges, completed/progressive subtitles and HLS session freshness.
+- Real generated non-media single-file and tar downloads, download-only phone layout, mixed-torrent Resume and Explore-only adult-setting copy.
 - Cached torrent file lists without torrent activation, Settings save/lock/source-field behavior, Debug polling/focus, and connection-test warnings.
 
 The deliberately failed/malformed POST responses and delayed audio-switch response are the only playback-response interventions. Codecs, probing, streams and successful decisions are not mocked. Each test uses a fresh browser context; each worker owns its server/cache. Teardown navigates away, stops leftover sessions through the API, shuts down the child and deletes its temporary files. Failure artifacts contain a screenshot, trace and server log.
@@ -61,3 +62,5 @@ The deliberately failed/malformed POST responses and delayed audio-switch respon
 The default suite is Chromium-only. Keep public-network tests and device acceptance checks separate so these regressions stay deterministic.
 
 Application and package code is checked with strict TypeScript, unused-code checks and type-aware linting. Browser fixtures and tests still convert to TypeScript on touch; passing this suite does not imply they have all been converted.
+
+The download UX regressions use `tests/e2e/tsconfig.json`, referenced by the root typecheck. `fixtures.d.ts` describes the fields they consume from the existing JavaScript harness; `types/create-torrent.d.ts` declares only the generated-fixture API, and the project reuses the torrent-engine parse-torrent declaration. These tests add original non-media bytes and metadata to the worker’s isolated cache; they do not mock file lists or download responses. They verify byte equality and tar names/content, not whether the synthetic `.iso` or `.flac` files are usable disk images/audio.

@@ -45,17 +45,19 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 20. **Content-hashed client assets:** esbuild writes `[name]-[hash]` bundles and the stylesheet with a metafile; the server links pages to them, serves `/assets/` as immutable and revalidates pages with a strong content ETag, so a release reaches browsers behind caching proxies on the next reload. See [architecture](architecture.md#static-delivery).
 
 21. **Torrent cache reuse:** saved file mtimes avoid rechecking unchanged completed data on reload; saved torrent metadata provides file lists without activating a torrent or waiting for piece verification. Playback and downloads still wait for readiness. See [architecture](architecture.md#package-boundaries) and [cached-list evidence](checkpoints/2026-10-19-cached-torrent-view.md).
-22. **Broader discovery filters:** Search has Audio, Software, Books and Other categories; Explore exposes BitMagnet's audio, reading, games, software and uncategorized types. Adult Explore/title content is gated by a default-off setting. Non-media file actions/copy and the setting's overly broad search wording remain follow-ups in the [taxonomy plan](plans/generic-torrent-taxonomy.md).
+22. **Broader discovery filters:** Search has Audio, Software, Books and Other categories; Explore exposes BitMagnet's audio, reading, games, software and uncategorized types. Adult Explore/title content is gated by a default-off setting. The setting explicitly describes its Explore/title scope; generic source search remains unfiltered. See [discovery types](user-interface.md#discovery-types).
 23. **Settings refinements:** URL-derived source names, schema-driven source fields and conversion dependencies, stable Debug disclosures and focus during polling, controlled save-confirmation expiry, and connection testing in Debug. See [user interface](user-interface.md), [architecture](architecture.md#settings-and-status) and [validation](checkpoints/2026-10-19-settings-followups.md).
 24. **TypeScript Phase 7:** reviewed assertions, third-party boundaries and suppressions; enabled unused-local/parameter compiler checks and three additional type-aware lint rules; removed avoidable double casts and unused dependencies. Scheduled Phases 0–4 and 7 are complete; remaining client/test/tooling conversion stays on touch. See [architecture](architecture.md#build-and-tooling) and [review evidence](checkpoints/2026-10-19-typescript-review.md).
+
+25. **Generic torrent download UX:** torrents without video offer a primary file or whole-torrent tar download, clickable file download names and neutral download-only notes. Mixed torrents retain Play/Resume and their existing file menus. The adult-content setting accurately describes its Explore/title scope. `torrent.ts` and the new typed browser regression cover real single-file/tar bytes, 375 px layout and mixed-torrent Resume. See [user interface](user-interface.md#download-only-torrents) and [validation](checkpoints/2026-10-19-generic-torrent-ux.md).
 
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
 ## Verification and confidence
 
-- Fast colocated suite: **238 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, not helper modules or browser tests.
+- Fast colocated suite: **240 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
-- Chromium: **60 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
+- Chromium: **64 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
 - `npm run test:all` runs all three suites. CI also runs `npm run typecheck` and `npm run lint` (no warnings allowed). The Node 22 validation and first Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md); the isolated Docker check was rerun on Node 24 Alpine after each reorganization step, most recently after Phases 3–4 on 2026-10-18 (arm64; remux first segment 217 ms, seek-to-30 s 221 ms).
 - Browser fixture media is fully cached; the separate peer suite covers uncached transfer. Both generate original data/media locally and require no public swarm or live indexer.
 - Local Docker acceptance is Linux/arm64 on the development machine, **not** proof of server performance, browser rendering through the container, large-file hashing latency, or amd64 compatibility.
@@ -65,17 +67,16 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-Updated 2026-10-19 after checking recent commits and completing the TypeScript Phase 7 review. Cached torrent reuse, broader discovery filters and Settings refinements are recorded above. The [desktop packaging](plans/desktop-packaging.md) plan remains unimplemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently.
+Updated 2026-10-19 after the TypeScript Phase 7 review and generic torrent download UX implementation. Cached torrent reuse, broader discovery filters and Settings refinements are recorded above. The [desktop packaging](plans/desktop-packaging.md) plan remains unimplemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently.
 
-Items 1–2 need the owner's devices and server. The TypeScript Phase 7 review is complete. The next implementable follow-up is finishing generic torrent messaging (item 3). Conditional items still require a demonstrated need.
+Items 1–2 need the owner's devices and server. The TypeScript Phase 7 review and generic torrent UX are complete. Remaining client/test/tooling conversions happen on touch. Conditional items still require a demonstrated need.
 
 | # | Priority | Work | Completion evidence |
 | --- | --- | --- | --- |
 | 1 | **P1** | Check the browsers/devices actually used | Mobile controls and fullscreen, audio/subtitle switching, wait explanations, and unsupported-format/external-player handoff on each device in use, with the new chrome. Each failure becomes a test or a Player item. |
 | 2 | **P1** | Measure on the real server | A transcode that falls behind, shown both in the Performance graph with ffmpeg CPU (Linux only) and as the wait explanation/capacity advisory (closes the open check in Player step 3); remux startup/seek timings; cache sizes in Debug over a long session (closes the open Wave 3 item); `.local` resolution against the server's real avahi-daemon. Use structured logs for server stages and device evidence for browser readiness. Record the numbers here and tune limits only if they call for it. |
-| 3 | **P3** | Finish generic torrent UX ([plan](plans/generic-torrent-taxonomy.md)) | Non-media torrents offer clear download actions and appropriate copy; the adult setting describes its actual Explore-only coverage. Client pages convert to TypeScript when touched. |
-| 4 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
-| 5 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
+| 3 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
+| 4 | **P3 / conditional** | Browser remux or cross-origin hosting | Only for a demonstrated server CPU/compatibility or deployment need. |
 
 **Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
 

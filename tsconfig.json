@@ -30,6 +30,9 @@
     },
     {
       "path": "apps/client"
+    },
+    {
+      "path": "tests/e2e"
     }
   ]
 }

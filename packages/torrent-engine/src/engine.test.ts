@@ -116,7 +116,7 @@ test('uncached file lists still load and remember content warnings', async t => 
   const { bytes, infoHash } = await torrentFor('notes.txt', Buffer.from('notes'))
   const info = await engine.info(bytes)
   assert.equal(info.infoHash, infoHash)
-  assert.equal(info.warning, 'No media file found')
+  assert.equal(info.warning, 'Download only · no video files')
   assert.equal(engine.knownWarning(infoHash), info.warning)
   assert.equal(engine.stats().loaded, 1)
   await assert.rejects(engine.info('../bad'), InvalidTorrentError)
