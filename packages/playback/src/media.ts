@@ -1,18 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { noopLogger, noopMetrics, observeJob } from '@magplay/observability'
 import type { Logger, Metrics, OperationContext } from '@magplay/observability'
-// What a file holds (ffprobe), how this browser should play it, and the ffmpeg work behind it.
-// Inputs are URLs or paths; the app passes its /raw loopback URL.
+// How this browser should play a file, and the ffmpeg work behind it when the server converts.
+// Inputs are URLs or paths; the app passes its /raw loopback URL. probe.ts reads what a file holds.
 import { execFile } from 'node:child_process'
 import type { ExecFileOptions } from 'node:child_process'
-import type { AudioTrack, BrowserCapabilities, ProbeResult, SubtitleTrack, VideoCodecKey, VideoTrack } from '@magplay/api-contract'
+import type { AudioTrack, BrowserCapabilities, VideoCodecKey, VideoTrack } from '@magplay/api-contract'
 import { MediaToolError, NoSuchTrackError, PlaybackBusyError, UnplayableError } from './errors.ts'
 import { createLimiter } from './limits.ts'
+import { keyframeBefore, probe } from './probe.ts'
+import type { MediaInfo } from './probe.ts'
 
-/** ffprobe's summary of a file, as the player API sends it (without the torrent's external subtitles). */
-export type MediaInfo = Omit<ProbeResult, 'externalSubtitles'>
-
-export type PlaybackMode = 'direct' | 'remux' | 'transcode'
+export type PlaybackMode = 'direct' | 'browser-remux' | 'remux' | 'transcode'
 
 export interface Decision {
   mode: PlaybackMode
@@ -21,6 +20,8 @@ export interface Decision {
 
 /** Server policy for files the browser can't play as they are. */
 export interface PlaybackPolicy {
+  /** Whether ffmpeg runs here; without it, repackaging happens in the browser and nothing is re-encoded. */
+  serverConversion: boolean
   allowTranscode: boolean
   /** Transcoded height in pixels, e.g. 720. */
   transcodeMaxHeight: number
@@ -28,94 +29,18 @@ export interface PlaybackPolicy {
   vaapiDevice?: string
 }
 
-const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
 const VIDEO_KEYS: Readonly<Record<string, VideoCodecKey>> = { h264: 'h264', hevc: 'hevc', vp9: 'vp9', av1: 'av1' }
 const AUDIO_KEYS: Readonly<Record<string, keyof BrowserCapabilities>> = { aac: 'aac', ac3: 'ac3', eac3: 'eac3', opus: 'opus', flac: 'flac' }
 const VIDEO_NAMES: Readonly<Record<string, string>> = { h264: 'H.264', hevc: 'HEVC', vp9: 'VP9', av1: 'AV1' }
-
-const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
-const record = (v: unknown): Record<string, unknown> => isRecord(v) ? v : {}
-const str = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined
-const int = (v: unknown): number => typeof v === 'number' && Number.isFinite(v) ? v : 0
-
-/** ffprobe's sample_aspect_ratio ("64:45") as a number; unset, "0:1" and malformed values mean square pixels. */
-export function sampleAspect (value: unknown): number {
-  const [num = 0, den = 0] = (typeof value === 'string' ? value : '').split(':').map(Number)
-  return num > 0 && den > 0 ? num / den : 1
-}
-
-/** ffprobe's -show_format -show_streams JSON as MediaInfo; anything that isn't such a summary throws MediaToolError. */
-export function parseProbe (data: unknown, fileName: string): MediaInfo {
-  if (!isRecord(data) || (data.streams !== undefined && !Array.isArray(data.streams))) {
-    throw new MediaToolError('ffprobe returned an invalid media summary')
-  }
-  const format = record(data.format)
-  const streams = (Array.isArray(data.streams) ? data.streams as unknown[] : []).map(record)
-  const tags = (s: Record<string, unknown>): Record<string, unknown> => record(s.tags)
-  const disposition = (s: Record<string, unknown>): Record<string, unknown> => record(s.disposition)
-  const lang = (s: Record<string, unknown>): string | null => {
-    const language = str(tags(s).language)
-    return language && language !== 'und' ? language : null
-  }
-  const v = streams.find(s => s.codec_type === 'video' && !disposition(s).attached_pic)
-  const video: VideoTrack | undefined = v && {
-    codec: str(v.codec_name) ?? '',
-    tag: str(v.codec_tag_string) ?? '',
-    profile: str(v.profile) ?? null,
-    width: int(v.width),
-    height: int(v.height),
-    sampleAspect: sampleAspect(v.sample_aspect_ratio),
-    bitDepth: Number(v.bits_per_raw_sample) || (/1[02]le|p010/.test(str(v.pix_fmt) ?? '') ? 10 : 8),
-  }
-  return {
-    duration: Number(format.duration) || Number(v?.duration) || null,
-    container: str(format.format_name) ?? '',
-    isWebm: /\.webm$/i.test(fileName),
-    ...(video && { video }),
-    audio: streams.filter(s => s.codec_type === 'audio').map((s, i): AudioTrack => ({
-      index: i, codec: str(s.codec_name) ?? '', channels: int(s.channels), language: lang(s), title: str(tags(s).title) ?? null, default: !!disposition(s).default,
-    })),
-    subtitles: streams.filter(s => s.codec_type === 'subtitle').map((s, i): SubtitleTrack => {
-      const codec = str(s.codec_name) ?? ''
-      return { index: i, codec, language: lang(s), title: str(tags(s).title) ?? null, text: TEXT_SUBS.has(codec) }
-    }),
-  }
-}
+/** Containers the browser's demuxer reads and audio it can decode (WebCodecs or the AC-3/DTS extensions) for a browser remux. */
+const BROWSER_CONTAINERS = new Set(['mp4', 'mov', 'matroska', 'webm', 'mpegts'])
+const BROWSER_AUDIO = new Set(['aac', 'ac3', 'eac3', 'dts', 'opus', 'mp3', 'flac', 'vorbis', 'pcm', 'pcm_mulaw', 'pcm_alaw'])
 
 export interface ToolOptions {
-  ffprobePath?: string
   ffmpegPath?: string
 }
 
 const lastLine = (text: string): string => text.trim().split('\n').pop() ?? ''
-
-/**
- * The video keyframe at or just before `start` seconds: input seeking can only begin copied video there.
- * One indexed read (`-skip_frame nokey` emits that keyframe first). Falls back to `start` when the file has no index.
- */
-export function keyframeBefore (input: string, start: number, { ffprobePath = 'ffprobe' }: ToolOptions = {}): Promise<number> {
-  if (!(start > 0)) return Promise.resolve(0)
-  const args = ['-v', 'error', '-select_streams', 'v:0', '-skip_frame', 'nokey', '-show_entries', 'frame=pts_time', '-read_intervals', `${start}%+#1`, '-of', 'csv=p=0', input]
-  return new Promise(resolve => {
-    execFile(ffprobePath, args, { timeout: 20_000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
-      const pts = Number((stdout ?? '').split(/[,\s]/, 1)[0])
-      resolve(!err && pts >= 0 && pts <= start + 0.001 ? pts : start)
-    })
-  })
-}
-
-/** ffprobe summary of a file or URL (an HTTP input is read with Range requests). */
-export function probe (input: string, fileName: string, { ffprobePath = 'ffprobe' }: ToolOptions = {}): Promise<MediaInfo> {
-  const args = ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', input]
-  return new Promise((resolve, reject) => {
-    execFile(ffprobePath, args, { timeout: 120_000, maxBuffer: 16 * 1024 ** 2 }, (err, stdout, stderr) => {
-      if (err) return reject(new MediaToolError(`ffprobe failed: ${err.killed ? 'timed out waiting for data' : lastLine(stderr)}`))
-      let data: unknown
-      try { data = JSON.parse(stdout) } catch { return reject(new MediaToolError('ffprobe returned invalid JSON')) }
-      try { resolve(parseProbe(data, fileName)) } catch (parseError) { reject(parseError instanceof Error ? parseError : new MediaToolError(String(parseError))) }
-    })
-  })
-}
 
 /** What decide() reads from a MediaInfo. */
 export interface DecideInput {
@@ -125,7 +50,7 @@ export interface DecideInput {
   audio: ReadonlyArray<Pick<AudioTrack, 'codec'>>
 }
 
-/** Picks direct play, remux or transcode for this browser and `audio` track. */
+/** Picks direct play, a browser or server remux, or a transcode for this browser and `audio` track. */
 export function decide (info: DecideInput, caps: Partial<BrowserCapabilities>, policy: PlaybackPolicy, audio = 0): Decision {
   const v = info.video
   if (!v) throw new UnplayableError('No video stream found in this file.')
@@ -149,13 +74,17 @@ export function decide (info: DecideInput, caps: Partial<BrowserCapabilities>, p
   }
   if (videoOk) {
     const why = [!containerOk && `repackaging ${info.container.split(',')[0]}`, a && a.codec !== 'aac' && `converting ${a.codec} audio to AAC`]
-    return { mode: 'remux', reason: `copying ${vName} video; ${why.filter(Boolean).join(', ') || 'switching audio track'}` }
+    const work = `copying ${vName} video; ${why.filter(Boolean).join(', ') || 'switching audio track'}`
+    if (policy.serverConversion) return { mode: 'remux', reason: work }
+    if (BROWSER_CONTAINERS.has(info.container) && (!a || BROWSER_AUDIO.has(a.codec))) return { mode: 'browser-remux', reason: `${work}, in the browser` }
+    throw new UnplayableError(`This file is ${vName}${a ? ` with ${a.codec} audio` : ''} in ${info.container}. This browser can't repackage it and this server has no ffmpeg. Open it in an external player (VLC, IINA, Infuse…).`)
   }
-  if (policy.allowTranscode) {
+  if (policy.allowTranscode && policy.serverConversion) {
     return { mode: 'transcode', reason: `this browser can't play ${vName}; re-encoding to H.264 ${policy.transcodeMaxHeight}p (slow on this server)` }
   }
   const safari = vKey === 'hevc' && v.bitDepth <= 10 ? ', open it in Safari,' : ''
-  throw new UnplayableError(`This file is ${vName}. This browser can't play it and this server is too slow to convert it. Open it in an external player (VLC, IINA, Infuse…)${safari} or choose an x264 release.`)
+  const server = policy.serverConversion ? 'this server is too slow to convert it' : 'this server has no ffmpeg to convert it'
+  throw new UnplayableError(`This file is ${vName}. This browser can't play it and ${server}. Open it in an external player (VLC, IINA, Infuse…)${safari} or choose an x264 release.`)
 }
 
 export interface FfmpegArgsOptions {
@@ -294,11 +223,18 @@ export function subtitleToVtt (input: string, track: number | null, { ffmpegPath
 
 /** Settings read per job, so a saved change applies to the next one. */
 export interface MediaLive {
-  ffprobePath: string
   ffmpegPath: string
   vaapiDevice?: string
   maxProbes: number
   maxSubtitleJobs: number
+}
+
+/** What the configured ffmpeg can do; `version` is null when it doesn't run (the lite image). */
+export interface FfmpegStatus {
+  path: string
+  version: string | null
+  /** Verified H.264 encoders for transcoding. */
+  encoders: string[]
 }
 
 export interface MediaTools {
@@ -306,12 +242,16 @@ export interface MediaTools {
   probe: (input: string, fileName: string, context?: OperationContext) => Promise<MediaInfo>
   /** subtitleToVtt(), bounded. */
   subtitleToVtt: (input: string, track: number | null) => Promise<string>
-  /** Detected hardware encoders for the current ffmpeg path (cached). */
+  /** The last ffmpeg detection for the current path; null until it has run. */
+  ffmpeg: () => FfmpegStatus | null
+  /** Whether the current ffmpeg runs, as far as the last detection knows. */
+  serverConversion: () => boolean
+  /** Detected encoders for the current ffmpeg path. */
   detectedEncoders: () => string[]
   /** The video keyframe at or just before `start`; `start` itself when the file can't be indexed. */
   keyframeBefore: (input: string, start: number) => Promise<number>
-  /** Re-run encoder detection. */
-  refreshEncoders: () => Promise<string[]>
+  /** Re-run ffmpeg and encoder detection. Never throws. */
+  refreshFfmpeg: () => Promise<FfmpegStatus>
   /** Busy slots and cached probe results, for the Debug page. */
   stats: () => { probes: { used: number, limit: number }, subtitles: { used: number, limit: number }, probeCache: { used: number, limit: number } }
 }
@@ -319,20 +259,31 @@ export interface MediaTools {
 /** Probe results kept, most recently used first; a file's streams don't change, so only the count is bounded. */
 export const PROBE_CACHE_LIMIT = 256
 
+/** The version ffmpeg reports, or null when it can't run. */
+export function ffmpegVersion (ffmpegPath: string): Promise<string | null> {
+  return new Promise(resolve => {
+    execFile(ffmpegPath, ['-version'], { timeout: 10_000 }, (err, stdout) => {
+      resolve(err ? null : (/version (n?[\d.]+|\S+)/.exec(stdout)?.[1] ?? 'unknown').replace(/^n/, ''))
+    })
+  })
+}
+
 /** Probing and subtitle conversion with process limits; overload fails fast with PlaybackBusyError. */
 export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, logger = noopLogger, metrics = noopMetrics }: { live: () => MediaLive, probeCacheLimit?: number, logger?: Logger, metrics?: Metrics }): MediaTools {
   const runProbe = createLimiter(() => live().maxProbes, () => { metrics.reject('probe', 'capacity'); logger.warn('resource.rejected', { resource: 'probe', reason: 'capacity' }); return new PlaybackBusyError('Media probing is busy. Try again shortly.') })
   const runSubtitle = createLimiter(() => live().maxSubtitleJobs, () => { metrics.reject('subtitle', 'capacity'); logger.warn('resource.rejected', { resource: 'subtitle', reason: 'capacity' }); return new PlaybackBusyError('Subtitle conversion is busy. Try again shortly.') })
   const probes = new Map<string, Promise<MediaInfo>>()
   const ids = new Map<string, string>()
-  let encoderCache: { ffmpegPath: string, encoders: string[] } | null = null
-  const refreshEncoders = async (): Promise<string[]> => {
+  let ffmpegCache: FfmpegStatus | null = null
+  const refreshFfmpeg = async (): Promise<FfmpegStatus> => {
     const { ffmpegPath, vaapiDevice } = live()
-    const encoders = await detectTranscodeEncoders(ffmpegPath, { logger, ...(vaapiDevice ? { vaapiDevice } : {}) })
-    encoderCache = { ffmpegPath, encoders }
-    return encoders
+    const version = await ffmpegVersion(ffmpegPath)
+    const encoders = version ? await detectTranscodeEncoders(ffmpegPath, { logger, ...(vaapiDevice ? { vaapiDevice } : {}) }) : []
+    ffmpegCache = { path: ffmpegPath, version, encoders }
+    logger[version ? 'info' : 'warn']('ffmpeg.checked', { path: ffmpegPath, version, encoders }, version ? undefined : 'ffmpeg does not run: direct streaming, browser remux and external players only')
+    return ffmpegCache
   }
-  const detectedEncoders = (): string[] => (encoderCache && encoderCache.ffmpegPath === live().ffmpegPath) ? encoderCache.encoders : []
+  const ffmpeg = (): FfmpegStatus | null => ffmpegCache && ffmpegCache.path === live().ffmpegPath ? ffmpegCache : null
   return {
     probe (input, fileName, context) {
       let p = probes.get(input)
@@ -342,7 +293,7 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
       } else {
         const jobId = randomUUID()
         ids.set(input, jobId)
-        p = observeJob(logger, metrics, 'probe', async () => await runProbe(() => probe(input, fileName, live())), { jobId }, context)
+        p = observeJob(logger, metrics, 'probe', async () => await runProbe(() => probe(input, fileName)), { jobId }, context)
         const job = p
         job.catch(() => { if (probes.get(input) === job) { probes.delete(input); ids.delete(input) } })
       }
@@ -354,9 +305,12 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
       return p
     },
     subtitleToVtt: (input, track) => observeJob(logger, metrics, 'subtitle', async () => await runSubtitle(() => subtitleToVtt(input, track, live()))),
-    detectedEncoders,
-    refreshEncoders,
-    keyframeBefore: (input, start) => keyframeBefore(input, start, { ffprobePath: live().ffprobePath }),
+    ffmpeg,
+    // Until the first detection finishes, assume ffmpeg is there: the full image is the common case
+    serverConversion: () => ffmpeg()?.version !== null,
+    detectedEncoders: () => ffmpeg()?.encoders ?? [],
+    refreshFfmpeg,
+    keyframeBefore,
     stats: () => ({ probes: runProbe.stats(), subtitles: runSubtitle.stats(), probeCache: { used: probes.size, limit: probeCacheLimit } }),
   }
 }

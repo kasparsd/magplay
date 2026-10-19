@@ -2,7 +2,6 @@
 // listen() binds the port and close() releases everything. Nothing happens at import time.
 import http from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
-import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
@@ -46,7 +45,7 @@ export interface App {
   hls: HlsSessions
   /** Binds the HTTP port (the config's when omitted) and resolves with the bound port. */
   listen: (port?: number) => Promise<number>
-  /** Startup checks: a warning when there are no sources, and whether ffmpeg and ffprobe run. Explore's counts start loading. */
+  /** Startup checks: a warning when there are no sources, and whether ffmpeg runs. Explore's counts start loading. */
   startupChecks: () => void
   /** Stops accepting requests, ends open ones (streams included), stops every ffmpeg and closes the torrent engine. */
   close: () => Promise<void>
@@ -81,10 +80,9 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
     metrics,
     live: () => {
       const c = current()
-      return { ffprobePath: c.ffprobePath, ffmpegPath: c.ffmpegPath, vaapiDevice: c.vaapiDevice, maxProbes: c.maxProbes, maxSubtitleJobs: c.maxSubtitleJobs }
+      return { ffmpegPath: c.ffmpegPath, vaapiDevice: c.vaapiDevice, maxProbes: c.maxProbes, maxSubtitleJobs: c.maxSubtitleJobs }
     },
   })
-  media.refreshEncoders().then(e => { detectedEncoders = e }).catch(() => {})
   const engine = createTorrentEngine({
     dir: path.join(boot.cacheDir, 'torrents'),
     logger: log.child({ component: 'torrent' }),
@@ -106,13 +104,16 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
     },
   })
 
-  /** ffmpeg and ffprobe read torrent files through /raw on the loopback address. */
+  /** The probe and ffmpeg read torrent files through /raw on the loopback address. */
   const input = (ih: string, idx: number): string => `http://127.0.0.1:${port}/raw/${ih}/${idx}`
-  const play = createPlay({ engine, media, tabs, input, logger: log.child({ component: 'playback' }), metrics, policy: () => ({ allowTranscode: current().allowTranscode, transcodeMaxHeight: current().transcodeMaxHeight }) })
+  const play = createPlay({ engine, media, tabs, input, logger: log.child({ component: 'playback' }), metrics, policy: () => ({ serverConversion: media.serverConversion(), allowTranscode: current().allowTranscode, transcodeMaxHeight: current().transcodeMaxHeight }) })
   const subtitles = createSubtitles({ engine, media, input })
   const search = createSearchService({ sources: () => current().sources, timeoutMs: () => current().searchTimeoutMs, engine, logger: log.child({ component: 'search' }), metrics })
   const explore = createExplore({ url: () => current().bitmagnetUrl, timeoutMs: () => current().searchTimeoutMs, showAdult: () => current().showAdult, logger: log.child({ component: 'explore' }), metrics })
   const status = createStatus({ logger: log.child({ component: 'status' }) })
+  // Whether ffmpeg runs decides server-side conversion; the full image has it, the lite image doesn't
+  const checkFfmpeg = (): Promise<void> => media.refreshFfmpeg().then(f => { detectedEncoders = f.encoders; status.invalidate('ffmpeg') })
+  const ffmpegChecked = checkFfmpeg()
   const caches = (): DebugResource[] => {
     const subs = subtitles.stats()
     return [
@@ -128,7 +129,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   const unsubscribe = config.onChange((_config, changed) => {
     configurationRevision++
     log.info('settings.changed', { changed, configurationRevision })
-    if (changed.includes('ffmpegPath') || changed.includes('transcode.encoder')) media.refreshEncoders().then(e => { detectedEncoders = e }).catch(() => {})
+    if (changed.includes('ffmpegPath') || changed.includes('transcode.encoder')) checkFfmpeg().catch(() => {})
     if (changed.includes('sources') || changed.includes('search.timeoutS')) search.rebuild()
     if (changed.includes('sources') || changed.includes('explore.bitmagnetUrl')) explore.rebuild()
     checks.settingsChanged(changed)
@@ -261,6 +262,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
     },
     startupChecks () {
       startupWarnings(current(), log)
+      ffmpegChecked.catch(() => {})
       explore.warm()
     },
     close () {
@@ -282,14 +284,9 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   }
 }
 
-/** Fail loudly at startup, not mid-playback: check the external binaries, and note missing indexers. */
+/** Note missing indexers at startup, not on the first search. (ffmpeg is checked by the media tools.) */
 function startupWarnings (c: Config, logger: Logger): void {
   if (!c.sources.length) {
     logger.warn('server.sources.missing', {}, 'No sources configured. Add one in Settings → Sources.')
-  }
-  for (const [bin, varName] of [[c.ffprobePath, 'FFPROBE_PATH'], [c.ffmpegPath, 'FFMPEG_PATH']] as const) {
-    execFile(bin, ['-version'], err => {
-      logger[err ? 'warn' : 'info']('server.tool.checked', { tool: varName, outcome: err ? 'failure' : 'success' })
-    })
   }
 }

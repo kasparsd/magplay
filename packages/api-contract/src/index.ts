@@ -54,7 +54,7 @@ export interface SubtitleTrack {
 export interface ProbeResult {
   /** Seconds, or unknown. */
   duration: number | null
-  /** ffprobe format names, e.g. "matroska,webm". */
+  /** Container id: mp4, mov, matroska, webm, mpegts, or the demuxer's lower-case name. */
   container: string
   isWebm: boolean
   video?: VideoTrack
@@ -66,7 +66,8 @@ export interface ProbeResult {
 
 /**
  * POST /api/play. `start` is an absolute media timestamp in seconds; the server
- * chooses direct/remux/transcode from the probe and reported browser capabilities.
+ * chooses direct, browser-remux, remux or transcode from the probe, the reported
+ * browser capabilities and whether it has ffmpeg.
  */
 export interface PlayRequest {
   /** Torrent infohash. */
@@ -91,6 +92,25 @@ export interface DirectDecision {
   url: string
   /** video.currentTime already refers to the whole media file. */
   offset: 0
+  audio?: never
+  session?: never
+  subtitles?: never
+}
+
+/**
+ * The browser reads /raw itself and repackages the file (copying video, converting audio to AAC) for Media Source
+ * Extensions. No server session; the timeline is the whole file, like direct playback. Embedded subtitles are not
+ * available in this mode; external subtitle files are.
+ */
+export interface BrowserRemuxDecision {
+  mode: 'browser-remux'
+  reason: string
+  duration: number | null
+  /** Same-origin /raw URL. */
+  url: string
+  offset: 0
+  /** The audio track to include. */
+  audio: number
   session?: never
   subtitles?: never
 }
@@ -113,10 +133,11 @@ export interface HlsDecision {
   session: string
   /** Embedded text-track indexes and session URLs. */
   subtitles: Array<{ index: number, url: string }>
+  audio?: never
 }
 
 /** POST /api/play success. Client-only `complete` is not part of this response. */
-export type PlaybackDecision = DirectDecision | HlsDecision
+export type PlaybackDecision = DirectDecision | BrowserRemuxDecision | HlsDecision
 
 /** ffmpeg session snapshot included by GET /api/torrents/:ih/status. */
 export interface SessionStats {

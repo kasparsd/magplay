@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@magplay/api-contract": "*",
-    "@magplay/observability": "*"
+    "@magplay/observability": "*",
+    "mediabunny": "1.61.6"
   }
 }

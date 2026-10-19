@@ -6,7 +6,7 @@ These limits protect a single-user deployment from accidental overload through t
 | --- | --- | --- |
 | `MAX_HLS_SESSIONS` | `2` | Retained HLS sessions, including completed output until cleanup. Replacing the same tab's session does not require another slot. |
 | `MAX_TORRENT_LOADS` | `4` | Concurrent distinct torrent initialization jobs. Requests for one hash still share one job. |
-| `MAX_PROBES` | `2` | Concurrent ffprobe jobs; requests for the same cached/pending probe share its result. |
+| `MAX_PROBES` | `2` | Concurrent probes (header reads in Node); requests for the same cached/pending probe share its result. |
 | `MAX_SUBTITLE_JOBS` | `1` | Concurrent standalone subtitle conversions. HLS subtitles belong to their existing HLS process. |
 | `HLS_MAX_GB` | `8` | Total soft budget for retained HLS output, separate from the torrent cache budget. |
 | `MIN_FREE_GB` | `0.25` | Filesystem free-space reserve required to start/continue HLS work. |

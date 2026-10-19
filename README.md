@@ -23,8 +23,10 @@ For sample media to try it with, Blender’s [Open Movies](https://studio.blende
   by infohash.
 - Opens a torrent and lists its files; nothing is downloaded until a file is
   streamed.
-- Plays in the browser (direct / remux / transcode) or hands a `/raw` link to
-  an external player that decodes everything on the client.
+- Plays in the browser (direct / browser remux / remux / transcode) or hands
+  a `/raw` link to an external player that decodes everything on the client.
+- Runs without ffmpeg (the `-lite` image) on small hosts such as a router's
+  container host: the browser repackages MKV and converts AC3/DTS audio itself.
 - Downloads individual files or whole torrents as a tar archive, with resume.
 - Keeps a cache with LRU eviction; torrents in use are never evicted.
 - No login by design; only expose on a private network (WireGuard).
@@ -37,8 +39,9 @@ browser ── /api/search ──────────────► sources
 VLC / IINA / Infuse ── /raw/… ───────┘
 ```
 
-`/raw` is the single source of bytes. The browser uses it for direct play, ffmpeg
-and ffprobe read it as their input, and external players open it directly.
+`/raw` is the single source of bytes. The browser uses it for direct play and
+browser remux, the probe and ffmpeg read it as their input, and external players
+open it directly.
 WebTorrent fetches the pieces under each open stream first, so seeking only
 downloads what's needed.
 
@@ -96,6 +99,15 @@ GitHub release `vX.Y.Z` tags the image `X.Y.Z`, `X.Y` and `X`; a prerelease
 (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to `main`
 moves the `edge` tag, and older edge builds are deleted. There is no `latest`
 tag, so pin a release or follow `edge` on purpose.
+
+Every tag also exists with a `-lite` suffix (`edge-lite`, `X.Y.Z-lite`): the
+same server without ffmpeg, about a third smaller. It plays MP4/WebM directly, repackages MKV and converts
+AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files itself,
+and hands everything else to an external player. Nothing is transcoded, and
+subtitles embedded in MKV need the full image. Meant for small hosts such as
+MikroTik RouterOS containers, where ffmpeg would not fit or run well. Build it
+from a checkout with `docker build --target lite .`; the full image is the
+default target.
 
 ## First search and playback
 
@@ -206,7 +218,7 @@ env vars are listed first and locked; sources added in Settings follow them.
 | `TRANSCODE_MAX_HEIGHT` | `720` | Downscale target when transcoding |
 | `TRANSCODE_ENCODER` | `auto` | Encoder: `auto`, `libx264`, or `h264_nvenc`/`h264_vaapi`/`h264_videotoolbox`/`h264_qsv`. Hardware choices fall back to libx264 unless a startup probe succeeds. |
 | `VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI render device |
-| `FFMPEG_PATH`, `FFPROBE_PATH` | `ffmpeg`, `ffprobe` | Paths to the binaries when they aren't on `PATH` |
+| `FFMPEG_PATH` | `ffmpeg` | Path to the binary when it isn't on `PATH`. When ffmpeg doesn't run, the server starts anyway in lite mode (a status warning), without remux, transcode or embedded subtitles. |
 
 Local safeguards reject excess jobs with a retryable 503 rather than an unbounded
 queue. See [resource limits](docs/resources.md), [player lifetime handling](docs/lifecycle.md), and [per-file Resume/Start over behavior](docs/progress.md). HLS disk limits are soft; use a filesystem/container quota for a hard bound.
@@ -235,18 +247,24 @@ view while watching, and **Hide flow** closes it.
 
 Each video can be played these ways:
 
-- **In the browser** (▶). magplay probes the file and picks a mode based on
-  what this browser says it can decode (`MediaSource.isTypeSupported`, not the
-  user agent):
+- **In the browser** (▶). magplay reads the file's headers in Node (no
+  ffprobe) and picks a mode based on what this browser says it can decode
+  (`MediaSource.isTypeSupported`, not the user agent):
   1. **direct**: MP4/WebM with codecs the browser supports. The browser reads
      `/raw` itself, and the server does no work.
   2. **remux**: the video codec is supported but the container (MKV…) or the
      audio (AC3, E-AC3, DTS, TrueHD…) isn't. ffmpeg copies the video into HLS
      (fMP4) and converts the audio to AAC stereo, which takes very little CPU.
-  3. **transcode**: only with `ALLOW_VIDEO_TRANSCODE=true`. libx264 at
+  3. **browser remux**: the same, on a server without ffmpeg. The browser
+     reads `/raw`, copies the video and converts the audio to AAC itself
+     ([Mediabunny](https://mediabunny.dev/) with WebCodecs and small WASM
+     decoders for AC3/DTS), a minute ahead of playback. The timeline is the
+     whole file, so seeking and switching audio need no server round trip.
+  4. **transcode**: only with `ALLOW_VIDEO_TRANSCODE=true` and ffmpeg. libx264 at
      `TRANSCODE_MAX_HEIGHT`. This is too slow for 1080p on the server CPU. Hardware H.264 encoders are used when available, otherwise CPU.
-  4. Otherwise it **refuses** before streaming and explains why (for example
-     HEVC in Firefox).
+  5. Otherwise it **refuses** before streaming and explains why (for example
+     HEVC in Firefox, or a file that needs converting on a server without
+     ffmpeg).
 - **In an external player** (the ⋯ menu, or **Open in** in the player). These
   links open the same `/raw` URL in a player that decodes everything on the
   client: HEVC, 10-bit, AV1, DTS, TrueHD and image subtitles (PGS/VobSub),
@@ -441,8 +459,9 @@ npm run test:peers           # Real loopback TCP transfer/failure cases
 npm run test:all             # Fast + peer + browser suites
 ```
 
-Playback tests need `ffmpeg` and `ffprobe` on `PATH`, with libx264, AAC and AC3
-encoders. See [tests/e2e/README.md](tests/e2e/README.md) for coverage,
+Playback tests need `ffmpeg` on `PATH`, with libx264, AAC and AC3 encoders
+(the fixtures are generated with it; one e2e file then runs the server with
+`FFMPEG_PATH` pointing nowhere to cover the lite image). See [tests/e2e/README.md](tests/e2e/README.md) for coverage,
 debugging and limitations.
 
 Node 24+, ES modules, npm workspaces. The server and packages use strict

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SETTINGS } from '@magplay/api-contract'
+import { SERVER_CONVERSION_KEY, SETTINGS } from '@magplay/api-contract'
 import { presentSetting } from './setting-rules.ts'
 
 test('source presentation follows schema rules without changing values or definitions', () => {
@@ -23,12 +23,14 @@ test('page setting dependencies use the same resolver and require the matching v
   assert.equal(presentSetting(def, () => false).disabled, true)
   assert.equal(presentSetting(def, () => true).disabled, undefined)
   assert.equal(presentSetting(def, () => 'false').disabled, undefined)
-  assert.match(presentSetting(def, () => false).help!, /Turn on video conversion/)
+  assert.match(presentSetting(def, key => key === SERVER_CONVERSION_KEY).help!, /Turn on video conversion/)
   assert.equal(presentSetting(def, () => true).help, def.help)
+  // A server without ffmpeg disables conversion settings whatever their values
+  assert.match(presentSetting(def, key => key !== SERVER_CONVERSION_KEY).help!, /no ffmpeg/)
 })
 
 test('schema rule dependencies name existing settings or sibling fields', () => {
-  const settingKeys = new Set(SETTINGS.map(d => d.key))
+  const settingKeys = new Set([...SETTINGS.map(d => d.key), SERVER_CONVERSION_KEY])
   for (const def of SETTINGS) {
     for (const rule of def.rules ?? []) assert.ok(settingKeys.has(rule.when.key))
     if (def.type !== 'list') continue

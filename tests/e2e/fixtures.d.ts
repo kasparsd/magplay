@@ -3,9 +3,13 @@ import type { PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, P
 
 interface AppFixture {
   origin: string
+  ih: string
+  files: Record<string, number>
   cache: string
   torrent: string
+  logs: () => string
+  player: (name: string) => string
 }
 
-export const test: TestType<PlaywrightTestArgs & PlaywrightTestOptions, PlaywrightWorkerArgs & PlaywrightWorkerOptions & { app: AppFixture }>
+export const test: TestType<PlaywrightTestArgs & PlaywrightTestOptions, PlaywrightWorkerArgs & PlaywrightWorkerOptions & { app: AppFixture, serverEnv: Record<string, string> }>
 export { expect } from '@playwright/test'

@@ -16,7 +16,7 @@ export interface PlayOptions {
   media: MediaTools
   tabs: Tabs
   policy: () => PlaybackPolicy
-  /** The /raw loopback URL ffmpeg and ffprobe read a torrent file from. */
+  /** The /raw loopback URL the probe and ffmpeg read a torrent file from. */
   input: (ih: string, idx: number) => string
 }
 
@@ -119,7 +119,8 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         }
         // Non-faststart MP4s can't begin decoding until their trailing `moov` atom arrives, which on a
         // torrent may mean waiting for the whole file. Remux instead so playback starts from the head.
-        if (decision.mode === 'direct' && !info.isWebm && /mp4|mov/.test(info.container)) {
+        // (The browser's demuxer has the same need for the index, so without ffmpeg the file stays direct.)
+        if (decision.mode === 'direct' && !info.isWebm && /mp4|mov/.test(info.container) && policy().serverConversion) {
           const fast = await isFaststart(file, new AbortController().signal)
           if (!fast) {
             decision = { mode: 'remux' as const, reason: 'MP4 index is at the end of the file; remuxing so playback can start before the file is fully downloaded' }
@@ -131,6 +132,10 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         if (decision.mode === 'direct') {
           tabs.stop(tab)
           return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, offset: 0 }
+        }
+        if (decision.mode === 'browser-remux') {
+          tabs.stop(tab)
+          return { mode: 'browser-remux', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, offset: 0, audio }
         }
         // Copied video begins at the keyframe before the request. Report that time as the session origin so the
         // clock and subtitles match the picture; the player seeks the remainder inside the session.

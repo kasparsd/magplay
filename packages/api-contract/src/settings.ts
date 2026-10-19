@@ -26,8 +26,13 @@ export interface SettingPresentation {
 }
 
 export interface SettingRule extends SettingPresentation {
+  /** A setting key, or SERVER_CONVERSION_KEY for whether the server has ffmpeg (from GET /api/debug). */
   when: { key: string, equals: string | number | boolean }
 }
+
+/** Not a setting: rules reading it see whether the server converts media (has ffmpeg). */
+export const SERVER_CONVERSION_KEY = 'server.conversion'
+const NO_FFMPEG: SettingRule = { when: { key: SERVER_CONVERSION_KEY, equals: false }, disabled: true, help: 'This server has no ffmpeg, so video is never converted here.' }
 
 interface Common {
   /** Dotted, stable id: 'cache.maxGb'. Also the key in settings.json and localStorage. */
@@ -198,7 +203,7 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Stop waiting for a source after this many seconds.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
 
   // Playback, server
-  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Convert unsupported video', help: 'Convert unsupported video formats on the server. Uses more CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false },
+  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Convert unsupported video', help: 'Convert unsupported video formats on the server. Uses more CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false, rules: [NO_FFMPEG] },
   {
     key: 'transcode.maxHeight',
     section: 'playback',
@@ -206,7 +211,7 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'segmented',
     label: 'Conversion resolution',
     help: 'Maximum resolution for converted video. Higher resolutions use more CPU.',
-    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to change the resolution.' }],
+    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to change the resolution.' }, NO_FFMPEG],
     env: ['TRANSCODE_MAX_HEIGHT'],
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
@@ -218,7 +223,7 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'segmented',
     label: 'Conversion encoder',
     help: 'Uses the CPU unless a supported GPU encoder is available.',
-    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to choose an encoder.' }],
+    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to choose an encoder.' }, NO_FFMPEG],
     env: ['TRANSCODE_ENCODER'],
     default: 'auto',
     options: [

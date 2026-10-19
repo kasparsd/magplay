@@ -25,7 +25,7 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "build": "esbuild 'apps/client/src/*.js' 'apps/client/src/*.ts' public/style.css --bundle --minify --format=esm --sourcemap --entry-names=[name]-[hash] --outdir=dist/client/assets --metafile=dist/client/meta.json",
+    "build": "esbuild 'apps/client/src/*.js' 'apps/client/src/*.ts' public/style.css --bundle --minify --format=esm --splitting --sourcemap --entry-names=[name]-[hash] --outdir=dist/client/assets --metafile=dist/client/meta.json",
     "dev": "npm run build -- --watch=forever & node --env-file-if-exists=.env --watch apps/server/src/main.ts",
     "release": "node packages/release/src/cli.ts"
   },

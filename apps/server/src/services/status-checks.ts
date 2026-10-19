@@ -1,5 +1,4 @@
 // The server's status checks (sources, Explore, ffmpeg, disk) and the Debug page's numbers.
-import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { createBitmagnetBrowser, createSource } from '@magplay/indexers'
 import type { SourceConfig } from '@magplay/indexers'
@@ -16,15 +15,6 @@ const formatGb = (n: number): string => `${(n / GB).toFixed(n < 10 * GB ? 2 : 1)
 const sourcesAction: StatusAction = { label: 'Open Sources', href: '/settings#sources' }
 const debugAction: StatusAction = { label: 'Open Debug', href: '/settings#debug' }
 const storageAction: StatusAction = { label: 'Open Storage', href: '/settings#storage' }
-
-/** The version an ffmpeg-family binary reports, or null when it can't run. */
-export function binaryVersion (bin: string): Promise<string | null> {
-  return new Promise(resolve => {
-    execFile(bin, ['-version'], { timeout: 10_000 }, (err, stdout) => {
-      resolve(err ? null : (/version (n?[\d.]+|\S+)/.exec(stdout)?.[1] ?? 'unknown').replace(/^n/, ''))
-    })
-  })
-}
 
 /** One source's health with the given config (saved, or unsaved values from the Test button). */
 export async function checkSource (config: SourceConfig, signal: AbortSignal = AbortSignal.timeout(10_000)): Promise<CheckResult> {
@@ -65,7 +55,6 @@ export interface StatusChecks {
 /** Registers every check on `status`. */
 export function createStatusChecks ({ status, config, engine, media, hls, logs, loggingStatus = () => ({ level: 'info', dropped: 0 }), version, caches = () => [] }: StatusChecksOptions): StatusChecks {
   const started = Date.now()
-  const versions: { ffmpeg: string | null, ffprobe: string | null } = { ffmpeg: null, ffprobe: null }
 
   function registerSourceChecks (): void {
     status.removeChecks(id => id === 'sources' || id.startsWith('source:'))
@@ -96,18 +85,17 @@ export function createStatusChecks ({ status, config, engine, media, hls, logs, 
     },
   })
 
+  // Without ffmpeg (the lite image) the server still streams files as they are and the browser repackages what it
+  // can; nothing is re-encoded. That is a mode, not a fault, so it warns rather than fails.
   status.registerCheck({
     id: 'ffmpeg',
     label: 'ffmpeg',
     ttl: Infinity,
     required: true,
     async run () {
-      const { ffmpegPath, ffprobePath } = config()
-      const [ffmpeg, ffprobe] = await Promise.all([binaryVersion(ffmpegPath), binaryVersion(ffprobePath)])
-      Object.assign(versions, { ffmpeg, ffprobe })
-      const missing = [!ffmpeg && ffmpegPath, !ffprobe && ffprobePath].filter(Boolean)
-      if (missing.length) return { level: 'error', value: 'Missing', message: `Playback needs ffmpeg and ffprobe; "${missing.join('", "')}" didn’t run. Install them, or set FFMPEG_PATH and FFPROBE_PATH.`, action: debugAction }
-      return { level: 'ok', value: ffmpeg === ffprobe ? ffmpeg ?? '' : `${ffmpeg} / ${ffprobe}` }
+      const ffmpeg = media.ffmpeg() ?? await media.refreshFfmpeg()
+      if (!ffmpeg.version) return { level: 'warn', value: 'Not installed', message: `ffmpeg didn’t run ("${ffmpeg.path}"). Files play directly or are repackaged in the browser; video that needs converting opens in an external player. Install ffmpeg or set FFMPEG_PATH for server-side conversion.`, action: debugAction }
+      return { level: 'ok', value: ffmpeg.version }
     },
   })
 
@@ -159,6 +147,7 @@ export function createStatusChecks ({ status, config, engine, media, hls, logs, 
       if (changed.includes('sources')) registerSourceChecks()
       if (changed.includes('explore.bitmagnetUrl')) status.invalidate('explore')
       if (changed.some(key => key.startsWith('cache.'))) status.invalidate('disk')
+      if (changed.includes('ffmpegPath')) status.invalidate('ffmpeg')
     },
     async debugInfo () {
       const sessions = hls.summary()
@@ -169,8 +158,8 @@ export function createStatusChecks ({ status, config, engine, media, hls, logs, 
         version,
         node: process.versions.node,
         uptimeS: Math.round((Date.now() - started) / 1000),
-        ffmpeg: versions.ffmpeg,
-        ffprobe: versions.ffprobe,
+        ffmpeg: media.ffmpeg()?.version ?? null,
+        serverConversion: media.serverConversion(),
         encoders: media.detectedEncoders(),
         transcodeEncoder,
         resources: [

@@ -68,11 +68,40 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: full
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Attestations are stored as extra untagged package versions.
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The lite image (no ffmpeg) for small hosts: the same tags with a -lite suffix (edge-lite, 1.2.3-lite).
+      # No 32-bit ARM: node:24-alpine has no linux/arm/v7 manifest.
+      - name: Generate lite image tags
+        id: meta-lite
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=false
+            suffix=-lite
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=edge
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: lite
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-lite.outputs.tags }}
+          labels: ${{ steps.meta-lite.outputs.labels }}
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max

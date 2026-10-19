@@ -12,8 +12,8 @@ export interface RangeList {
 }
 
 export interface SeekContext {
-  mode: 'direct' | 'remux' | 'transcode'
-  /** Absolute media time where the session starts; 0 in direct mode. */
+  mode: 'direct' | 'browser-remux' | 'remux' | 'transcode'
+  /** Absolute media time where the session starts; 0 in direct and browser-remux modes. */
   offset: number
   /** Whole media duration in seconds. */
   duration: number
@@ -28,7 +28,7 @@ export interface SeekContext {
 /**
  * - `buffered`: the browser has it; the jump is instant.
  * - `seekable`: the browser can land there in this session (direct mode: the bytes are on the server).
- * - `restart`: outside what the browser has, so ffmpeg restarts there (HLS modes only).
+ * - `restart`: outside what the browser has, so the conversion restarts there (browser-remux and HLS modes).
  * - `missing`: not downloaded yet; playback waits for peers.
  */
 export type SeekOutcome = 'buffered' | 'seekable' | 'restart' | 'missing'
@@ -62,6 +62,7 @@ export function seekOutcome (t: number, ctx: SeekContext): SeekOutcome {
   if (inside(rel, ctx.buffered)) return 'buffered'
   const present = onServer(ctx.duration > 0 ? t / ctx.duration : 0, ctx.ranges)
   if (ctx.mode === 'direct') return present ? 'seekable' : 'missing'
+  if (ctx.mode === 'browser-remux') return present ? 'restart' : 'missing'
   if (canSeekLocally(rel, ctx.seekable)) return 'seekable'
   return present ? 'restart' : 'missing'
 }
