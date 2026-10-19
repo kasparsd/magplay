@@ -28,6 +28,53 @@ export interface Play {
   preparation: (ih: string, idx: number) => PlaybackPreparation | null
 }
 
+
+/** Whether an MP4 stores its `moov` (index) box before `mdat` (media data) — a "faststart"/web-optimized file.
+ *  Files without it can't start playing until the trailing metadata arrives, which on a torrent may take
+ *  the whole download. Reads only the leading bytes and never throws. */
+async function isFaststart (file: { read?: (start: number, end: number, signal: AbortSignal) => AsyncIterable<Uint8Array> }, signal: AbortSignal): Promise<boolean> {
+  if (typeof file.read !== 'function') return true
+  const LIMIT = 8 * 1024 * 1024
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for await (const c of file.read(0, LIMIT - 1, signal)) {
+      chunks.push(c)
+      total += c.length
+      if (total >= LIMIT) break
+    }
+  } catch {
+    return true
+  }
+  const buf = new Uint8Array(Math.min(total, LIMIT))
+  let off = 0
+  for (const c of chunks) {
+    const n = Math.min(c.length, buf.length - off)
+    buf.set(c.subarray(0, n), off)
+    off += n
+    if (off >= buf.length) break
+  }
+  let pos = 0
+  while (pos + 8 <= buf.length) {
+    let size = (buf[pos]! << 24) >>> 0 | (buf[pos + 1]! << 16) | (buf[pos + 2]! << 8) | buf[pos + 3]!
+    const type = String.fromCharCode(buf[pos + 4]!, buf[pos + 5]!, buf[pos + 6]!, buf[pos + 7]!)
+    if (size === 1) {
+      if (pos + 16 > buf.length) break
+      size = 0
+      for (let i = 0; i < 8; i++) size = size * 256 + buf[pos + 8 + i]!
+      /* header = 16 */
+    } else if (size === 0) {
+      size = buf.length - pos
+    }
+    if (size < 8) break
+    if (type === 'moov') return true
+    if (type === 'mdat') return false
+    if (pos + size > buf.length) break
+    pos += size
+  }
+  return true
+}
+
 export function createPlay ({ engine, media, tabs, policy, input, logger = noopLogger, metrics = noopMetrics }: PlayOptions): Play {
   // Requests share file/probe work. Reference counts keep one caller finishing
   // from clearing another caller's phase; entries disappear even on failure.
@@ -70,6 +117,14 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         } catch (err) {
           log.warn('playback.refused', { reason: err instanceof Error ? err.name : 'unknown' })
           throw err
+        }
+        // Non-faststart MP4s can't begin decoding until their trailing `moov` atom arrives, which on a
+        // torrent may mean waiting for the whole file. Remux instead so playback starts from the head.
+        if (decision.mode === 'direct' && !info.isWebm && /mp4|mov/.test(info.container)) {
+          const fast = await isFaststart(file, new AbortController().signal)
+          if (!fast) {
+            decision = { mode: 'remux' as const, reason: 'MP4 index is at the end of the file; remuxing so playback can start before the file is fully downloaded' }
+          }
         }
         mode = decision.mode
         log.info('playback.decided', { mode, reason: decision.reason })
