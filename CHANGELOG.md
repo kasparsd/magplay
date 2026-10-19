@@ -1,5 +1,11 @@
 # magplay
 
+## 0.2.1
+
+### Patch
+
+- Docker transcoding falls back to libx264 when hardware encoders cannot run.
+
 ## 0.2.0
 
 ### Minor
