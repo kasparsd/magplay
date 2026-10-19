@@ -47,7 +47,7 @@ export async function listCached (dir: string, limit: number, lastUsed: (infoHas
 
 export interface EvictOptions {
   isSeeded?: (name: string) => boolean
-  unload?: (name: string) => Promise<void>
+  unload?: (name: string) => void | Promise<void>
 }
 
 /** Deletes least-recently-used folders until the cache fits in `maxBytes`, skipping those `inUse`. */

@@ -377,7 +377,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     }
     await evict(dir, cacheMaxBytes, name => !!find(name), logger, {
       isSeeded: (name: string) => seeded.has(name),
-      unload: async (name: string) => {
+      unload: (name: string) => {
         const t = find(name)
         if (t) t.destroy()
         seeded.delete(name)
