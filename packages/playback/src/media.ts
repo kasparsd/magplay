@@ -11,7 +11,7 @@ import { createLimiter } from './limits.ts'
 import { keyframeBefore, probe } from './probe.ts'
 import type { MediaInfo } from './probe.ts'
 
-export type PlaybackMode = 'direct' | 'browser-remux' | 'remux' | 'transcode'
+export type PlaybackMode = 'direct' | 'browser-remux' | 'node-remux' | 'remux' | 'transcode'
 
 export interface Decision {
   mode: PlaybackMode
@@ -20,7 +20,7 @@ export interface Decision {
 
 /** Server policy for files the browser can't play as they are. */
 export interface PlaybackPolicy {
-  /** Whether ffmpeg runs here; without it, repackaging happens in the browser and nothing is re-encoded. */
+  /** Whether ffmpeg runs here. Without it, the browser repackages when it can and Node does otherwise; nothing is re-encoded. */
   serverConversion: boolean
   allowTranscode: boolean
   /** Transcoded height in pixels, e.g. 720. */
@@ -50,8 +50,12 @@ export interface DecideInput {
   audio: ReadonlyArray<Pick<AudioTrack, 'codec'>>
 }
 
-/** Picks direct play, a browser or server remux, or a transcode for this browser and `audio` track. */
-export function decide (info: DecideInput, caps: Partial<BrowserCapabilities>, policy: PlaybackPolicy, audio = 0): Decision {
+/**
+ * Picks direct play, a browser or server remux, or a transcode for this browser and `audio` track.
+ * `browserRemux` is whether the page can repackage a file itself. When it can't and ffmpeg isn't installed,
+ * the same repackaging runs in Node (`node-remux`) and is served as HLS.
+ */
+export function decide (info: DecideInput, caps: Partial<BrowserCapabilities>, policy: PlaybackPolicy, audio = 0, browserRemux = true): Decision {
   const v = info.video
   if (!v) throw new UnplayableError('No video stream found in this file.')
   const a = info.audio[audio]
@@ -76,7 +80,9 @@ export function decide (info: DecideInput, caps: Partial<BrowserCapabilities>, p
     const why = [!containerOk && `repackaging ${info.container.split(',')[0]}`, a && a.codec !== 'aac' && `converting ${a.codec} audio to AAC`]
     const work = `copying ${vName} video; ${why.filter(Boolean).join(', ') || 'switching audio track'}`
     if (policy.serverConversion) return { mode: 'remux', reason: work }
-    if (BROWSER_CONTAINERS.has(info.container) && (!a || BROWSER_AUDIO.has(a.codec))) return { mode: 'browser-remux', reason: `${work}, in the browser` }
+    const repackable = BROWSER_CONTAINERS.has(info.container) && (!a || BROWSER_AUDIO.has(a.codec))
+    if (repackable && browserRemux) return { mode: 'browser-remux', reason: `${work}, in the browser` }
+    if (repackable) return { mode: 'node-remux', reason: `${work}, in Node` }
     throw new UnplayableError(`This file is ${vName}${a ? ` with ${a.codec} audio` : ''} in ${info.container}. This browser can't repackage it and this server has no ffmpeg. Open it in an external player (VLC, IINA, Infuse…).`)
   }
   if (policy.allowTranscode && policy.serverConversion) {

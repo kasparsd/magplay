@@ -5,6 +5,7 @@ import type { Logger, Metrics, OperationContext } from '@magplay/observability'
 import { spawn } from 'node:child_process'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -12,6 +13,7 @@ import type { SessionStats } from '@magplay/api-contract'
 import { PlaybackBusyError } from './errors.ts'
 import { ffmpegArgs, resolveTranscodeEncoder } from './media.ts'
 import type { FfmpegArgsOptions } from './media.ts'
+import { runNodeRemux } from './node-remux.ts'
 
 // Pause ffmpeg when it's this far ahead of the player, so the disk isn't filled with segments nobody watches yet
 const AHEAD_PAUSE_S = 240
@@ -95,7 +97,9 @@ export interface HlsSessionsOptions {
   onStop?: (id: string) => void
 }
 
-export interface StartOptions extends Pick<FfmpegArgsOptions, 'input' | 'info' | 'audio' | 'start' | 'mode'> {
+export interface StartOptions extends Omit<Pick<FfmpegArgsOptions, 'input' | 'info' | 'audio' | 'start' | 'mode'>, 'mode'> {
+  /** `node-remux` repackages in this process when the browser can't and ffmpeg isn't installed. The session reports `remux`. */
+  mode: 'remux' | 'transcode' | 'node-remux'
   context?: OperationContext
   onReady?: () => void
   /** A session this one replaces: it doesn't count against the limit and is stopped once this one is admitted. */
@@ -123,7 +127,7 @@ export interface HlsSession {
 }
 
 export interface HlsSessions {
-  /** Starts ffmpeg, or throws PlaybackBusyError when the limit or disk budget doesn't allow another session. */
+  /** Starts ffmpeg or a Node remux, or throws PlaybackBusyError when the limit or disk budget doesn't allow another session. */
   start: (options: StartOptions) => HlsSession
   get: (id: string) => HlsSession | undefined
   /** Marks a session as alive; `position` is the player's time within the session output. */
@@ -143,6 +147,9 @@ export interface HlsSessions {
 interface Session {
   id: string
   mode: 'remux' | 'transcode'
+  /** Node remux has no ffmpeg process; stopping it aborts the conversion instead of signalling one. */
+  producer: 'ffmpeg' | 'node'
+  abort: AbortController
   encoder: string
   start: number
   dir: string
@@ -169,6 +176,20 @@ interface Session {
 }
 
 const spawnFfmpeg: SpawnProcess = (command, args, options) => spawn(command, args, options) as FfmpegProcess
+
+/** A stream nothing reads; a Node remux session has no ffmpeg pipes. */
+const devNull = (): NodeJS.ReadableStream => new EventEmitter() as NodeJS.ReadableStream
+
+const idleProcess = (): FfmpegProcess => {
+  const proc = {
+    pid: undefined,
+    kill: () => true,
+    on () { return proc },
+    stdout: devNull(),
+    stderr: devNull(),
+  }
+  return proc as unknown as FfmpegProcess
+}
 
 export function createHlsSessions ({
   dir,
@@ -198,12 +219,19 @@ export function createHlsSessions ({
   function throttle (s: Session): void {
     if (s.exitCode !== null) return
     const ahead = s.outTime - s.position
+    if (s.producer === 'node') {
+      if (!s.paused && ahead > AHEAD_PAUSE_S) s.paused = true
+      if (s.paused && ahead < AHEAD_RESUME_S) s.paused = false
+      return
+    }
     if (!s.paused && ahead > AHEAD_PAUSE_S) { s.proc.kill('SIGSTOP'); s.paused = true }
     if (s.paused && ahead < AHEAD_RESUME_S) { s.proc.kill('SIGCONT'); s.paused = false }
   }
 
   function kill (s: Session): void {
     if (s.exitCode !== null) return
+    s.abort.abort()
+    if (s.producer === 'node') return
     if (s.paused) s.proc.kill('SIGCONT')
     s.proc.kill('SIGKILL')
   }
@@ -245,6 +273,25 @@ export function createHlsSessions ({
     return s.cpu
   }
 
+  function finishNode (s: Session, err?: unknown): void {
+    if (s.terminal) return
+    s.terminal = true
+    const cancelled = s.stopReason !== null || s.abort.signal.aborted || (err instanceof Error && err.name === 'ConversionCanceledError')
+    if (err && !cancelled) {
+      const message = err instanceof Error ? err.message : 'Node remux failed'
+      s.stderr.push(message.slice(0, 1024))
+      s.failure = message
+      s.exitCode ??= 1
+      metrics.job('conversion', 'failure', (performance.now() - s.started) / 1000)
+      s.log.error('hls.failed', { err, durationMs: performance.now() - s.started })
+      return
+    }
+    s.exitCode ??= 0
+    metrics.job('conversion', s.stopReason ? s.stopReason === 'resource-limit' ? 'rejected' : 'cancelled' : 'success', (performance.now() - s.started) / 1000)
+    checkReady(s)
+    s.log.info('hls.finished', { stopReason: s.stopReason, outputSeconds: s.outTime, durationMs: performance.now() - s.started })
+  }
+
   function start ({ input, info, audio, start: at, mode, replaces, context, onReady }: StartOptions): Session {
     const { maxSessions, minFreeBytes, hlsMaxBytes, ffmpegPath, transcodeMaxHeight, transcodeEncoder, vaapiDevice, detectedEncoders } = live()
     const resolvedEncoder = resolveTranscodeEncoder(transcodeEncoder, detectedEncoders ?? [])
@@ -275,12 +322,62 @@ export function createHlsSessions ({
     const id = randomBytes(8).toString('hex')
     const folder = path.join(dir, id)
     fs.mkdirSync(folder)
+    if (mode === 'node-remux') {
+      const s: Session = {
+        id,
+        mode: 'remux',
+        producer: 'node',
+        abort: new AbortController(),
+        encoder: 'node',
+        start: at,
+        dir: folder,
+        proc: idleProcess(),
+        lastSeen: Date.now(),
+        outTime: 0,
+        speed: null,
+        fps: null,
+        position: 0,
+        paused: false,
+        exitCode: null,
+        stderr: [],
+        failure: null,
+        bytes: 0,
+        sizes: new Map(),
+        cpuSample: { at: Date.now(), seconds: 0 },
+        cpu: null,
+        log: (context?.logger ?? logger).child({ component: 'hls', sessionId: id, mode: 'remux', producer: 'node' }),
+        started: performance.now(),
+        ready: false,
+        stopReason: null,
+        terminal: false,
+        onReady,
+      }
+      sessions.set(id, s)
+      s.log.info('hls.created', { replacesSessionId: replaces, startSeconds: at, producer: 'node' })
+      runNodeRemux({
+        input,
+        dir: folder,
+        audio,
+        start: at,
+        signal: s.abort.signal,
+        position: () => s.position,
+        onOutput: (seconds, speed) => {
+          s.outTime = seconds
+          s.speed = speed
+          throttle(s)
+          checkReady(s)
+        },
+      }).then(() => finishNode(s), (err: unknown) => finishNode(s, err))
+      return s
+    }
     const args = ffmpegArgs({ input, info, audio, start: at, mode, dir: folder, transcodeMaxHeight, transcodeEncoder: resolvedEncoder, ...(vaapiDevice ? { vaapiDevice } : {}) })
     const proc = spawnProcess(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     // CPU use is the CPU-time delta between two status polls; the first poll measures from the spawn
     const s: Session = {
       id,
       mode,
+      producer: 'ffmpeg',
+      abort: new AbortController(),
       encoder: resolvedEncoder,
       start: at,
       dir: folder,

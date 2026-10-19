@@ -81,6 +81,11 @@ export interface PlayRequest {
   /** Per-page identifier for replacing the tab's old session. */
   tab?: string
   caps?: Partial<BrowserCapabilities>
+  /**
+   * Whether this page can repackage a file itself (it has Media Source Extensions).
+   * Absent means it can. When it can't and the server has no ffmpeg, the server repackages and answers `remux`.
+   */
+  browserRemux?: boolean
 }
 
 /** Direct playback has no ffmpeg session or HLS subtitle URLs. */

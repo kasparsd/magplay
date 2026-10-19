@@ -186,3 +186,21 @@ test('without ffmpeg an MKV is repackaged in the browser: no session, the whole-
   assert.equal(result.audio, 1)
   assert.equal(result.session, undefined)
 })
+
+test('without ffmpeg a browser that cannot repackage gets an HLS session produced in Node', async () => {
+  const mkv: MediaInfo = { ...info, container: 'matroska', audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }] }
+  let started = ''
+  const options = {
+    engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(mkv), keyframeBefore: (_input: string, at: number) => Promise.resolve(at) },
+    tabs: { stop: () => {}, start: (_tab: string, opts: { mode: string }) => { started = opts.mode; return { id: 's' } } },
+    policy: () => ({ serverConversion: false, allowTranscode: true, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 12, caps: { h264: true }, browserRemux: false }, () => false)
+  assert.equal(started, 'node-remux')
+  assert.equal(result.mode, 'remux')
+  assert.equal(result.session, 's')
+  assert.equal(result.offset, 12)
+  assert.deepEqual(result.subtitles, [])
+})

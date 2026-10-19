@@ -46,3 +46,19 @@ test('MKV/AC3 is repackaged in the browser: whole-file timeline, seeking, audio 
   const hls = await page.request.get(`${app.origin}/api/debug`).then(r => r.json())
   expect(hls.serverConversion).toBe(false)
 })
+
+test('a browser that cannot repackage gets the file repackaged in Node and plays the HLS', async ({ page, app }) => {
+  await page.route('**/api/play', async route => {
+    if (route.request().method() !== 'POST') return route.continue()
+    const body = route.request().postDataJSON()
+    await route.continue({ postData: JSON.stringify({ ...body, browserRemux: false }) })
+  })
+  const decision = await openPlayer(page, app, remux)
+  expect(decision.mode).toBe('remux')
+  expect(decision.session).toEqual(expect.any(String))
+  expect(decision.offset).toBe(0)
+  expect(decision.subtitles).toEqual([])
+  const playlist = await page.request.get(`${app.origin}/hls/${decision.session}/index.m3u8`)
+  expect(playlist.ok()).toBeTruthy()
+  expect(await playlist.text()).toContain('#EXT-X-MAP:URI="init.mp4"')
+})

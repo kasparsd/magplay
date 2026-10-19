@@ -26,6 +26,7 @@ test('without ffmpeg the browser remuxes what it can demux and decode; nothing i
   assert.equal(decide(info(), caps, core).mode, 'direct')
   const mkv = decide(info({ container: 'matroska', audio: [{ codec: 'ac3' }] }), caps, core)
   assert.equal(mkv.mode, 'browser-remux')
+  assert.equal(decide(info({ container: 'matroska', audio: [{ codec: 'ac3' }] }), caps, core, 0, false).mode, 'node-remux')
   assert.match(mkv.reason, /converting ac3 audio to AAC, in the browser/)
   assert.throws(() => decide(info({ container: 'avi' }), caps, core), UnplayableError)
   assert.throws(() => decide(info({ container: 'matroska', audio: [{ codec: 'truehd' }] }), caps, core), UnplayableError)

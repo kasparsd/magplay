@@ -6,7 +6,7 @@ import type { PlaybackDecision, ProbeResult, TorrentFileInfo, TorrentInfo, Torre
 import { api } from './lib/api.ts'
 import type { ApiError } from './lib/api.ts'
 import type { BrowserRemux } from './lib/browser-remux.ts'
-import { measureCaps } from './lib/capabilities.ts'
+import { browserCanRemux, measureCaps } from './lib/capabilities.ts'
 import { icon } from './lib/icons.ts'
 import { pickByLanguage, releaseName } from './lib/naming.ts'
 import { performanceView, record } from './lib/performance.ts'
@@ -234,6 +234,7 @@ function renderFacts (): void {
 }
 
 const caps = measureCaps(video, window)
+const browserRemux = browserCanRemux(window)
 
 const position = (): number => cur ? cur.offset + video.currentTime : pendingPosition
 /** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
@@ -298,7 +299,7 @@ async function start (at = 0, message = ''): Promise<void> {
   try {
     const result = await requestPlayback(async current => {
       if (gen !== generation) return null
-      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, tab: requestTab }, signal: pageSignal })
+      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, browserRemux, tab: requestTab }, signal: pageSignal })
       if (!current() || gen !== generation) {
         if (result.session) navigator.sendBeacon(`/api/play/${result.session}`)
         return null

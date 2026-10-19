@@ -96,7 +96,7 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
       const counts = pending.get(`${ih}/${idx}`)
       return counts?.probing ? 'probing' : counts?.['loading-file'] ? 'loading-file' : null
     },
-    async play ({ ih, idx, audio = 0, start = 0, tab, caps = {} }, cancelled, context) {
+    async play ({ ih, idx, audio = 0, start = 0, tab, caps = {}, browserRemux }, cancelled, context) {
       const started = performance.now()
       const log = (context?.logger ?? logger).child({ component: 'playback', operationId: randomUUID(), torrentId: ih, fileIndex: idx, startSeconds: start, audioIndex: audio })
       log.info('playback.requested')
@@ -112,7 +112,7 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         check()
         let decision
         try {
-          decision = decide(info, caps, policy(), audio)
+          decision = decide(info, caps, policy(), audio, browserRemux !== false)
         } catch (err) {
           log.warn('playback.refused', { reason: err instanceof Error ? err.name : 'unknown' })
           throw err
@@ -126,8 +126,9 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
             decision = { mode: 'remux' as const, reason: 'MP4 index is at the end of the file; remuxing so playback can start before the file is fully downloaded' }
           }
         }
-        mode = decision.mode
-        log.info('playback.decided', { mode, reason: decision.reason })
+        const node = decision.mode === 'node-remux'
+        mode = node ? 'remux' : decision.mode
+        log.info('playback.decided', { mode, ...(node && { producer: 'node' }), reason: decision.reason })
         const { reason } = decision
         if (decision.mode === 'direct') {
           tabs.stop(tab)
@@ -139,31 +140,32 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         }
         // Copied video begins at the keyframe before the request. Report that time as the session origin so the
         // clock and subtitles match the picture; the player seeks the remainder inside the session.
-        const origin = decision.mode === 'remux' && start > 0 ? await media.keyframeBefore(input(ih, idx), start) : start
+        const origin = (decision.mode === 'remux' || node) && start > 0 ? await media.keyframeBefore(input(ih, idx), start) : start
         check()
+        const wireMode = decision.mode === 'transcode' ? 'transcode' : 'remux'
         const s = tabs.start(tab, {
           input: input(ih, idx),
           info,
           audio,
           start: origin,
-          mode: decision.mode,
+          mode: node ? 'node-remux' : wireMode,
           context: { logger: log },
           onReady: () => {
             const durationMs = performance.now() - started
-            metrics.ready(decision.mode, durationMs / 1000)
-            log.info('playback.ready', { mode: decision.mode, sessionId, durationMs })
+            metrics.ready(mode, durationMs / 1000)
+            log.info('playback.ready', { mode, sessionId, durationMs })
           }
         })
         sessionId = s.id
         return {
-          mode: decision.mode,
+          mode: wireMode,
           reason,
           duration: info.duration,
           url: `/hls/${s.id}/index.m3u8`,
           session: s.id,
           offset: origin,
-          // Text subtitles are written by the same ffmpeg, timed relative to the session start
-          subtitles: info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
+          // ffmpeg writes text subtitles beside the segments; a Node remux doesn't, so external subtitle files are the way
+          subtitles: node ? [] : info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
         }
       } catch (err) {
         result = outcome(err)

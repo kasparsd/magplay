@@ -98,7 +98,7 @@ const READOUTS: Record<string, () => ReadoutValue> = {
     return { text: `Torrent cache: ${gb(disk.cacheBytes)} / ${gb(disk.cacheMaxBytes)} · Free disk space: ${gb(disk.free)}`, fraction: disk.cacheBytes / disk.cacheMaxBytes }
   },
   'debug.server': () => debug
-    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg', debug.ffmpeg ?? 'not installed'], ['Conversion', debug.serverConversion ? 'on the server (ffmpeg)' : 'in the browser only; nothing is re-encoded'], ['Encoders', (debug.encoders ?? []).join(', ') || 'none'], ['Transcode encoder', debug.transcodeEncoder ?? 'auto']])
+    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg', debug.ffmpeg ?? 'not installed'], ['Conversion', debug.serverConversion ? 'on the server (ffmpeg)' : 'in the browser when it can, otherwise in Node; nothing is re-encoded'], ['Encoders', (debug.encoders ?? []).join(', ') || 'none'], ['Transcode encoder', debug.transcodeEncoder ?? 'auto']])
     : 'Loading…',
   'debug.resources': () => {
     if (!debug) return 'Loading…'

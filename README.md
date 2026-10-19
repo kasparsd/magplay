@@ -260,11 +260,14 @@ Each video can be played these ways:
   2. **remux**: the video codec is supported but the container (MKV…) or the
      audio (AC3, E-AC3, DTS, TrueHD…) isn't. ffmpeg copies the video into HLS
      (fMP4) and converts the audio to AAC stereo, which takes very little CPU.
-  3. **browser remux**: the same, on a server without ffmpeg (`magplay-core`). The browser
+  3. **browser remux**: the same, on a server without ffmpeg (`magplay-core`), when
+     the browser can append media (Media Source Extensions). The browser
      reads `/raw`, copies the video and converts the audio to AAC itself
      ([Mediabunny](https://mediabunny.dev/) with WebCodecs and small WASM
      decoders for AC3/DTS), a minute ahead of playback. The timeline is the
      whole file, so seeking and switching audio need no server round trip.
+     A browser that can't do that gets the same repackaging done in Node, as
+     HLS, which is how Safari without Media Source Extensions plays it.
   4. **transcode**: only with `ALLOW_VIDEO_TRANSCODE=true` and ffmpeg. libx264 at
      `TRANSCODE_MAX_HEIGHT`. This is too slow for 1080p on the server CPU. Hardware H.264 encoders are used when available, otherwise CPU.
   5. Otherwise it **refuses** before streaming and explains why (for example
