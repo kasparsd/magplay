@@ -420,11 +420,13 @@ policy:** [docs/http-caching.md](docs/http-caching.md).
 - [Resource limits](docs/resources.md), [lifecycle](docs/lifecycle.md),
   [progress](docs/progress.md).
 
-## Trying it with Jackett and Prowlarr
+## Local testing stack (contributors)
 
 `compose.yml` in this repo runs magplay together with Jackett
 (`linuxserver/jackett:v0.24.2663-ls38`) and Prowlarr
-(`linuxserver/prowlarr:2.6.5.5623-ls162`). It's for local testing.
+(`linuxserver/prowlarr:2.6.5.5623-ls162`). This is for developing and testing
+magplay itself; regular users point magplay at their own Jackett/Prowlarr via
+env vars or Settings and do not need this stack or the script below.
 
 ```bash
 echo "BITMAGNET_URL=http://example-host:3333/torznab/api" > .env
