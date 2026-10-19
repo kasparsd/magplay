@@ -28,7 +28,7 @@ function showName (name) {
 async function load () {
   showName(params.get('title') || (infoHash ? `Torrent ${shortHash(infoHash)}` : 'Torrent'))
   const started = Date.now()
-  const tick = () => setStatus(status, `Finding peers and the file list… ${Math.round((Date.now() - started) / 1000)} s`, 'busy')
+  const tick = () => setStatus(status, `Loading the file list… ${Math.round((Date.now() - started) / 1000)} s`, 'busy')
   tick()
   const timer = setInterval(tick, 1000)
   let t

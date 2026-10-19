@@ -1,5 +1,18 @@
 import { test, expect } from './fixtures.js'
 
+test('reopening a saved torrent shows its files without activating an idle torrent', async ({ page, app }) => {
+  const statusUrl = `${app.origin}/api/torrents/${app.ih}/status`
+  const before = await (await page.request.get(statusUrl)).json()
+  await page.goto(app.torrent)
+  await expect(page.locator('#torrent .meta')).toBeVisible()
+  await expect(page.locator('#status')).toBeEmpty()
+  if (!before.loaded) await expect(page.locator('#torrent .live')).toContainText('Not active right now')
+  await page.reload()
+  await expect(page.locator('#torrent .meta')).toBeVisible()
+  await expect(page.locator('#status')).toBeEmpty()
+  expect((await (await page.request.get(statusUrl)).json()).loaded).toBe(before.loaded)
+})
+
 test('search results link back from the torrent page, and the header keeps the query', async ({ page, app }) => {
   await page.goto(`${app.origin}/?q=Playback`)
   const row = page.locator('#results li').filter({ hasText: 'Playback fixtures' })

@@ -44,6 +44,7 @@ test('a torrent whose data is on disk loads without peers, reads byte ranges and
   await fs.writeFile(path.join(dir, infoHash, 'sample.bin'), data)
 
   const torrent = await engine.add(bytes)
+  assert.deepEqual(await engine.info(infoHash), engine.describe(torrent))
   assert.equal(torrent.infoHash, infoHash)
   assert.equal(engine.describe(torrent).files[0]?.name, 'sample.bin')
   const file = await engine.file(infoHash, 0)
@@ -68,6 +69,63 @@ test('a torrent whose data is on disk loads without peers, reads byte ranges and
   assert.equal(recent?.infoHash, infoHash)
   assert.equal(recent.name, 'sample.bin')
   assert.ok(recent.onDisk > 0 && recent.onDisk <= data.length)
+
+  await engine.close()
+  const restarted = createTorrentEngine({ dir, port: 0, dht: false, lsd: false })
+  t.after(() => restarted.close())
+  assert.deepEqual(await restarted.info(infoHash), engine.describe(torrent))
+  assert.equal(restarted.stats().loaded, 0)
+  const restored = await restarted.file(infoHash, 0)
+  assert.deepEqual(await collect(restored.read(0, 9, AbortSignal.timeout(5000))), data.subarray(0, 10))
+})
+
+test('saved file lists are available without data, peers or a free initialization slot', async t => {
+  const { dir, engine } = await setup(t, { ...DEFAULT_LIVE, maxLoads: 0 })
+  const bytes = toTorrentFile({
+    info: {
+      name: 'Season',
+      files: [
+        { length: 100, path: ['Season.S01E02.mkv'] },
+        { length: 100, path: ['Season.S01E01.mkv'] },
+        { length: 100, path: ['notes.txt'] },
+      ],
+      'piece length': PIECE,
+      pieces: Buffer.alloc(20),
+    }
+  })
+  const { infoHash } = await parseTorrent(bytes)
+  const folder = path.join(dir, infoHash)
+  await fs.mkdir(folder)
+  await fs.writeFile(path.join(folder, 'meta.torrent'), bytes)
+  const info = await engine.info(infoHash)
+  assert.equal(info.name, 'Season')
+  assert.equal(info.warning, null)
+  assert.deepEqual(info.files.map(f => [f.idx, f.name, f.size]), [
+    [1, 'Season.S01E01.mkv', 100],
+    [0, 'Season.S01E02.mkv', 100],
+    [2, 'notes.txt', 100],
+  ])
+  assert.deepEqual(await engine.info(`magnet:?xt=urn:btih:${infoHash}`), info)
+  assert.deepEqual(engine.status(infoHash), { loaded: false })
+  assert.equal(engine.stats().loads.used, 0)
+  assert.equal(engine.stats().loaded, 0)
+})
+
+test('uncached file lists still load and remember content warnings', async t => {
+  const { dir, engine } = await setup(t)
+  const { bytes, infoHash } = await torrentFor('notes.txt', Buffer.from('notes'))
+  const info = await engine.info(bytes)
+  assert.equal(info.infoHash, infoHash)
+  assert.equal(info.warning, 'No media file found')
+  assert.equal(engine.knownWarning(infoHash), info.warning)
+  assert.equal(engine.stats().loaded, 1)
+  await assert.rejects(engine.info('../bad'), InvalidTorrentError)
+  // Let WebTorrent's asynchronous file-stat callback finish before destroying it.
+  for (let i = 0; i < 100; i++) {
+    if (await fs.stat(path.join(dir, infoHash, 'modtimes.json')).catch(() => null)) break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  assert.ok(await fs.stat(path.join(dir, infoHash, 'modtimes.json')))
 })
 
 test('invalid ids and unknown torrents fail clearly; status never loads a torrent', async t => {

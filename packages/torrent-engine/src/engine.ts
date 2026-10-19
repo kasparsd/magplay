@@ -10,7 +10,7 @@ import type { Torrent as WtTorrent, TorrentFile as WtFile } from 'webtorrent'
 import parseTorrent from 'parse-torrent'
 import type { ParsedTorrent } from 'parse-torrent'
 import { contentWarning, listFiles } from '@magplay/release-info'
-import type { ListedFile } from '@magplay/release-info'
+import type { ListedFile, TorrentLike } from '@magplay/release-info'
 import { EngineBusyError, InvalidTorrentError, NoSuchFileError } from './errors.ts'
 import { createLimiter } from './limits.ts'
 import { waitForTorrent } from './ready.ts'
@@ -82,6 +82,8 @@ export interface TorrentInfo {
 }
 
 export interface TorrentEngine {
+  /** A file list from a ready torrent or saved metadata; activates only torrents whose metadata is not cached. */
+  info: (id: string | Uint8Array) => Promise<TorrentInfo>
   /** Adds (or reuses) a torrent by magnet, info hash or .torrent bytes and waits for its file list. Nothing is selected for download. */
   add: (id: string | Uint8Array, context?: OperationContext) => Promise<Torrent>
   /** A loaded torrent, re-adding it by info hash if it was unloaded. */
@@ -109,6 +111,14 @@ export interface TorrentEngine {
 }
 
 const INFO_HASH = /^[a-f0-9]{40}$/
+
+async function parseId (id: string | Uint8Array): Promise<ParsedTorrent> {
+  try {
+    const parsed = await parseTorrent(id)
+    if (parsed?.infoHash && INFO_HASH.test(parsed.infoHash)) return parsed
+  } catch {}
+  throw new InvalidTorrentError('Not a valid magnet, info hash or torrent file')
+}
 
 /** Bytes start..end (inclusive) of a torrent file. WebTorrent reads end=0 as "to the end", so cap the bytes ourselves. */
 async function * fileBytes (file: WtFile, start: number, end: number, signal: AbortSignal): AsyncGenerator<Uint8Array> {
@@ -232,13 +242,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
   }
 
   async function add (id: string | Uint8Array, context?: OperationContext): Promise<Torrent> {
-    let parsed: ParsedTorrent
-    try {
-      parsed = await parseTorrent(id)
-    } catch {
-      throw new InvalidTorrentError('Not a valid magnet, info hash or torrent file')
-    }
-    if (!parsed?.infoHash) throw new InvalidTorrentError('Not a valid magnet, info hash or torrent file')
+    const parsed = await parseId(id)
     const ih = parsed.infoHash
     touch(ih)
 
@@ -291,7 +295,28 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
 
   let closing: Promise<void> | null = null
 
+  function describe (torrent: TorrentLike & { infoHash: string }): TorrentInfo {
+    const files = listFiles(torrent)
+    const warning = contentWarning(files)
+    warnings.delete(torrent.infoHash)
+    if (warning) warnings.set(torrent.infoHash, warning)
+    if (warnings.size > 5000) warnings.delete(warnings.keys().next().value!)
+    return { infoHash: torrent.infoHash, name: torrent.name, files, warning }
+  }
+
   return {
+    async info (id) {
+      const { infoHash } = await parseId(id)
+      touch(infoHash)
+      const loaded = find(infoHash)
+      if (loaded?.ready) return describe(handle(loaded))
+      const saved = await fs.readFile(path.join(dir, infoHash, 'meta.torrent'))
+        .then(bytes => parseTorrent(bytes)).catch(() => null)
+      if (saved?.infoHash === infoHash && saved.files) {
+        return describe({ infoHash, name: saved.name ?? infoHash, files: saved.files })
+      }
+      return describe(await add(id))
+    },
     add,
     get,
     async file (ih, idx, context) {
@@ -299,14 +324,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
       if (!file) throw new NoSuchFileError('No such file in this torrent')
       return file
     },
-    describe (torrent) {
-      const files = listFiles(torrent)
-      const warning = contentWarning(files)
-      warnings.delete(torrent.infoHash)
-      if (warning) warnings.set(torrent.infoHash, warning)
-      if (warnings.size > 5000) warnings.delete(warnings.keys().next().value!)
-      return { infoHash: torrent.infoHash, name: torrent.name, files, warning }
-    },
+    describe,
     knownWarning: ih => warnings.get(ih) ?? null,
     status (ih, { idx } = {}) {
       const t = find(ih)

@@ -50,6 +50,8 @@ apps/server ──► indexers ──────► release-info
 
 Each package throws its own typed errors (busy, timeout, not found, cancelled, invalid input). `apps/server` maps them to HTTP statuses in one place.
 
+Torrent detail requests use `torrent-engine.info()` to describe a ready torrent or read its saved `meta.torrent` directly. A cached file list does not activate WebTorrent, occupy an initialization slot, or wait for cached-piece verification; file indices and content warnings use the same description logic as active torrents. Missing or invalid saved metadata falls back to the normal discovery path. Playback and downloads still use `get()`/`file()` and wait for torrent readiness before reading bytes.
+
 ### Apps
 
 - **`apps/server`**
