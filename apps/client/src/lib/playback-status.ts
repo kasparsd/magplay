@@ -16,6 +16,8 @@ export interface PlaybackSignals {
   rate: number
   slowSamples: number
   problem: PlaybackProblem | null
+  /** Recent source-only observation retained through a seek/session restart. */
+  source?: { status: Extract<TorrentStatus, { loaded: true }>, age: number }
 }
 export interface PlaybackExplanation extends PlaybackProblem {
   key: string

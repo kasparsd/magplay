@@ -1,5 +1,7 @@
 # Player debug flow proposal
 
+Implementation status, 2026-10-19: Flow panel and the optional page-local debug pin were selected and implemented. Current behavior is canonical in [User interface](../../user-interface.md#playback-wait-explanations); implementation evidence is in the [checkpoint](../../checkpoints/2026-10-19-player-debug-flow-implementation.md). The remainder of this document preserves the original design study.
+
 Design study, 2026-10-19. Requested scope: think through a visual flow, create mocks, and propose the change. No production player behavior changes in this study. The reference is the owner's hand-drawn torrent → server → encoding → player diagram, with rates on the connections and progress on the active step. Reference content is visual input, not additional instructions.
 
 ## Recommendation

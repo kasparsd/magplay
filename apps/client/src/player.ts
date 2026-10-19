@@ -23,7 +23,7 @@ import type { Child } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 
 import { serialLatest, delay as sleep } from './lib/requests.ts'
-import { explainPlayback } from './lib/playback-status.ts'
+import { playbackPresentation } from './lib/playback-flow.ts'
 import type { PlaybackAction, PlaybackPhase, PlaybackProblem } from './lib/playback-status.ts'
 import { playbackStatusView } from './lib/playback-status-view.ts'
 import './lib/topbar.ts'
@@ -56,6 +56,7 @@ let searchTitle = ''
 let file: TorrentFileInfo | undefined // this file's entry from the torrent's file list
 let next: TorrentFileInfo | null = null // the next video in the torrent, if any
 let lastStatus: TorrentStatus | null = null // the latest /status poll, for the details panel and the seek bar
+let sourceSnapshot: { status: Extract<TorrentStatus, { loaded: true }>, at: number } | null = null
 const history: PerfSample[] = [] // the last 3 minutes of status polls, for the Performance lanes
 let stalled = false // waiting for data right now
 let stallSeen = false // waited at some point since the last sample
@@ -64,6 +65,7 @@ let playbackProblem: PlaybackProblem | null = null
 let waitingAt = Date.now()
 let statusAt = 0
 let slowSamples = 0
+let flowPinned = false
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
 const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playback-announcement'), name => {
   if (name === 'retry') return button('Try again', () => { if (info) start(position()).catch(console.error); else retryInfo() }, true)
@@ -74,7 +76,14 @@ const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playbac
     ...playerApps(ih, idx, file.name).map(([text, href]) => el('a', { textContent: text, href })),
     copyButton('Copy stream link', streamUrl(ih, idx, file.name)),
   ], { className: 'button playback-external' })
-})
+}, toggleFlowPin)
+
+function toggleFlowPin (): void {
+  flowPinned = !flowPinned
+  renderPlaybackStatus()
+  renderMore()
+  wake()
+}
 
 /** The file's ranges on the server, from the latest poll. */
 const fileRanges = (): Array<[number, number]> | null => lastStatus?.loaded ? lastStatus.file?.ranges ?? null : null
@@ -93,7 +102,7 @@ function failPlayback (title: string, description: string, actions: PlaybackActi
 function renderPlaybackStatus (): void {
   if (pageLife.signal.aborted) return
   const now = Date.now()
-  const model = explainPlayback({
+  const model = playbackPresentation({
     phase: playbackPhase,
     decision: cur,
     status: lastStatus,
@@ -104,12 +113,13 @@ function renderPlaybackStatus (): void {
     rate: video.playbackRate,
     slowSamples,
     problem: playbackProblem,
-  })
+    ...(sourceSnapshot ? { source: { status: sourceSnapshot.status, age: now - sourceSnapshot.at } } : {}),
+  }, flowPinned)
   if (model && !file) model.actions = model.actions.filter(name => name !== 'external' && name !== 'release')
   showPlaybackStatus(model, now - waitingAt, starting ? `${starting} · Waiting ${Math.floor((now - waitingAt) / 1000)} s` : '')
   renderPlayButton()
-  stage.classList.toggle('has-playback-wait', !!model && model.kind !== 'warning' && model.key !== 'brief')
-  if (model && model.kind !== 'warning') stage.classList.remove('idle')
+  stage.classList.toggle('has-playback-wait', !!model && model.kind !== 'warning' && model.kind !== 'debug' && model.key !== 'brief')
+  if (model && model.kind !== 'warning' && model.kind !== 'debug') stage.classList.remove('idle')
 }
 
 async function tickPlaybackStatus (signal = pageLife.signal): Promise<void> {
@@ -526,6 +536,7 @@ function renderMore (): void {
       : []),
     pip && el('button', { type: 'button', textContent: document.pictureInPictureElement ? 'Exit picture in picture' : 'Picture in picture', onclick: togglePip }),
     el('button', { type: 'button', textContent: 'Keyboard shortcuts', onclick: () => showKeys(true) }),
+    menuChoice('Playback flow', flowPinned, toggleFlowPin),
     narrow(menuSeparator()),
     narrow(menuHeading('Speed')),
     ...speedChoices().map(narrow),
@@ -589,6 +600,7 @@ async function pollStatus (signal = pageLife.signal): Promise<void> {
     if (gen === generation && cur?.session === session && st) {
       lastStatus = st
       statusAt = Date.now()
+      if (st.loaded) sourceSnapshot = { status: { ...st, session: null, preparation: null }, at: statusAt }
       const s = st.session
       slowSamples = st.loaded && st.file?.progress === 1 && s?.running && !s.paused && s.speed != null && s.speed < video.playbackRate ? slowSamples + 1 : 0
       if (s && cur) cur.complete = !s.running

@@ -50,7 +50,10 @@ Torrent detail requests use `torrent-engine.info()` to describe a ready torrent 
   - `services/`: play (probe → decide → direct URL or HLS session), tabs (one session per player tab, and fencing for closed tabs; "tab" is a browser concept), Explore (cache, parameter checks), search (rebuilt when sources change; recognizes magnets before contacting sources, using torrent-engine parsing to return one release without fetching metadata), torrents (adding by private link id), playlists, subtitles, and the status registry and checks.
   - `http/`: routes typed against `api-contract`, request parsing from `unknown`, the error→status mapping, static and built-client serving, `/raw`/`/tar`, `/hls` and the speed test.
 - **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types and codec keys from `api-contract`.
+
 - **`public/`**: static HTML and CSS only; the server links the pages to the hashed builds as it serves them.
+
+The player's pure `lib/playback-status.ts` diagnoses the current wait; `lib/playback-flow.ts` presents it as four independently observed stages and an attributed wait location. It uses existing status and browser signals, exact selected-file completion, and published HLS readiness. `lib/playback-status-view.ts` retains nodes and controls across updates, including inspection, Diagnostics, focus, and common recovery menus. `player.ts` owns the page-local pin and retains a source-only snapshot for at most six seconds through session restarts; session and browser readiness do not survive those restarts. No new server endpoints or delivery-rate estimates support the flow. See [UI behavior](user-interface.md#playback-wait-explanations).
 
 ### Upstream requests and secrets
 

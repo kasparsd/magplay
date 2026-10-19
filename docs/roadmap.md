@@ -48,14 +48,15 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 22. **Broader discovery filters:** Search has Audio, Software, Books and Other categories; Explore exposes BitMagnet's audio, reading, games, software and uncategorized types. Adult Explore/title content is gated by a default-off setting. Non-media file actions/copy and the setting's overly broad search wording remain follow-ups in the [taxonomy plan](plans/generic-torrent-taxonomy.md).
 23. **Settings refinements:** URL-derived source names, schema-driven source fields and conversion dependencies, stable Debug disclosures and focus during polling, controlled save-confirmation expiry, and connection testing in Debug. See [user interface](user-interface.md), [architecture](architecture.md#settings-and-status) and [validation](checkpoints/2026-10-19-settings-followups.md).
 24. **TypeScript Phase 7:** reviewed assertions, third-party boundaries and suppressions; enabled unused-local/parameter compiler checks and three additional type-aware lint rules; removed avoidable double casts and unused dependencies. Scheduled Phases 0–4 and 7 are complete; remaining client/test/tooling conversion stays on touch. See [architecture](architecture.md#build-and-tooling) and [review evidence](checkpoints/2026-10-19-typescript-review.md).
+25. **Player debug flow:** a stable Torrent → Server → Prepare → Player flow replaces the dense wait snapshot, with a selectable inspector, measured source progress, explicit unknown work, retained Diagnostics/focus across reason changes, and an optional page-local debug pin through More. Direct playback bypasses conversion without removing a stage; published HLS readiness and fresh source-only observations survive the appropriate session boundaries. See [UI behavior](user-interface.md#playback-wait-explanations) and [validation](checkpoints/2026-10-19-player-debug-flow-implementation.md).
 
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
 ## Verification and confidence
 
-- Fast colocated suite: **238 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, not helper modules or browser tests.
+- Fast colocated suite: **245 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, plus `tools/scripts/*.test.mjs`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
-- Chromium: **60 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
+- Chromium: **69 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
 - `npm run test:all` runs all three suites. CI also runs `npm run typecheck` and `npm run lint` (no warnings allowed). The Node 22 validation and first Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md); the isolated Docker check was rerun on Node 24 Alpine after each reorganization step, most recently after Phases 3–4 on 2026-10-18 (arm64; remux first segment 217 ms, seek-to-30 s 221 ms).
 - Browser fixture media is fully cached; the separate peer suite covers uncached transfer. Both generate original data/media locally and require no public swarm or live indexer.
 - Local Docker acceptance is Linux/arm64 on the development machine, **not** proof of server performance, browser rendering through the container, large-file hashing latency, or amd64 compatibility.
@@ -84,8 +85,6 @@ Before public/untrusted exposure, authentication, media/API access protection an
 ## Backburner
 
 These items are planned for later and are not part of the active sequence above. Reprioritize explicitly before starting implementation.
-
-- [ ] **Player wait/debug flow presentation** ([proposal and mocks](research/player-debug-flow/proposal.md)). Design study completed, 2026-10-19. Owner to choose Flow panel or Pinned ribbon and whether the first implementation includes a persistent debug pin. Recommended: Flow panel first, four stable stages and one inspector, using existing telemetry. No production implementation has started.
 
 - [ ] **Electron desktop distribution for Windows, macOS and Linux** ([finalized plan](plans/desktop-packaging.md), [architecture](architecture.md#desktop-distribution-direction)). Package the existing UI in its own application window with a supervised Node backend and bundled FFmpeg/ffprobe; retain the headless/Docker distribution. First prove packaged playback and native torrent dependencies on each OS, then implement portable paths, Windows throttling/process cleanup, desktop behavior, installers and signing. No implementation has started; no release date is scheduled. Automatic updates, tray/background mode and a browser-only launcher are outside the first release scope.
 

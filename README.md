@@ -59,6 +59,8 @@ Three pages, each with its own URL, so Back, reload, bookmarks and new tabs all 
 
 ### Playing
 
+During a playback wait, **Torrent → Server → Prepare → Player** shows where work is happening. Select a stage to inspect its measured progress or open **Diagnostics** for the full explanation. A check means ready for playback; downloads or conversion may still be running. **More → Playback flow** pins the view while watching, and **Hide flow** closes it.
+
 Each video can be played these ways:
 
 - **In the browser** (▶). magplay probes the file and picks a mode based on what this browser says it can decode (`MediaSource.isTypeSupported`, not the user agent):
