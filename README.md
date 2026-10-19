@@ -420,32 +420,6 @@ policy:** [docs/http-caching.md](docs/http-caching.md).
 - [Resource limits](docs/resources.md), [lifecycle](docs/lifecycle.md),
   [progress](docs/progress.md).
 
-## Local testing stack (contributors)
-
-`compose.yml` in this repo runs magplay together with Jackett
-(`linuxserver/jackett:v0.24.2663-ls38`) and Prowlarr
-(`linuxserver/prowlarr:2.6.5.5623-ls162`). This is for developing and testing
-magplay itself; regular users point magplay at their own Jackett/Prowlarr via
-env vars or Settings and do not need this stack or the script below.
-
-```bash
-echo "BITMAGNET_URL=http://example-host:3333/torznab/api" > .env
-```
-
-```bash
-docker compose up -d --build
-```
-
-```bash
-node tools/scripts/setup-indexers.mjs
-```
-
-The script adds only the indexers passed on the command line, reads API keys
-from `tools/docker/*/config/`, writes them to `.env`, and recreates magplay.
-
-Override `MAGPLAY_PORT` and `TORRENT_PORT` in `.env` if those ports are taken.
-The stack's network is pinned to `10.89.82.0/24` (`DOCKER_SUBNET`).
-
 ## Development
 
 ```bash
@@ -487,6 +461,33 @@ file lists and Explore responses. See [docs/api.md](docs/api.md) for the HTTP
 surface.
 
 Dependencies: [docs/dependencies.md](docs/dependencies.md).
+
+## Local testing stack (contributors)
+
+`compose.yml` in this repo runs magplay together with Jackett
+(`linuxserver/jackett:v0.24.2663-ls38`) and Prowlarr
+(`linuxserver/prowlarr:2.6.5.5623-ls162`). This is for developing and testing
+magplay itself; regular users point magplay at their own Jackett/Prowlarr via
+env vars or Settings and do not need this stack or the script below.
+
+```bash
+echo "BITMAGNET_URL=http://example-host:3333/torznab/api" > .env
+```
+
+```bash
+docker compose up -d --build
+```
+
+```bash
+node tools/scripts/setup-indexers.mjs
+```
+
+The script adds only the indexers passed on the command line, reads API keys
+from `tools/docker/*/config/`, writes them to `.env`, and recreates magplay.
+
+Override `MAGPLAY_PORT` and `TORRENT_PORT` in `.env` if those ports are taken.
+The stack's network is pinned to `10.89.82.0/24` (`DOCKER_SUBNET`).
+
 
 ## License
 
