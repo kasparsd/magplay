@@ -39,6 +39,8 @@ export interface Config {
   metadataTimeoutMs: number
   checkingTimeoutMs: number
   idleTorrentMs: number
+  seedingEnabled: boolean
+  seedingRatio: number
   allowTranscode: boolean
   transcodeMaxHeight: number
   transcodeEncoder: string
@@ -213,6 +215,8 @@ export function deriveSettings (v: Values): Omit<Config, keyof EnvOnlyConfig> {
     searchTimeoutMs: num(v, 'search.timeoutS') * 1000,
     showAdult: bool(v, 'content.showAdult'),
     cacheMaxBytes: num(v, 'cache.maxGb') * GB,
+    seedingEnabled: bool(v, 'seeding.enabled'),
+    seedingRatio: num(v, 'seeding.ratio'),
     hlsMaxBytes: num(v, 'cache.hlsMaxGb') * GB,
     minFreeBytes: num(v, 'cache.minFreeGb') * GB,
     allowTranscode: bool(v, 'transcode.allow'),

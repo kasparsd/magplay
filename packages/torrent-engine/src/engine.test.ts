@@ -5,9 +5,11 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import parseTorrent, { toTorrentFile } from 'parse-torrent'
+import WebTorrent from 'webtorrent'
 import { createTorrentEngine, DEFAULT_LIVE } from './engine.ts'
-import type { TorrentEngine } from './engine.ts'
+import type { LiveOptions, TorrentEngine } from './engine.ts'
 import { InvalidTorrentError, NoSuchFileError } from './errors.ts'
+import { dirBytes } from './store.ts'
 
 const PIECE = 16384
 
@@ -134,7 +136,140 @@ test('invalid ids and unknown torrents fail clearly; status never loads a torren
   await assert.rejects(engine.get('bad'), InvalidTorrentError)
   assert.deepEqual(engine.status('a'.repeat(40)), { loaded: false })
   assert.equal(engine.knownWarning('a'.repeat(40)), null)
-  assert.deepEqual(engine.stats(), { loads: { used: 0, limit: DEFAULT_LIVE.maxLoads }, loaded: 0 })
+  assert.deepEqual(engine.stats(), { loads: { used: 0, limit: DEFAULT_LIVE.maxLoads }, loaded: 0, seeded: 0, uploadSpeed: 0 })
+})
+
+const exists = (p: string): Promise<boolean> => fs.stat(p).then(() => true, () => false)
+const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 5))
+
+/** Puts `data` on disk (only its first piece when `partial`) and loads it, waiting for the metadata files it writes. */
+async function load (engine: TorrentEngine, dir: string, name: string, { partial = false, uploaded }: { partial?: boolean, uploaded?: number } = {}): Promise<{ infoHash: string, folder: string, length: number }> {
+  const data = Buffer.alloc(3 * PIECE + 100, name)
+  const { bytes, infoHash } = await torrentFor(name, data)
+  const folder = path.join(dir, infoHash)
+  await fs.mkdir(folder)
+  await fs.writeFile(path.join(folder, name), partial ? Buffer.concat([data.subarray(0, PIECE), Buffer.alloc(data.length - PIECE)]) : data)
+  if (uploaded !== undefined) await fs.writeFile(path.join(folder, 'seed.json'), JSON.stringify({ uploaded }))
+  await engine.add(bytes)
+  for (let i = 0; i < 100 && !(await exists(path.join(folder, 'modtimes.json')) && await exists(path.join(folder, 'meta.torrent'))); i++) await tick()
+  return { infoHash, folder, length: data.length }
+}
+
+const seedingLive = (overrides: Partial<LiveOptions> = {}): LiveOptions => ({ ...DEFAULT_LIVE, seeding: { enabled: true, ratio: 1 }, ...overrides })
+
+test('with seeding off, uploads are not throttled and completed torrents unload on the playback idle timeout', async t => {
+  const throttle = t.mock.method(WebTorrent.prototype, 'throttleUpload')
+  const { dir, engine } = await setup(t, { ...DEFAULT_LIVE, idleMs: 0, seeding: { enabled: false, ratio: 1 } })
+  const { folder } = await load(engine, dir, 'done.bin')
+  assert.equal(engine.stats().seeded, 0)
+  await tick()
+  await engine.housekeeping()
+  assert.equal(throttle.mock.calls.at(-1)?.arguments[0], -1)
+  assert.equal(engine.stats().loaded, 0)
+  assert.ok(await exists(folder))
+})
+
+test('a completed torrent keeps seeding past the playback idle timeout until seeding is turned off', async t => {
+  const live = seedingLive({ idleMs: 0 })
+  const { dir, engine } = await setup(t, live)
+  const { folder } = await load(engine, dir, 'seed.bin')
+  await tick()
+  await engine.housekeeping()
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [1, 1])
+
+  live.seeding = { enabled: false, ratio: 1 }
+  await engine.housekeeping()
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [0, 0])
+  assert.ok(await exists(folder))
+})
+
+test('reaching the ratio unloads the torrent, keeps its data and remembers the uploaded bytes', async t => {
+  const live = seedingLive()
+  const { dir, engine } = await setup(t, live)
+  const half = (3 * PIECE + 100) / 2
+  const { infoHash, folder } = await load(engine, dir, 'ratio.bin', { uploaded: half })
+  assert.equal(engine.stats().seeded, 1)
+
+  live.seeding = { enabled: true, ratio: 0.5 }
+  await engine.housekeeping()
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [0, 0])
+  assert.ok(await exists(path.join(folder, 'ratio.bin')))
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(folder, 'seed.json'), 'utf8')), { uploaded: half })
+
+  // A higher ratio lets the next load seed it again
+  live.seeding = { enabled: true, ratio: 2 }
+  const modtimes = path.join(folder, 'modtimes.json')
+  const written = (await fs.stat(modtimes, { bigint: true })).mtimeNs
+  await engine.get(infoHash)
+  assert.equal(engine.stats().seeded, 1)
+  for (let i = 0; i < 100 && (await fs.stat(modtimes, { bigint: true })).mtimeNs === written; i++) await tick()
+})
+
+test('a partially downloaded torrent is not seeded', async t => {
+  const { dir, engine } = await setup(t, seedingLive({ idleMs: 0 }))
+  await load(engine, dir, 'partial.bin', { partial: true })
+  assert.equal(engine.stats().seeded, 0)
+  await tick()
+  await engine.housekeeping()
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [0, 0])
+})
+
+test('the seeding cap and cache eviction never unload or delete a torrent with an open stream', async t => {
+  const live = seedingLive()
+  const { dir, engine } = await setup(t, live)
+  const torrents = []
+  for (const name of ['a.bin', 'b.bin', 'c.bin', 'd.bin']) torrents.push(await load(engine, dir, name))
+  const [watched, oldest] = torrents
+  const done = engine.openStream(watched!.infoHash)
+  assert.equal(engine.stats().seeded, 4)
+
+  await engine.housekeeping()
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [3, 3])
+  assert.equal(engine.status(watched!.infoHash).loaded, true)
+  assert.equal(engine.status(oldest!.infoHash).loaded, false)
+  for (const { folder } of torrents) assert.ok(await exists(folder))
+
+  live.cacheMaxBytes = 1
+  await engine.housekeeping()
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [1, 1])
+  assert.deepEqual(await fs.readdir(dir), [watched!.infoHash])
+  done()
+})
+
+test('eviction removes other cached data before seeded data, and seeded data when still over the limit', async t => {
+  const live = seedingLive()
+  const { dir, engine } = await setup(t, live)
+  const seededTorrent = await load(engine, dir, 'kept.bin')
+  const other = path.join(dir, 'b'.repeat(40))
+  await fs.mkdir(other)
+  await fs.writeFile(path.join(other, 'data'), Buffer.alloc(65536, 1))
+  // Plain LRU would delete the seeded folder first
+  await fs.utimes(seededTorrent.folder, new Date(1000), new Date(1000))
+  await fs.utimes(other, new Date(2000), new Date(2000))
+
+  live.cacheMaxBytes = await dirBytes(seededTorrent.folder) + 4096
+  await engine.housekeeping()
+  assert.deepEqual(await fs.readdir(dir), [seededTorrent.infoHash])
+  assert.equal(engine.stats().seeded, 1)
+
+  live.cacheMaxBytes = 1
+  await engine.housekeeping()
+  assert.deepEqual(await fs.readdir(dir), [])
+  assert.deepEqual([engine.stats().loaded, engine.stats().seeded], [0, 0])
+})
+
+test('while seeding, an open stream caps uploads at 128 KiB/s and no stream turns the throttle off', async t => {
+  const throttle = t.mock.method(WebTorrent.prototype, 'throttleUpload')
+  const { dir, engine } = await setup(t, seedingLive())
+  const { infoHash } = await load(engine, dir, 'throttle.bin')
+  await engine.housekeeping()
+  assert.equal(throttle.mock.calls.at(-1)?.arguments[0], -1)
+  const done = engine.openStream(infoHash)
+  await engine.housekeeping()
+  assert.equal(throttle.mock.calls.at(-1)?.arguments[0], 128 * 1024)
+  done()
+  await engine.housekeeping()
+  assert.equal(throttle.mock.calls.at(-1)?.arguments[0], -1)
 })
 
 test('housekeeping evicts the least recently used folders above the cache limit', async t => {
