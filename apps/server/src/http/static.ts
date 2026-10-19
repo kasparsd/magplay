@@ -14,16 +14,12 @@ interface Metafile { outputs: Record<string, { entryPoint?: string }> }
 
 /** '/search.js' (as the pages link it) → '/assets/search-HASH.js', from esbuild's metafile; re-read after a rebuild. */
 function assetLinks (metafilePath: string): () => Promise<Map<string, string>> {
-  let cached: { mtimeMs: number, links: Map<string, string> } | null = null
   return async () => {
-    const { mtimeMs } = await fs.stat(metafilePath)
-    if (cached?.mtimeMs === mtimeMs) return cached.links
     const { outputs } = JSON.parse(await fs.readFile(metafilePath, 'utf8')) as Metafile
     const links = new Map<string, string>()
     for (const [output, { entryPoint }] of Object.entries(outputs)) {
       if (entryPoint) links.set('/' + path.basename(entryPoint).replace(/\.ts$/, '.js'), '/assets/' + path.basename(output))
     }
-    cached = { mtimeMs, links }
     return links
   }
 }
