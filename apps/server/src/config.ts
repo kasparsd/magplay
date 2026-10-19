@@ -76,6 +76,10 @@ export function sourcesFromEnv (env: Env): SourceConfig[] {
     hostName(env.PROWLARR_URL)
     out.push({ type: 'prowlarr', name: env.PROWLARR_NAME || 'Prowlarr', url: env.PROWLARR_URL, apiKey: env.PROWLARR_APIKEY || '', indexerIds: splitList(env.PROWLARR_INDEXERS || '-2') })
   }
+  if (env.BITMAGNET_URL) {
+    hostName(env.BITMAGNET_URL)
+    out.push({ type: 'torznab', name: env.BITMAGNET_NAME || 'BitMagnet', url: env.BITMAGNET_URL, apiKey: env.BITMAGNET_APIKEY || '' })
+  }
   return out
 }
 
