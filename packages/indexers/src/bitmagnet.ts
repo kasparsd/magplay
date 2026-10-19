@@ -225,9 +225,10 @@ export function groupTitles (items: BitmagnetItem[], showAdult = false): Explore
   return [...groups.values()].map(({ title, releases }) => {
     const bySeeders = [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
     const top = bySeeders[0]!
-    const best = bySeeders.find(r => r.likelyDirect) ?? top
+    const effortRank = (r: ExploreRelease) => r.playbackEffort === 'direct' ? 0 : r.playbackEffort === 'remux' ? 1 : r.playbackEffort === 'transcode' ? 2 : 3
+    const best = [...releases].sort((a, b) => effortRank(a) - effortRank(b) || (b.seeders ?? 0) - (a.seeders ?? 0))[0] ?? top
     // Only this page's releases are grouped here, so there's no release count: the title page has the full list
-    return { ...title, seeders: top.seeders, playable: releases.some(r => r.likelyDirect), best: best.infoHash }
+    return { ...title, seeders: top.seeders, playable: releases.some(r => r.playbackEffort === 'direct' || r.playbackEffort === 'remux'), best: best.infoHash }
   })
 }
 

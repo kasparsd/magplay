@@ -177,6 +177,7 @@ export interface ReleaseRowItem {
   warning?: string | null | undefined
   badges?: string[] | undefined
   likelyDirect?: boolean | undefined
+  playbackEffort?: 'direct' | 'remux' | 'transcode' | null | undefined
   size?: number | null | undefined
   seeders?: number | null | undefined
 }
@@ -198,7 +199,9 @@ export function releaseRow (r: ReleaseRowItem, href: string, { extra = [], meta 
         r.warning && el('span', { className: 'badge note', textContent: r.warning }),
         r.episode && el('span', { className: 'badge note', textContent: r.episode }),
         ...(r.badges ?? []).map(b => el('span', { className: 'badge', textContent: b })),
-        r.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser', title: 'H.264 with AAC or unknown audio: likely plays in any browser' }),
+        r.playbackEffort === 'direct' && el('span', { className: 'badge good', textContent: 'playable (exact)', title: 'H.264 with AAC or no audio: plays natively in any browser' }),
+        r.playbackEffort === 'remux' && el('span', { className: 'badge good', textContent: 'playable (remux)', title: 'H.264 video: a cheap ffmpeg pass repackages or converts the audio' }),
+        r.playbackEffort === 'transcode' && el('span', { className: 'badge', textContent: 'playable (transcode)', title: 'The video must be re-encoded; expensive unless a GPU encoder is available' }),
         ...extra),
       note && el('div', { className: 'meta', textContent: note })),
     el('span', { className: 'size' }, [...meta, formatBytes(r.size), r.seeders != null && count(r.seeders, 'seeder')].filter(Boolean).join(' · ')))
