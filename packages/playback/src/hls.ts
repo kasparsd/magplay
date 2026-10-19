@@ -143,6 +143,7 @@ export interface HlsSessions {
 interface Session {
   id: string
   mode: 'remux' | 'transcode'
+  encoder: string
   start: number
   dir: string
   proc: FfmpegProcess
@@ -274,6 +275,7 @@ export function createHlsSessions ({
     const s: Session = {
       id,
       mode,
+      encoder: resolvedEncoder,
       start: at,
       dir: folder,
       proc,
@@ -423,6 +425,7 @@ export function createHlsSessions ({
       return {
         id: s.id,
         mode: s.mode,
+        encoder: s.encoder,
         speed: s.speed,
         fps: s.fps,
         cpu: sampleCpu(s, now),

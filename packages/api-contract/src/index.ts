@@ -101,6 +101,8 @@ export interface DirectDecision {
  */
 export interface HlsDecision {
   mode: 'remux' | 'transcode'
+  /** Encoder used for this session. */
+  encoder?: string
   reason: string
   /** Whole media duration, not the HLS session duration. */
   duration: number | null
@@ -120,6 +122,8 @@ export type PlaybackDecision = DirectDecision | HlsDecision
 export interface SessionStats {
   id: string
   mode: 'remux' | 'transcode'
+  /** Encoder used for this session. */
+  encoder?: string
   /** Conversion speed relative to real time. */
   speed: number | null
   /** Frames per second ffmpeg is producing, from its -progress output. */
