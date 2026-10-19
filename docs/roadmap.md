@@ -80,6 +80,8 @@ Before public/untrusted exposure, authentication, media/API access protection an
 
 These items are planned for later and are not part of the active sequence above. Reprioritize explicitly before starting implementation.
 
+- [ ] **Player wait/debug flow presentation** ([proposal and mocks](research/player-debug-flow/proposal.md)). Design study completed, 2026-10-19. Owner to choose Flow panel or Pinned ribbon and whether the first implementation includes a persistent debug pin. Recommended: Flow panel first, four stable stages and one inspector, using existing telemetry. No production implementation has started.
+
 - [ ] **Electron desktop distribution for Windows, macOS and Linux** ([finalized plan](plans/desktop-packaging.md), [architecture](architecture.md#desktop-distribution-direction)). Package the existing UI in its own application window with a supervised Node backend and bundled FFmpeg/ffprobe; retain the headless/Docker distribution. First prove packaged playback and native torrent dependencies on each OS, then implement portable paths, Windows throttling/process cleanup, desktop behavior, installers and signing. No implementation has started; no release date is scheduled. Automatic updates, tray/background mode and a browser-only launcher are outside the first release scope.
 
 ## Boundaries to preserve

@@ -43,6 +43,8 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 
 ### Playback wait explanations
 
+Proposed follow-up, 2026-10-19: a stable four-stage flow for the wait/debug overlay is explored in the [design study and interactive mocks](research/player-debug-flow/proposal.md). It is a proposal, not an accepted change to the behavior below; presentation choice and implementation remain open in the roadmap.
+
 The player uses the Reason first design: a centered cause, one short explanation, measured evidence and relevant recovery actions, with a Why disclosure for the playback decision and current diagnostics. The panel belongs to the video stage, so it and its external-player choices work in fullscreen. A quiet immediate preparation label expands after one second. Elapsed waiting time is shown without inventing a completion estimate or preparation percentage. Why and keyboard focus survive routine metric updates; assistive technology announces reason changes rather than every timer tick.
 
 Reasons distinguish loading/checking a file, selecting a playback mode, waiting for torrent data or peers, converting/preparing playable segments, and waiting for the browser to buffer. Unsupported formats, failed/lost sessions and blocked autoplay have specific actions. Stale or inconclusive diagnostics say that the cause is not yet known. A deliberately paused or normally playing video has no blocking explanation. If sustained conversion capacity falls below the selected playback speed with little video prepared ahead, a compact advisory remains while playback continues.
