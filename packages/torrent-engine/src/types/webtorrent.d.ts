@@ -56,6 +56,7 @@ declare module 'webtorrent' {
     created?: Date
     pieces: unknown[]
     bitfield: BitField
+    getFileModtimes: (cb: (err: Error | null, modtimes?: number[]) => void) => void
     wires: Wire[]
     length: number
     downloaded: number
@@ -69,7 +70,7 @@ declare module 'webtorrent' {
     constructor (opts?: ClientOptions)
     torrents: Torrent[]
     destroyed: boolean
-    add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean }) => Torrent
+    add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean, fileModtimes?: number[] }) => Torrent
     destroy: (cb?: (err?: Error | null) => void) => void
   }
 }

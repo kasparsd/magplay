@@ -188,12 +188,15 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
 
   async function load (ih: string, parsed: ParsedTorrent, existing: WtTorrent | undefined, log: Logger): Promise<Torrent> {
     // Metadata saved on an earlier visit: no need to wait for peers to send it again
-    const metaFile = path.join(dir, ih, 'meta.torrent')
+    const folder = path.join(dir, ih)
+    const metaFile = path.join(folder, 'meta.torrent')
+    const modtimesFile = path.join(folder, 'modtimes.json')
     const saved = await fs.readFile(metaFile).catch(() => null)
+    const savedModtimes = await fs.readFile(modtimesFile).then(b => JSON.parse(b.toString()) as number[]).catch(() => undefined)
     if (saved && !existing) parsed = await parseTorrent(saved)
     const { extraTrackers, metadataTimeoutMs, checkingTimeoutMs } = live()
     parsed.announce = [...new Set([...(parsed.announce ?? []), ...extraTrackers])]
-    const torrent = existing ?? client.add(parsed, { path: path.join(dir, ih), deselect: true })
+    const torrent = existing ?? client.add(parsed, { path: folder, deselect: true, ...(savedModtimes ? { fileModtimes: savedModtimes } : {}) })
     let checkingAt: number | undefined
     let result: ReturnType<typeof outcome> = 'success'
     try {
@@ -218,6 +221,13 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
         .then(() => fs.writeFile(metaFile, torrent.torrentFile))
         .catch((err: unknown) => logger.error('torrent.metadata.save.failed', { err }))
     }
+    // Remember the files' mtimes so a later load can trust the cached data without re-hashing
+    torrent.getFileModtimes((err, modtimes) => {
+      if (err || !modtimes) return
+      fs.mkdir(folder, { recursive: true })
+        .then(() => fs.writeFile(modtimesFile, JSON.stringify(modtimes)))
+        .catch((writeErr: unknown) => logger.error('torrent.modtimes.save.failed', { err: writeErr }))
+    })
     return handle(torrent)
   }
 
