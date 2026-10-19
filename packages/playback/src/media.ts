@@ -23,6 +23,8 @@ export interface PlaybackPolicy {
   allowTranscode: boolean
   /** Transcoded height in pixels, e.g. 720. */
   transcodeMaxHeight: number
+  transcodeEncoder?: string
+  vaapiDevice?: string
 }
 
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
@@ -150,17 +152,64 @@ export interface FfmpegArgsOptions {
   /** Where the playlist, segments and WebVTT files go. */
   dir: string
   transcodeMaxHeight: number
+  transcodeEncoder?: string
+  vaapiDevice?: string
 }
 
 /** ffmpeg arguments for an HLS session starting at `start` seconds, plus WebVTT outputs for text subtitles. */
-export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMaxHeight }: FfmpegArgsOptions): string[] {
+export const TRANSCODE_ENCODERS = ['libx264', 'h264_nvenc', 'h264_vaapi', 'h264_videotoolbox', 'h264_qsv'] as const
+export type TranscodeEncoder = typeof TRANSCODE_ENCODERS[number]
+
+export function isTranscodeEncoder (value: unknown): value is TranscodeEncoder {
+  return typeof value === 'string' && (TRANSCODE_ENCODERS as readonly string[]).includes(value)
+}
+
+const PRIORITY = ['h264_nvenc', 'h264_vaapi', 'h264_videotoolbox', 'h264_qsv', 'libx264'] as const
+
+export function resolveTranscodeEncoder (requested: string | undefined, available: readonly string[] = []): TranscodeEncoder {
+  const req = (requested ?? 'auto').trim()
+  if (req && req !== 'auto') {
+    if (isTranscodeEncoder(req) && (req === 'libx264' || available.length === 0 || available.includes(req))) return req
+    return 'libx264'
+  }
+  for (const name of PRIORITY) {
+    if (name === 'libx264' || available.includes(name)) return name
+  }
+  return 'libx264'
+}
+
+export function parseEncoders (text: string): string[] {
+  const found = new Set<string>()
+  for (const line of (text ?? '').split(/\r?\n/)) {
+    for (const name of TRANSCODE_ENCODERS) {
+      if (line.includes(name)) found.add(name)
+    }
+  }
+  return [...found]
+}
+// aliases for tests
+export const parseEncoderList = parseEncoders
+export const detectEncodersFromOutput = parseEncoders
+
+export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMaxHeight, transcodeEncoder, vaapiDevice }: FfmpegArgsOptions): string[] {
   const a = info.audio[audio]
-  const video = mode === 'transcode'
-    ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p',
-        '-vf', `scale=-2:'min(${transcodeMaxHeight},ih)'`, '-g', '48', '-keyint_min', '48', '-sc_threshold', '0']
-    : ['-c:v', 'copy', ...(info.video?.codec === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
+  const H = transcodeMaxHeight
+  const enc = resolveTranscodeEncoder(transcodeEncoder ?? 'libx264', [])
+  const device = vaapiDevice || '/dev/dri/renderD128'
+  const baseGop = ['-g', '48', '-keyint_min', '48', '-sc_threshold', '0']
+  const scaleVf = `scale=-2:'min(${H},ih)'`
+  const transcodeVideo: Record<string, string[]> = {
+    libx264: ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p', '-vf', scaleVf, ...baseGop],
+    h264_nvenc: ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-pix_fmt', 'yuv420p', '-vf', `scale=-2:'min(${H},ih)',format=yuv420p`, ...baseGop],
+    h264_vaapi: ['-vaapi_device', device, '-vf', `format=nv12,hwupload,scale_vaapi=w=-2:h=min(${H},ih)`, '-c:v', 'h264_vaapi', ...baseGop],
+    h264_videotoolbox: ['-c:v', 'h264_videotoolbox', '-q:v', '50', '-vf', scaleVf, ...baseGop],
+    h264_qsv: ['-c:v', 'h264_qsv', '-preset', 'medium', '-global_quality', '23', '-vf', scaleVf, ...baseGop],
+  }
+  const video = (mode === 'transcode'
+    ? (transcodeVideo[enc] ?? transcodeVideo.libx264)
+    : ['-c:v', 'copy', ...(info.video?.codec === 'hevc' ? ['-tag:v', 'hvc1'] : [])]) as string[]
   const audioArgs = !a ? [] : a.codec === 'aac' ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']
-  const subs = info.subtitles.filter(s => s.text).flatMap(s =>
+  const subs = (info.subtitles ?? []).filter(s => s.text).flatMap(s =>
     ['-map', `0:s:${s.index}`, '-c:s', 'webvtt', '-flush_packets', '1', '-f', 'webvtt', `${dir}/sub_${s.index}.vtt`])
   return [
     '-hide_banner', '-nostdin', '-loglevel', 'warning', '-progress', 'pipe:1',
@@ -199,6 +248,10 @@ export interface MediaTools {
   probe: (input: string, fileName: string, context?: OperationContext) => Promise<MediaInfo>
   /** subtitleToVtt(), bounded. */
   subtitleToVtt: (input: string, track: number | null) => Promise<string>
+  /** Detected hardware encoders for the current ffmpeg path (cached). */
+  detectedEncoders: () => string[]
+  /** Re-run encoder detection. */
+  refreshEncoders: () => Promise<string[]>
   /** Busy slots and cached probe results, for the Debug page. */
   stats: () => { probes: { used: number, limit: number }, subtitles: { used: number, limit: number }, probeCache: { used: number, limit: number } }
 }
@@ -212,6 +265,18 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
   const runSubtitle = createLimiter(() => live().maxSubtitleJobs, () => { metrics.reject('subtitle', 'capacity'); logger.warn('resource.rejected', { resource: 'subtitle', reason: 'capacity' }); return new PlaybackBusyError('Subtitle conversion is busy. Try again shortly.') })
   const probes = new Map<string, Promise<MediaInfo>>()
   const ids = new Map<string, string>()
+  let encoderCache: { ffmpegPath: string, encoders: string[] } | null = null
+  const refreshEncoders = async (): Promise<string[]> => {
+    const ffmpegPath = live().ffmpegPath
+    return new Promise(resolve => {
+      execFile(ffmpegPath, ['-hide_banner', '-encoders'], { timeout: 10_000, maxBuffer: 4 * 1024 ** 2 }, (err, stdout) => {
+        const encoders = err ? [] : parseEncoders(stdout ?? '')
+        encoderCache = { ffmpegPath, encoders }
+        resolve(encoders)
+      })
+    })
+  }
+  const detectedEncoders = (): string[] => (encoderCache && encoderCache.ffmpegPath === live().ffmpegPath) ? encoderCache.encoders : []
   return {
     probe (input, fileName, context) {
       let p = probes.get(input)
@@ -233,6 +298,18 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
       return p
     },
     subtitleToVtt: (input, track) => observeJob(logger, metrics, 'subtitle', async () => await runSubtitle(() => subtitleToVtt(input, track, live()))),
+    detectedEncoders,
+    refreshEncoders,
     stats: () => ({ probes: runProbe.stats(), subtitles: runSubtitle.stats(), probeCache: { used: probes.size, limit: probeCacheLimit } }),
   }
 }
+
+/** Detects available transcode encoders by running ffmpeg. Never throws; returns [] on failure. */
+export function detectTranscodeEncoders (ffmpegPath = 'ffmpeg'): Promise<string[]> {
+  return new Promise(resolve => {
+    execFile(ffmpegPath, ['-hide_banner', '-encoders'], { timeout: 10_000, maxBuffer: 4 * 1024 ** 2 }, (err, stdout) =>
+      resolve(err ? [] : parseEncoders(stdout ?? '')))
+  })
+}
+export const detectAvailableEncoders = detectTranscodeEncoders
+export const detectEncoders = detectTranscodeEncoders

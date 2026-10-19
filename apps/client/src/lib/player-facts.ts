@@ -30,6 +30,7 @@ export function factRows ({ decision, file, info, audio, status, buffered }: Fac
     ['On the server', status?.loaded && status.file && `${Math.round(status.file.progress * 100)}% of this file`],
     ['Buffered', decision && `${Math.max(0, Math.round(buffered))} s ahead`],
     ['ffmpeg', s && `${s.speed ? `${s.speed.toFixed(1)}x` : '…'}${s.paused ? ', paused far enough ahead' : s.running ? '' : ', finished'}`],
+    ['Encoder', s?.encoder],
   ]
   return rows.filter((row): row is [string, string] => !!row[1])
 }

@@ -98,7 +98,7 @@ const READOUTS: Record<string, () => ReadoutValue> = {
     return { text: `Torrent cache: ${gb(disk.cacheBytes)} / ${gb(disk.cacheMaxBytes)} · Free disk space: ${gb(disk.free)}`, fraction: disk.cacheBytes / disk.cacheMaxBytes }
   },
   'debug.server': () => debug
-    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`]])
+    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`], ['Encoders', (debug.encoders ?? []).join(', ') || 'none'], ['Transcode encoder', debug.transcodeEncoder ?? 'auto']])
     : 'Loading…',
   'debug.resources': () => {
     if (!debug) return 'Loading…'

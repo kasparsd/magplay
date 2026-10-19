@@ -10,7 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { SessionStats } from '@magplay/api-contract'
 import { PlaybackBusyError } from './errors.ts'
-import { ffmpegArgs } from './media.ts'
+import { ffmpegArgs, resolveTranscodeEncoder } from './media.ts'
 import type { FfmpegArgsOptions } from './media.ts'
 
 // Pause ffmpeg when it's this far ahead of the player, so the disk isn't filled with segments nobody watches yet
@@ -72,9 +72,12 @@ export interface HlsLive {
   /** Free space to keep on the HLS disk. */
   minFreeBytes: number
   transcodeMaxHeight: number
+  transcodeEncoder?: string
+  vaapiDevice?: string
+  detectedEncoders?: string[]
 }
 
-export const DEFAULT_HLS_LIVE: HlsLive = { ffmpegPath: 'ffmpeg', maxSessions: 2, hlsMaxBytes: 8 * 1024 ** 3, minFreeBytes: 256 * 1024 ** 2, transcodeMaxHeight: 720 }
+export const DEFAULT_HLS_LIVE: HlsLive = { ffmpegPath: 'ffmpeg', maxSessions: 2, hlsMaxBytes: 8 * 1024 ** 3, minFreeBytes: 256 * 1024 ** 2, transcodeMaxHeight: 720, transcodeEncoder: 'auto', vaapiDevice: '/dev/dri/renderD128', detectedEncoders: [] }
 
 export interface HlsSessionsOptions {
   logger?: Logger
@@ -140,6 +143,7 @@ export interface HlsSessions {
 interface Session {
   id: string
   mode: 'remux' | 'transcode'
+  encoder: string
   start: number
   dir: string
   proc: FfmpegProcess
@@ -241,7 +245,8 @@ export function createHlsSessions ({
   }
 
   function start ({ input, info, audio, start: at, mode, replaces, context, onReady }: StartOptions): Session {
-    const { maxSessions, minFreeBytes, hlsMaxBytes, ffmpegPath, transcodeMaxHeight } = live()
+    const { maxSessions, minFreeBytes, hlsMaxBytes, ffmpegPath, transcodeMaxHeight, transcodeEncoder, vaapiDevice, detectedEncoders } = live()
+    const resolvedEncoder = resolveTranscodeEncoder(transcodeEncoder, detectedEncoders ?? [])
     const admitted = [...sessions.values()].filter(s => !s.failure && s.id !== replaces)
     if (admitted.length >= maxSessions) {
       metrics.reject('hls', 'capacity')
@@ -264,12 +269,13 @@ export function createHlsSessions ({
     const id = randomBytes(8).toString('hex')
     const folder = path.join(dir, id)
     fs.mkdirSync(folder)
-    const args = ffmpegArgs({ input, info, audio, start: at, mode, dir: folder, transcodeMaxHeight })
+    const args = ffmpegArgs({ input, info, audio, start: at, mode, dir: folder, transcodeMaxHeight, transcodeEncoder: resolvedEncoder, ...(vaapiDevice ? { vaapiDevice } : {}) })
     const proc = spawnProcess(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     // CPU use is the CPU-time delta between two status polls; the first poll measures from the spawn
     const s: Session = {
       id,
       mode,
+      encoder: resolvedEncoder,
       start: at,
       dir: folder,
       proc,
@@ -294,7 +300,7 @@ export function createHlsSessions ({
       onReady,
     }
     sessions.set(id, s)
-    s.log.info('hls.created', { replacesSessionId: replaces, startSeconds: at })
+    s.log.info('hls.created', { replacesSessionId: replaces, startSeconds: at, encoder: resolvedEncoder })
 
     let buf = ''
     proc.stdout.on('data', (chunk: Buffer | string) => {
@@ -419,6 +425,7 @@ export function createHlsSessions ({
       return {
         id: s.id,
         mode: s.mode,
+        encoder: s.encoder,
         speed: s.speed,
         fps: s.fps,
         cpu: sampleCpu(s, now),

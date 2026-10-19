@@ -18,7 +18,7 @@
     "prestart": "npm run build",
     "start": "node --env-file-if-exists=.env apps/server/src/main.ts",
     "test": "npm run build && node --test '{apps,packages}/**/*.test.{js,ts}' 'tools/scripts/*.test.mjs'",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && playwright test --reporter=line",
     "test:peers": "node --test tests/integration/*.test.js",
     "test:observability": "node tools/scripts/check-observability.mjs",
     "test:all": "npm test && npm run test:peers && npm run test:e2e",

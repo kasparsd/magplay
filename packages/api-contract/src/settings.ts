@@ -211,6 +211,25 @@ export const SETTINGS: readonly SettingDef[] = [
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
   },
+  {
+    key: 'transcode.encoder',
+    section: 'playback',
+    scope: 'server',
+    type: 'segmented',
+    label: 'Conversion encoder',
+    help: 'Uses the CPU unless a supported GPU encoder is available.',
+    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to choose an encoder.' }],
+    env: ['TRANSCODE_ENCODER'],
+    default: 'auto',
+    options: [
+      { value: 'auto', label: 'Auto' },
+      { value: 'libx264', label: 'CPU' },
+      { value: 'h264_nvenc', label: 'NVENC' },
+      { value: 'h264_vaapi', label: 'VAAPI' },
+      { value: 'h264_videotoolbox', label: 'VideoToolbox' },
+      { value: 'h264_qsv', label: 'Quick Sync' },
+    ],
+  },
 
   // Playback, this browser: state the Player remembers (its own recall()/remember() keys), kept in the
   // schema so stored values are validated and diagnostics can include them. Nothing here is on the page.

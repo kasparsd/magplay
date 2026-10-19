@@ -164,13 +164,15 @@ export function createStatusChecks ({ status, config, engine, media, hls, logs, 
       const sessions = hls.summary()
       const { loads, loaded } = engine.stats()
       const { probes, subtitles, probeCache } = media.stats()
-      const { maxHlsSessions, hlsMaxBytes } = config()
+      const { maxHlsSessions, hlsMaxBytes, transcodeEncoder } = config()
       return {
         version,
         node: process.versions.node,
         uptimeS: Math.round((Date.now() - started) / 1000),
         ffmpeg: versions.ffmpeg,
         ffprobe: versions.ffprobe,
+        encoders: media.detectedEncoders(),
+        transcodeEncoder,
         resources: [
           { id: 'conversions', label: 'Conversions', used: sessions.active, limit: maxHlsSessions },
           { id: 'torrentLoads', label: 'Torrents loading', ...loads },
