@@ -4,6 +4,7 @@ import { isMaskedSecret } from '@magplay/api-contract'
 import type { ActionDef, ChoiceDef, ItemFieldDef, ListDef, ListItem, NumberDef, SecretDef, SettingDef, TextDef } from '@magplay/api-contract'
 import { el } from './ui.ts'
 import type { Child } from './ui.ts'
+import { presentSetting } from './setting-rules.ts'
 
 /** What a readout shows: text, text with a meter (0–1), or a ready-made node. */
 export type ReadoutValue = string | Node | { text: string, fraction?: number | null }
@@ -20,10 +21,8 @@ export interface ControlContext {
   run?: () => Promise<string | undefined>
   /** readout: the current value. */
   readout?: () => ReadoutValue
-  /** list: extra header content per item (a status badge, a Test button). */
+  /** list: extra header content per item (status text, a Test button). */
   itemExtras?: (item: ListItem, index: number) => Child[]
-  /** list: fields and guidance for the current item, recalculated when its type changes. */
-  itemFields?: (item: ListItem) => readonly ItemFieldDef[]
   /** list: items from env vars, shown read-only first. */
   locked?: readonly ListItem[]
   /** list: with no items at all, show one blank item to fill in (it becomes a change only once edited). */
@@ -135,33 +134,46 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
   const box = el('div', { id: ctx.id, className: 'list' })
   const items = el('div', { className: 'list-items' })
   // Its name, else its address's host, else "New source" while it's being filled in
-  const host = (url: unknown): string => /^https?:\/\/([^/:?#]+)/i.exec(text(url))?.[1] ?? ''
+  const host = (value: unknown): string => {
+    try {
+      const url = new URL(text(value))
+      return ['http:', 'https:'].includes(url.protocol) ? url.hostname : ''
+    } catch { return '' }
+  }
   const title = (item: ListItem): string => (def.titleField && text(item[def.titleField])) || host(item.url) || `New ${def.itemLabel}`
   const card = (item: ListItem, i: number, locked: boolean, update: (next: ListItem | null, committed?: boolean) => void): HTMLElement => {
     const n = `${def.itemLabel} ${i + 1}`
     const remove = el('button', { type: 'button', className: 'button', textContent: 'Remove' })
     remove.setAttribute('aria-label', `Remove ${n}`)
     remove.addEventListener('click', () => update(null))
+    const heading = el('strong', { textContent: title(item) })
     const head = el('div', { className: 'list-head' },
       el('span', { className: 'list-title' },
-        el('strong', { textContent: title(item) }),
+        heading,
         locked && el('span', { className: 'control-note', textContent: 'Set in the environment' })),
       el('span', { className: 'list-extras' },
         ...(ctx.itemExtras?.(item, i) ?? []),
         !locked && remove))
+    const updateHeading = (): void => {
+      heading.textContent = title(item)
+      const test = head.querySelector('button[aria-label^="Test "]')
+      test?.setAttribute('aria-label', `Test ${host(item.url) || def.itemLabel}`)
+    }
+    updateHeading()
     const fields = el('div')
-    const renderFields = (): void => fields.replaceChildren(...(ctx.itemFields?.(item) ?? def.item).map(f => el('div', { className: 'row' },
+    const renderFields = (): void => fields.replaceChildren(...def.item.map(f => presentSetting(f, key => item[key])).filter(f => !f.hidden).map(f => el('div', { className: 'row' },
       el('div', { className: 'row-text' },
         el('label', { className: 'row-label', htmlFor: `${ctx.id}-${i}-${f.key}` }, f.label, optionalNote(f)),
         f.help && el('p', { className: 'help', textContent: f.help })),
       el('div', { className: 'row-control' }, field(f, item[f.key], {
         id: `${ctx.id}-${i}-${f.key}`,
         label: `${f.label}, ${n}`,
-        disabled: locked,
+        disabled: locked || !!f.disabled,
         onChange: (v, committed) => {
           item = { ...item, [f.key]: v }
           update(item, committed)
-          if (f.key === 'type' && ctx.itemFields) {
+          updateHeading()
+          if (def.item.some(field => field.rules?.some(rule => rule.when.key === f.key))) {
             renderFields()
             fields.querySelector<HTMLElement>(`#${ctx.id}-${i}-${f.key}`)?.focus()
           }

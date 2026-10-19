@@ -1,4 +1,5 @@
 // The connection test: latency to the server and download speed from its byte faucet, run on demand.
+import { formatSpeed } from './format.ts'
 import { STORAGE_KEYS } from './preferences.ts'
 import type { PreferenceStorage } from './preferences.ts'
 
@@ -71,6 +72,14 @@ export const CONNECTION_MAX_AGE_MS = 7 * 24 * 3600_000
 /** Below this a local network struggles with high-bitrate files. */
 export const SLOW_BYTES_PER_SEC = 10e6
 export const SLOW_LATENCY_MS = 100
+
+/** Name the measured limit that failed without guessing the network cause. */
+export function connectionWarning (result: ConnectionResult): string {
+  return [
+    result.downBytesPerSec < SLOW_BYTES_PER_SEC && `Download speed is below ${formatSpeed(SLOW_BYTES_PER_SEC)}.`,
+    result.latencyMs > SLOW_LATENCY_MS && `Latency is above ${SLOW_LATENCY_MS} ms.`,
+  ].filter(Boolean).join(' ')
+}
 
 /** ok, warn (slow), or unknown when never run or older than a week. */
 export function connectionLevel (result: ConnectionResult | null, now = Date.now()): 'ok' | 'warn' | 'unknown' {

@@ -1,14 +1,20 @@
 import { test, expect } from './fixtures.js'
 
 const statusButton = page => page.locator('.status-button')
+const clockPages = new WeakSet()
 
 async function save (page) {
+  if (!clockPages.has(page)) {
+    await page.clock.install()
+    clockPages.add(page)
+  }
   await expect(page.locator('#savebar')).toBeVisible()
   const response = page.waitForResponse(r => r.url().endsWith('/api/settings') && r.request().method() === 'PATCH')
   await page.locator('#savebar-save').click()
   expect((await response).status()).toBe(200)
   await expect(page.locator('#savebar-count')).toHaveText(/^Saved: /)
-  await expect(page.locator('#savebar')).toBeHidden({ timeout: 8000 })
+  await page.clock.fastForward(4100)
+  await expect(page.locator('#savebar')).toBeHidden()
 }
 
 test('the top bar has a status button with a panel of checks, and a gear that links to Settings', async ({ page, app }) => {
@@ -119,6 +125,8 @@ test('the connection test runs, and a slow result warns on every page', async ({
   const check = page.locator('.status-check', { hasText: 'Your connection' })
   await expect(check).toHaveClass(/lvl-warn/)
   await expect(check).toContainText('2.0 MB/s · 20 ms')
+  await expect(check).toContainText('Download speed is below 10.0 MB/s.')
+  await expect(check).not.toContainText('Wi-Fi')
   await expect(check.getByRole('link', { name: /Test again/ })).toHaveAttribute('href', '/settings#debug')
   await check.getByRole('link', { name: /Test again/ }).click()
   await expect(page.locator('#debug-title')).toBeInViewport()
@@ -127,6 +135,7 @@ test('the connection test runs, and a slow result warns on every page', async ({
 
 test('Settings is one page with every section stacked in order, and #section links scroll to it', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings#debug`)
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toHaveCount(0)
   const sections = page.locator('main.settings > #settings-body > section.settings-section')
   await expect(sections).toHaveCount(4)
   expect(await sections.evaluateAll(list => list.map(s => s.id))).toEqual(['sources', 'playback', 'storage', 'debug'])
@@ -217,6 +226,8 @@ test('source guidance follows its type and preserves fields across type changes 
   await expect(url).toHaveAttribute('placeholder', 'http://jackett:9117')
   await expect(page.getByText('Use the API key from Jackett settings.')).toBeVisible()
   await url.fill('http://127.0.0.1:9')
+  await expect(page.locator('.list-item').nth(1).locator('.list-title strong')).toHaveText('127.0.0.1')
+  await expect(url).toBeFocused()
   await key.fill('fixture-key')
   await indexer.fill('7')
   await type.selectOption('torznab')
@@ -244,10 +255,7 @@ test('transcode resolution follows draft changes and discard without losing its 
     data.meta['transcode.allow'] = { source: 'default' }
     await route.fulfill({ response, json: data })
   })
-  await page.goto(`${app.origin}/settings`)
-  const nav = page.getByRole('navigation', { name: 'Settings sections' })
-  await expect(nav.getByRole('link')).toHaveCount(4)
-  await nav.getByRole('link', { name: 'Playback', exact: true }).click()
+  await page.goto(`${app.origin}/settings#playback`)
   await expect(page.getByRole('heading', { name: 'Playback', exact: true })).toBeInViewport()
   const toggle = page.getByRole('switch', { name: 'Convert unsupported video' })
   const resolution = page.getByRole('radiogroup', { name: 'Conversion resolution' })
@@ -266,10 +274,103 @@ test('transcode resolution follows draft changes and discard without losing its 
   await expect(resolution.getByRole('radio', { name: '720p' })).toBeDisabled()
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto(`${app.origin}/settings#debug`)
-  const versions = page.locator('#setting-debug-server .readout-grid > div')
-  const first = await versions.nth(0).boundingBox()
-  const second = await versions.nth(1).boundingBox()
-  expect(first.y).toBe(second.y)
-  expect(second.x).toBeGreaterThan(first.x + first.width)
+  const versions = page.locator('#setting-debug-server .readout-list > div')
+  for (const width of [1100, 375]) {
+    await page.setViewportSize({ width, height: 812 })
+    const first = await versions.nth(0).boundingBox()
+    const second = await versions.nth(1).boundingBox()
+    expect(second.y).toBeGreaterThanOrEqual(first.y + first.height)
+    const label = await versions.nth(0).locator('dt').boundingBox()
+    const value = await versions.nth(0).locator('dd').boundingBox()
+    expect(value.x).toBeGreaterThan(label.x + label.width)
+    expect(Math.abs(value.y - label.y)).toBeLessThan(4)
+  }
   await expect(page.getByRole('button', { name: 'Clear conversion cache', exact: true })).toBeVisible()
+})
+
+test('source headings follow URL edits without losing focus or exposing credentials', async ({ page, app }) => {
+  await page.goto(`${app.origin}/settings`)
+  await page.getByRole('button', { name: '+ Add source' }).click()
+  const source = page.locator('.list-item').nth(1)
+  const heading = source.locator('.list-title strong')
+  const url = source.getByLabel('Source URL, source 2', { exact: true })
+  await expect(heading).toHaveText('New source')
+  await url.fill('http://user:password@media.local:3333/feed')
+  await expect(heading).toHaveText('media.local')
+  await expect(source.getByRole('button', { name: 'Test media.local', exact: true })).toBeVisible()
+  await expect(url).toBeFocused()
+  await url.fill('https://another.local/feed')
+  await expect(heading).toHaveText('another.local')
+  await expect(url).toBeFocused()
+  await url.fill('')
+  await expect(heading).toHaveText('New source')
+  await expect(url).toBeFocused()
+  await page.getByRole('button', { name: 'Discard', exact: true }).click()
+})
+
+test('save confirmation expires on time and old deadlines cannot hide new edits or saves', async ({ page, app }) => {
+  await page.clock.install({ time: new Date('2026-10-19T12:00:00Z') })
+  await page.clock.pauseAt(new Date('2026-10-19T12:01:00Z'))
+  await page.goto(`${app.origin}/settings`)
+  const timeout = page.locator('#setting-search-timeoutS')
+  const bar = page.locator('#savebar')
+  const submit = async () => {
+    const response = page.waitForResponse(r => r.url().endsWith('/api/settings') && r.request().method() === 'PATCH')
+    await page.locator('#savebar-save').click()
+    expect((await response).status()).toBe(200)
+    await expect(page.locator('#savebar-count')).toHaveText('Saved: search timeout')
+  }
+  await timeout.fill('40')
+  await submit()
+  await page.clock.runFor(3999)
+  await expect(bar).toBeVisible()
+  await page.clock.runFor(1)
+  await expect(bar).toBeHidden()
+  await timeout.fill('45')
+  await submit()
+  await page.clock.runFor(2000)
+  await timeout.fill('50')
+  await page.clock.runFor(2000)
+  await expect(page.locator('#savebar-count')).toHaveText('1 unsaved change')
+  await submit()
+  await page.clock.runFor(2000)
+  await timeout.fill('30')
+  await submit()
+  // The previous confirmation would have expired here.
+  await page.clock.runFor(2000)
+  await expect(page.locator('#savebar-count')).toHaveText('Saved: search timeout')
+  await expect(bar).toBeVisible()
+  await page.clock.runFor(2000)
+  await expect(bar).toBeHidden()
+  await timeout.fill('40')
+  await submit()
+  // Advance wall time without running timers, as when a backgrounded page resumes.
+  await page.clock.setSystemTime(new Date(await page.evaluate(() => Date.now()) + 60_000))
+  await expect(bar).toBeVisible()
+  await page.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')) })
+  await expect(bar).toBeHidden()
+  await timeout.fill('30')
+  await submit()
+  await page.clock.runFor(4000)
+  await expect(bar).toBeHidden()
+})
+
+test('schema dependencies cannot unlock environment-controlled resolution', async ({ page, app }) => {
+  await page.route('**/api/settings', async route => {
+    const response = await route.fetch()
+    const data = await response.json()
+    data.values['transcode.allow'] = true
+    data.meta['transcode.allow'] = { source: 'default' }
+    data.meta['transcode.maxHeight'] = { source: 'env', env: 'TRANSCODE_MAX_HEIGHT' }
+    await route.fulfill({ response, json: data })
+  })
+  await page.goto(`${app.origin}/settings#playback`)
+  const resolution = page.getByRole('radiogroup', { name: 'Conversion resolution' })
+  await expect(resolution.getByRole('radio', { name: '720p' })).toBeDisabled()
+  await page.getByRole('switch', { name: 'Convert unsupported video' }).click()
+  await page.getByRole('switch', { name: 'Convert unsupported video' }).click()
+  await expect(resolution.getByRole('radio', { name: '720p' })).toBeDisabled()
+  await expect(resolution.getByRole('radio', { name: '720p' })).toBeChecked()
+  await expect(page.locator('#row-setting-transcode-maxHeight')).toContainText('TRANSCODE_MAX_HEIGHT')
+  await expect(page.locator('#savebar')).toBeHidden()
 })

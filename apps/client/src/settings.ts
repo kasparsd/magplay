@@ -1,13 +1,14 @@
 // The settings page, /settings#<section>: a loop over the settings schema, one control per entry.
 // Server settings collect in a save bar and are saved together; browser settings apply as they change.
 import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
-import type { DebugInfo, ItemFieldDef, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
+import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, optionalNote, renderControl } from './lib/controls.ts'
 import type { ControlContext, ReadoutValue } from './lib/controls.ts'
+import { presentSetting } from './lib/setting-rules.ts'
 import { readPreferences, setPreference } from './lib/preferences.ts'
 import type { PreferenceKey, Preferences } from './lib/preferences.ts'
-import { connectionLevel, measureConnection, readConnection, saveConnection, SLOW_BYTES_PER_SEC, SLOW_LATENCY_MS } from './lib/speedtest.ts'
+import { connectionLevel, connectionWarning, measureConnection, readConnection, saveConnection, SLOW_BYTES_PER_SEC, SLOW_LATENCY_MS } from './lib/speedtest.ts'
 import { onStatus, refreshStatus, updateBrowserChecks } from './lib/status-menu.ts'
 import type { MergedStatus } from './lib/status-menu.ts'
 import './lib/topbar.ts'
@@ -67,8 +68,8 @@ function logView (): HTMLElement {
   return el('div', {}, el('p', { className: 'muted', textContent: `Server log level: ${debug?.logging.level ?? '…'} · Dropped entries: ${debug?.logging.dropped ?? 0}. Filter the recorded entries below.` }), filter, pre)
 }
 
-function grid (cells: Array<[string, ReadoutValue]>): HTMLElement {
-  return el('dl', { className: 'readout-grid' }, ...cells.map(([label, value]) => {
+function infoList (cells: Array<[string, ReadoutValue]>): HTMLElement {
+  return el('dl', { className: 'readout-list' }, ...cells.map(([label, value]) => {
     const dd = el('dd')
     fillReadout(dd, value)
     return el('div', {}, el('dt', { textContent: label }), dd)
@@ -87,7 +88,7 @@ const READOUTS: Record<string, () => ReadoutValue> = {
         el('span', { className: 'muted', textContent: `tested ${timeAgo(r.at)}` })),
       el('p', {}, el('span', { className: `status-dot lvl-${level}` }), ' ',
         level === 'warn'
-          ? 'This connection may be too slow for high-bitrate video.'
+          ? connectionWarning(r)
           : level === 'ok' ? `At least ${formatSpeed(SLOW_BYTES_PER_SEC)} download and no more than ${SLOW_LATENCY_MS} ms latency.` : 'These results are over a week old. Run the test again.'))
   },
   'cache.usage': () => {
@@ -97,13 +98,13 @@ const READOUTS: Record<string, () => ReadoutValue> = {
     return { text: `Torrent cache: ${gb(disk.cacheBytes)} / ${gb(disk.cacheMaxBytes)} · Free disk space: ${gb(disk.free)}`, fraction: disk.cacheBytes / disk.cacheMaxBytes }
   },
   'debug.server': () => debug
-    ? grid([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`]])
+    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`]])
     : 'Loading…',
   'debug.resources': () => {
     if (!debug) return 'Loading…'
     const resources = debug.resources
     const capacity = new Set(['conversions', 'torrentLoads', 'torrents', 'probes', 'subtitles'])
-    const resourceGrid = (active: boolean): HTMLElement => grid(resources.filter(r => capacity.has(r.id) === active).map(r => [r.label, r.unit === 'bytes'
+    const resourceGrid = (active: boolean): HTMLElement => infoList(resources.filter(r => capacity.has(r.id) === active).map(r => [r.label, r.unit === 'bytes'
       ? { text: `${size(r.used)} of ${size(r.limit)}`, fraction: r.used / r.limit }
       : r.limit ? { text: `${r.used} of ${r.limit}`, fraction: r.used / r.limit } : String(r.used)]))
     return el('div', { className: 'resource-groups' },
@@ -147,8 +148,8 @@ function refreshReadout (key: string, force = false): void {
       const next = read()
       if (next instanceof HTMLElement) {
         for (const group of box.querySelectorAll('details')) {
-          const current = group.querySelector('.readout-grid')
-          const updated = next.querySelector(`#${group.id} .readout-grid`)
+          const current = group.querySelector('.readout-list')
+          const updated = next.querySelector(`#${group.id} .readout-list`)
           if (current && updated) current.replaceChildren(...updated.childNodes)
         }
         return
@@ -178,24 +179,15 @@ function envNote (def: SettingDef, meta: SettingMeta | undefined): Child {
   return el('p', { className: 'env-note' }, 'Set by ', el('code', { textContent: meta.env ?? def.env?.[0] ?? '' }), '. Change this environment variable to edit the setting.')
 }
 
-/** Source-specific presentation; hidden fields keep their values in the draft. */
-function sourceFields (fields: readonly ItemFieldDef[], item: ListItem): ItemFieldDef[] {
-  return fields.filter(f => f.key !== 'indexer' || item.type === 'jackett' || item.type === 'prowlarr').map(f => {
-    if (f.key === 'apiKey') return { ...f, help: item.type === 'torznab' ? 'Leave blank if this feed does not require an API key.' : `Use the API key from ${item.type === 'jackett' ? 'Jackett' : 'Prowlarr'} settings.` }
-    if (f.key === 'indexer') return { ...f, help: item.type === 'jackett' ? 'Enter an indexer ID or filter. Leave blank to search all indexers.' : 'Enter indexer IDs separated by commas. Leave blank to search all indexers.' }
-    if (f.key === 'url' && f.type === 'url') return { ...f, placeholder: item.type === 'jackett' ? 'http://jackett:9117' : item.type === 'prowlarr' ? 'http://prowlarr:9696' : f.placeholder ?? '' }
-    return f
-  })
-}
-
 /** Source items get their live status and a Test button that checks the unsaved values. */
 function sourceExtras (item: ListItem): Child[] {
   const check = tested.get(item.id) ?? status?.checks.find(c => c.id === `source:${item.id}`)
-  const badge = el('span', { className: 'source-status' })
+  const indicator = el('span', { className: 'source-status' })
   const show = (c: Pick<StatusCheck, 'level' | 'value' | 'message'> | undefined): void => {
-    if (!c) return fill(badge)
+    indicator.title = c?.message ?? ''
+    if (!c) return fill(indicator)
     const word = c.level === 'ok' ? 'Working' : c.level === 'unknown' ? 'Checking' : 'Failed'
-    fill(badge, el('span', { className: `badge lvl-${c.level}`, title: c.message ?? '' }, el('span', { className: `status-dot lvl-${c.level}` }), ` ${[word, c.level === 'ok' && c.value].filter(Boolean).join(' · ')}`))
+    fill(indicator, el('span', { className: `status-dot lvl-${c.level}` }), [word, c.level === 'ok' && c.value].filter(Boolean).join(' · '))
   }
   show(check)
   const message = el('span', { className: 'sr-only', role: 'status' })
@@ -215,7 +207,7 @@ function sourceExtras (item: ListItem): Child[] {
       show({ level: 'error', message: err instanceof Error ? err.message : String(err) })
     }).finally(() => { test.disabled = false })
   })
-  return [badge, test, message]
+  return [indicator, test, message]
 }
 
 function row (def: SettingDef): HTMLElement {
@@ -232,7 +224,6 @@ function row (def: SettingDef): HTMLElement {
   if (def.type === 'list' && meta?.locked) ctx.locked = meta.locked
   if (def.key === 'sources' && def.type === 'list') {
     ctx.itemExtras = sourceExtras
-    ctx.itemFields = item => sourceFields(def.item, item)
     ctx.startWithOne = true // with no sources, the form to add one is already open
   }
   if (isValueDef(def)) {
@@ -275,18 +266,23 @@ function editServer (def: ValueDef, next: unknown, committed: boolean): void {
     slot.textContent = result.ok ? '' : `${def.label} ${result.error}`
   }
   renderSaveBar()
-  syncTranscoding()
+  syncPresentation()
 }
 
-/** Disabling transcoding leaves the chosen resolution intact for the next time it is enabled. */
-function syncTranscoding (): void {
-  const row = document.getElementById('row-setting-transcode-maxHeight')
-  if (!row) return
-  const inactive = serverValue('transcode.allow') !== true
-  row.classList.toggle('inactive', inactive)
-  for (const input of row.querySelectorAll<HTMLInputElement>('input')) input.disabled = inactive || metaOf('transcode.maxHeight')?.source === 'env'
-  const help = row.querySelector('.help')
-  if (help) help.textContent = inactive ? 'Turn on video conversion to change the resolution.' : 'Maximum resolution for converted video. Higher resolutions use more CPU.'
+/** Apply schema dependencies to existing controls so edits keep focus and values. */
+function syncPresentation (): void {
+  for (const def of SETTINGS) {
+    if (!def.rules?.length) continue
+    const row = document.getElementById(`row-setting-${def.key.replace(/\./g, '-')}`)
+    if (!row) continue
+    const presented = presentSetting(def, key => serverValue(key))
+    row.hidden = !!presented.hidden
+    row.classList.toggle('inactive', !!presented.disabled)
+    const disabled = !!presented.disabled || metaOf(def.key)?.source === 'env'
+    for (const input of row.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')) input.disabled = disabled
+    const help = row.querySelector('.help')
+    if (help) help.textContent = presented.help ?? ''
+  }
 }
 
 // ---- Sections ----
@@ -340,23 +336,28 @@ function renderSectionStatus (): void {
 }
 
 /** "Saved: search timeout" for a few seconds after a save, in the same bar. */
-let savedNote: { text: string, timer: ReturnType<typeof setTimeout> } | null = null
+let savedNote: { text: string, expiresAt: number } | null = null
+let savedTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearSavedNote (): void {
+  if (savedTimer !== null) clearTimeout(savedTimer)
+  savedTimer = null
+  savedNote = null
+}
 
 function renderSaveBar (): void {
   const n = Object.keys(draft).length
-  if (n && savedNote) {
-    clearTimeout(savedNote.timer)
-    savedNote = null
-  }
+  if (savedNote && (n || Date.now() >= savedNote.expiresAt)) clearSavedNote()
   saveBar.hidden = n === 0 && !savedNote
   saveBar.classList.toggle('saved', !n && !!savedNote)
   $('#savebar-count').textContent = savedNote && !n ? savedNote.text : `${n} unsaved ${n === 1 ? 'change' : 'changes'}`
 }
 
 function noteSaved (keys: string[]): void {
-  if (savedNote) clearTimeout(savedNote.timer)
+  clearSavedNote()
   const names = keys.map(key => SETTINGS.find(d => d.key === key)?.label.toLowerCase() ?? key)
-  savedNote = { text: `Saved: ${names.join(', ')}`, timer: setTimeout(() => { savedNote = null; renderSaveBar() }, 4000) }
+  savedNote = { text: `Saved: ${names.join(', ')}`, expiresAt: Date.now() + 4000 }
+  savedTimer = setTimeout(() => { renderSaveBar() }, 4000)
 }
 
 function render (): void {
@@ -365,13 +366,9 @@ function render (): void {
   fill(body, ...SECTIONS.map(s => renderSection(s.id)))
   renderSectionStatus()
   renderSaveBar()
-  syncTranscoding()
+  syncPresentation()
   if (observer) watchLiveSections()
 }
-
-const navigation = el('nav', { className: 'settings-nav' }, ...SECTIONS.map(s => el('a', { href: `#${s.id}`, textContent: s.label })))
-navigation.setAttribute('aria-label', 'Settings sections')
-body.before(navigation)
 
 /** Scrolls to the section the hash names (#debug), once it has been rendered. */
 function scrollToHash (): void {
@@ -435,13 +432,15 @@ $('#savebar-discard').addEventListener('click', () => {
   setStatus($('#savebar-status'), '')
   render()
 })
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderSaveBar() })
+window.addEventListener('pageshow', () => { renderSaveBar() })
 window.addEventListener('beforeunload', e => { if (Object.keys(draft).length) e.preventDefault() })
 onStatus(next => {
   status = next
   tested.clear()
   if (!saved) return
   renderSectionStatus()
-  // Source badges follow the latest checks; re-render the list only when nothing is being edited there
+  // Source status follows the latest checks; re-render the list only when nothing is being edited there
   const section = document.getElementById('sources')
   if (section && !('sources' in draft) && !section.contains(document.activeElement)) {
     section.replaceWith(renderSection('sources'))

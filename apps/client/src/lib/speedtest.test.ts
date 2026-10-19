@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { connectionLevel, measureConnection, readConnection, saveConnection, CONNECTION_MAX_AGE_MS } from './speedtest.ts'
+import { connectionLevel, connectionWarning, measureConnection, readConnection, saveConnection, CONNECTION_MAX_AGE_MS } from './speedtest.ts'
 import { getPreference, readPreferences, setPreference } from './preferences.ts'
 
 function memoryStorage (): Storage {
@@ -60,4 +60,12 @@ test('results and preferences round-trip through storage, and bad stored values 
   assert.equal(prefs['player.volume'], 1)
   assert.equal(prefs['player.muted'], true)
   assert.equal(getPreference('player.volume', null), 1)
+})
+
+test('connection warnings identify download and latency limits independently', () => {
+  const result = { at: 1, downBytesPerSec: 2e6, latencyMs: 20 }
+  assert.equal(connectionWarning(result), 'Download speed is below 10.0 MB/s.')
+  assert.equal(connectionWarning({ ...result, downBytesPerSec: 50e6, latencyMs: 150 }), 'Latency is above 100 ms.')
+  assert.equal(connectionWarning({ ...result, latencyMs: 150 }), 'Download speed is below 10.0 MB/s. Latency is above 100 ms.')
+  assert.equal(connectionWarning({ ...result, downBytesPerSec: 10e6, latencyMs: 100 }), '')
 })

@@ -18,6 +18,17 @@ export const SECTIONS: readonly SectionDef[] = [
   { id: 'debug', label: 'Debug', intro: 'Server status, logs and troubleshooting details.' },
 ]
 
+export interface SettingPresentation {
+  hidden?: boolean
+  disabled?: boolean
+  help?: string
+  placeholder?: string
+}
+
+export interface SettingRule extends SettingPresentation {
+  when: { key: string, equals: string | number | boolean }
+}
+
 interface Common {
   /** Dotted, stable id: 'cache.maxGb'. Also the key in settings.json and localStorage. */
   key: string
@@ -29,8 +40,10 @@ interface Common {
   env?: readonly string[]
   /** Cards within a section; settings with the same group render together. */
   group?: string
-  /** Stored and validated but not rendered (state the player remembers, like volume). */
+  /** Hidden unless a presentation rule overrides it; stored values remain validated. */
   hidden?: boolean
+  /** Presentation overrides based on another setting, or a sibling field inside a list item. */
+  rules?: readonly SettingRule[]
 }
 
 export interface TextDef extends Common {
@@ -130,9 +143,43 @@ export const SETTINGS: readonly SettingDef[] = [
         default: 'torznab',
         options: [{ value: 'torznab', label: 'Torznab' }, { value: 'jackett', label: 'Jackett' }, { value: 'prowlarr', label: 'Prowlarr' }],
       },
-      { key: 'url', type: 'url', label: 'Source URL', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
-      { key: 'apiKey', type: 'secret', label: 'API key', default: '', optional: true, placeholder: 'Paste the key' },
-      { key: 'indexer', type: 'text', label: 'Indexer filter', default: '', optional: true, placeholder: 'All' },
+      {
+        key: 'url',
+        type: 'url',
+        label: 'Source URL',
+        default: '',
+        placeholder: 'http://bitmagnet:3333/torznab/api',
+        rules: [
+          { when: { key: 'type', equals: 'jackett' }, placeholder: 'http://jackett:9117' },
+          { when: { key: 'type', equals: 'prowlarr' }, placeholder: 'http://prowlarr:9696' },
+        ]
+      },
+      {
+        key: 'apiKey',
+        type: 'secret',
+        label: 'API key',
+        default: '',
+        optional: true,
+        placeholder: 'Paste the key',
+        help: 'Leave blank if this feed does not require an API key.',
+        rules: [
+          { when: { key: 'type', equals: 'jackett' }, help: 'Use the API key from Jackett settings.' },
+          { when: { key: 'type', equals: 'prowlarr' }, help: 'Use the API key from Prowlarr settings.' },
+        ]
+      },
+      {
+        key: 'indexer',
+        type: 'text',
+        label: 'Indexer filter',
+        default: '',
+        optional: true,
+        placeholder: 'All',
+        hidden: true,
+        rules: [
+          { when: { key: 'type', equals: 'jackett' }, hidden: false, help: 'Enter an indexer ID or filter. Leave blank to search all indexers.' },
+          { when: { key: 'type', equals: 'prowlarr' }, hidden: false, help: 'Enter indexer IDs separated by commas. Leave blank to search all indexers.' },
+        ]
+      },
     ],
   },
   {
@@ -159,6 +206,7 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'segmented',
     label: 'Conversion resolution',
     help: 'Maximum resolution for converted video. Higher resolutions use more CPU.',
+    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to change the resolution.' }],
     env: ['TRANSCODE_MAX_HEIGHT'],
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
