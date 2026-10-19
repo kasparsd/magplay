@@ -6,6 +6,10 @@ Search a Torznab indexer (BitMagnet, Prowlarr…), pick a torrent, and play a vi
 
 ![magplay playing Big Buck Bunny on desktop and mobile](docs/screenshots/player.png)
 
+![magplay settings on desktop and mobile](docs/screenshots/settings.png)
+
+![magplay status panel on desktop and mobile](docs/screenshots/status.png)
+
 <sub>The player shows [Big Buck Bunny](https://peach.blender.org/) (© Blender Foundation, CC BY 3.0). To regenerate the screenshots, run `node tools/scripts/screenshots.mjs path/to/big_buck_bunny_720p_h264.mov`.</sub>
 
 For sample media to try it with, Blender’s [Open Movies](https://studio.blender.org/films/) such as Big Buck Bunny and [Elephants Dream](https://orange.blender.org/download/) are shared under Creative Commons.
