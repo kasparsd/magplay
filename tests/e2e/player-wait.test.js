@@ -16,7 +16,7 @@ async function holdPlaylists (page) {
   return release
 }
 
-test('cached HLS delivery wait shows flow, preserves Diagnostics/focus, and recovers without notices erasing it', async ({ page, app }) => {
+test('cached HLS delivery wait shows flow, preserves Diagnostics/focus, and recovers without notices erasing it', { tag: '@slow' }, async ({ page, app }) => {
   const release = await holdPlaylists(page)
   try {
     await page.goto(app.player(remux))
@@ -38,7 +38,7 @@ test('cached HLS delivery wait shows flow, preserves Diagnostics/focus, and reco
 })
 
 for (const width of [1100, 375, 320]) {
-  test(`pinned flow observes direct playback and pause without resizing or blocking the video at ${width}px`, async ({ page, app }) => {
+  test(`pinned flow observes direct playback and pause without resizing or blocking the video at ${width}px`, { tag: '@slow' }, async ({ page, app }) => {
     await page.setViewportSize({ width, height: 812 })
     await openPlayer(page, app, direct)
     const before = await page.locator('#stage').boundingBox()
@@ -60,7 +60,7 @@ for (const width of [1100, 375, 320]) {
 }
 
 for (const width of [1100, 560, 375, 320]) {
-  test(`flow positions, inspection, and Diagnostics survive reason changes at ${width}px`, async ({ page, app }, testInfo) => {
+  test(`flow positions, inspection, and Diagnostics survive reason changes at ${width}px`, { tag: '@slow' }, async ({ page, app }, testInfo) => {
     await page.setViewportSize({ width, height: 900 })
     const release = await holdPlaylists(page)
     let state = 'browser'
@@ -112,7 +112,7 @@ for (const width of [1100, 560, 375, 320]) {
   })
 }
 
-test('short landscape waits keep recovery and stage details reachable in fullscreen', async ({ page, app }, testInfo) => {
+test('short landscape waits keep recovery and stage details reachable in fullscreen', { tag: '@slow' }, async ({ page, app }, testInfo) => {
   await page.setViewportSize({ width: 812, height: 375 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const release = await holdPlaylists(page)
@@ -138,7 +138,7 @@ test('short landscape waits keep recovery and stage details reachable in fullscr
 
 test.describe('touch and larger text', () => {
   test.use({ hasTouch: true, viewport: { width: 375, height: 812 } })
-  test('flow controls remain reachable with larger text and touch targets', async ({ page, app }, testInfo) => {
+  test('flow controls remain reachable with larger text and touch targets', { tag: '@slow' }, async ({ page, app }, testInfo) => {
     const release = await holdPlaylists(page)
     try {
       await page.goto(app.player(remux))
@@ -162,7 +162,7 @@ test.describe('touch and larger text', () => {
   })
 })
 
-test('waiting reasons and their actions fit a phone and remain inside fullscreen', async ({ page, app }) => {
+test('waiting reasons and their actions fit a phone and remain inside fullscreen', { tag: '@slow' }, async ({ page, app }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   const release = await holdPlaylists(page)
   try {
@@ -186,7 +186,7 @@ test('waiting reasons and their actions fit a phone and remain inside fullscreen
   } finally { release() }
 })
 
-test('normal direct playback and a deliberate pause have no buffering explanation', async ({ page, app }) => {
+test('normal direct playback and a deliberate pause have no buffering explanation', { tag: '@slow' }, async ({ page, app }) => {
   await openPlayer(page, app, direct)
   await expect(explanation(page)).toBeHidden()
   await showChrome(page)
@@ -198,7 +198,7 @@ test('normal direct playback and a deliberate pause have no buffering explanatio
   await expect(explanation(page)).toBeHidden()
 })
 
-test('a lost session is explained while waiting, and retry owns the replacement', async ({ page, app }) => {
+test('a lost session is explained while waiting, and retry owns the replacement', { tag: '@slow' }, async ({ page, app }) => {
   const release = await holdPlaylists(page)
   try {
     const response = page.waitForResponse(r => r.url().endsWith('/api/play') && r.request().method() === 'POST')
@@ -221,7 +221,7 @@ test('a lost session is explained while waiting, and retry owns the replacement'
   } finally { release() }
 })
 
-test('out-of-date diagnostics stop claiming a cause and recover when status returns', async ({ page, app }) => {
+test('out-of-date diagnostics stop claiming a cause and recover when status returns', { tag: '@slow' }, async ({ page, app }) => {
   const release = await holdPlaylists(page)
   let unavailable = false
   await page.route('**/api/torrents/*/status?*', route => unavailable ? route.abort() : route.continue())
@@ -239,7 +239,7 @@ test('out-of-date diagnostics stop claiming a cause and recover when status retu
   } finally { release() }
 })
 
-test('blocked autoplay explains the needed gesture and the real Play action recovers', async ({ page, app }) => {
+test('blocked autoplay explains the needed gesture and the real Play action recovers', { tag: '@slow' }, async ({ page, app }) => {
   await page.addInitScript(() => {
     const play = HTMLMediaElement.prototype.play
     let blocked = true

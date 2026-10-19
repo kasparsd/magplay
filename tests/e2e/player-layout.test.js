@@ -17,7 +17,7 @@ const files = [
 ]
 
 for (const { name, file, width: videoWidth, ratio } of files) {
-  test(`the ${name} video box keeps its aspect ratio and fits the viewport at desktop and phone sizes`, async ({ page, app }) => {
+  test(`the ${name} video box keeps its aspect ratio and fits the viewport at desktop and phone sizes`, { tag: '@slow' }, async ({ page, app }) => {
     await openPlayer(page, app, file, videoWidth)
     for (const { width, height, titleAboveFold } of sizes) {
       await page.setViewportSize({ width, height })
@@ -43,7 +43,7 @@ for (const { name, file, width: videoWidth, ratio } of files) {
 
 // Phone portrait and landscape both leave the stage under 600 px wide
 for (const { width, height } of [{ width: 375, height: 812 }, { width: 812, height: 375 }]) {
-  test(`below 600 px of stage the chrome drops ±10 s, volume and Speed, and keeps 40 px targets at ${width}×${height}`, async ({ page, app }) => {
+  test(`below 600 px of stage the chrome drops ±10 s, volume and Speed, and keeps 40 px targets at ${width}×${height}`, { tag: '@slow' }, async ({ page, app }) => {
     await page.setViewportSize({ width, height })
     await openPlayer(page, app, direct)
     const stage = await page.locator('#stage').boundingBox()
@@ -70,7 +70,7 @@ for (const { width, height } of [{ width: 375, height: 812 }, { width: 812, heig
   })
 }
 
-test('the title row names the release and episode; the file name moves into Details', async ({ page, app }) => {
+test('the title row names the release and episode; the file name moves into Details', { tag: '@slow' }, async ({ page, app }) => {
   await openPlayer(page, app, direct)
   await expect(page.locator('h1')).toHaveText('Playback fixtures · S01E01')
   await expect(page.locator('#back')).toHaveText('← Playback fixtures')
@@ -81,7 +81,7 @@ test('the title row names the release and episode; the file name moves into Deta
   await expect(page.getByRole('button', { name: 'ⓘ Details' })).toHaveAttribute('aria-expanded', 'true')
 })
 
-test('the Player has the status button and Settings gear in its top bar, and the video still fits', async ({ page, app }) => {
+test('the Player has the status button and Settings gear in its top bar, and the video still fits', { tag: '@slow' }, async ({ page, app }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await openPlayer(page, app, direct)
   const bar = page.locator('header.topbar')

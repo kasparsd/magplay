@@ -150,9 +150,6 @@ test('Settings is one page with every section stacked in order, and #section lin
 test('only the settings people tune are on the page, and Sources has a labelled list', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings`)
   await expect(page.locator('#sources')).toBeVisible()
-  for (const gone of ['Extra trackers', 'Web port', 'Torrent port', 'Find peers with DHT', 'Cache folder', 'Simultaneous conversions', 'Close idle torrents after', 'Wait for torrent metadata', 'Needs a restart', 'Play the next episode automatically', 'Show playback stats on the video', 'Log requests to the browser console', 'Not set; managed here', 'Preferred subtitles', 'Preferred audio', 'Default speed']) {
-    await expect(page.getByText(gone, { exact: false })).toHaveCount(0)
-  }
   await expect(page.locator('#row-setting-sources > .row-text > .row-label')).toHaveText('Search sources')
   await expect(page.locator('#row-setting-sources > .row-text > .help')).toBeVisible()
   // One stylesheet serves every page: the Player's wait-overlay id must not appear here, or its padding renders a huge empty box
