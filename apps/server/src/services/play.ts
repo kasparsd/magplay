@@ -28,7 +28,6 @@ export interface Play {
   preparation: (ih: string, idx: number) => PlaybackPreparation | null
 }
 
-
 /** Whether an MP4 stores its `moov` (index) box before `mdat` (media data) — a "faststart"/web-optimized file.
  *  Files without it can't start playing until the trailing metadata arrives, which on a torrent may take
  *  the whole download. Reads only the leading bytes and never throws. */
