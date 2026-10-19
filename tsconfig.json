@@ -11,6 +11,9 @@
       "path": "packages/release-info"
     },
     {
+      "path": "packages/release"
+    },
+    {
       "path": "packages/seekable-tar"
     },
     {
