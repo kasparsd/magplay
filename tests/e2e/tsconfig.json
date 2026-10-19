@@ -8,5 +8,5 @@
     "checkJs": false
   },
   "include": ["*.ts", "types/*.d.ts", "../../packages/torrent-engine/src/types/parse-torrent.d.ts"],
-  "references": [{ "path": "../../packages/api-contract" }]
+  "references": [{ "path": "../../packages/api-contract" }, { "path": "../../packages/playback" }]
 }

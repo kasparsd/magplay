@@ -128,6 +128,13 @@ The window loads pages, APIs and media from one loopback HTTP origin after readi
 
 A frontend proxy is not a cross-origin client. Nginx can serve the static pages and built client and proxy `/api`, `/raw`, `/tar`, `/hls`, `/subs` and playlists under the same origin. This needs neither CORS nor authentication. Node-only serving stays supported.
 
+## HLS session timing
+
+An HLS session is one ffmpeg writing fMP4 segments from `start` seconds into the file (`ffmpegArgs` in `packages/playback/src/media.ts`). Its timestamps follow two rules, both for browsers' MSE parsers, which hls.js feeds the segments as they are:
+
+- **Every track begins where the seek lands.** `-ss` before `-i` seeks to the keyframe before `start`, which is where copied video has to begin. `-noaccurate_seek` keeps converted audio from being trimmed to `start` itself, so the tracks start together instead of up to a GOP apart. The session timeline therefore begins at that keyframe, not at `start`; `offset` in the play decision is still `start`, so the position readout and subtitles run ahead of the picture by the keyframe distance after a resume, seek restart or audio switch (roadmap item 3).
+- **Start offsets live in `tfdt`, never in edit lists.** movenc writes each track's first fragment at decode time 0 and puts the track's real start (the audio/video gap, the B-frame reordering delay, AAC encoder priming) into an edit list in `init.mp4`. hls.js never reads edit lists and Chrome's MSE ignores empty edits, so audio played ahead of video. `-hls_segment_options use_editlist=0:movflags=+frag_discont:avoid_negative_ts=disabled` makes the fragment muxer keep absolute decode times (`frag_discont` without edit lists) and not shift them again (the outer hls muxer has already made them non-negative). Safari's native player accepts both forms. `tests/e2e/hls-sync.test.ts` measures a flash/beep marker through the real argument list with edit lists ignored; [the checkpoint](checkpoints/2026-10-19-hls-av-sync.md) records the measurements.
+
 ## Framework and browser-media triggers
 
 Preact is a conditional option, not a chosen destination. Consider it only if shared reactive state or component composition becomes the dominant maintenance problem. Keep the media controller imperative even if a framework eventually owns its surrounding shell. The player's lifecycle and abort ownership is described in [lifetime rules](lifecycle.md).

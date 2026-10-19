@@ -213,13 +213,20 @@ export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMax
     ['-map', `0:s:${s.index}`, '-c:s', 'webvtt', '-flush_packets', '1', '-f', 'webvtt', `${dir}/sub_${s.index}.vtt`])
   return [
     '-hide_banner', '-nostdin', '-loglevel', 'warning', '-progress', 'pipe:1',
+    // Input seeking lands on the keyframe before `start`, where copied video has to begin. Without -noaccurate_seek
+    // ffmpeg would trim converted audio to `start` itself, so the tracks would begin up to a GOP apart.
     // FLV can't seek even to 0 and would skip to the next keyframe
-    ...(start ? ['-ss', String(start)] : []), '-i', input,
+    ...(start ? ['-noaccurate_seek', '-ss', String(start)] : []), '-i', input,
     '-map', '0:v:0', ...(a ? ['-map', `0:a:${audio}`] : []),
     ...video, ...audioArgs,
     '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'event',
     '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4',
     '-hls_flags', 'independent_segments+temp_file',
+    // movenc writes every track's first fragment at tfdt 0 and puts the track's real start (the audio/video gap,
+    // B-frame delay, encoder priming) into an edit list. hls.js never reads edit lists and Chrome's MSE ignores
+    // empty edits, so audio ran ahead of video. frag_discont without edit lists keeps the offsets in tfdt;
+    // the outer hls muxer has already made the timestamps non-negative, so the fragment muxer must not shift again.
+    '-hls_segment_options', 'use_editlist=0:movflags=+frag_discont:avoid_negative_ts=disabled',
     '-hls_segment_filename', `${dir}/seg_%05d.m4s`, `${dir}/index.m3u8`,
     ...subs,
   ]
