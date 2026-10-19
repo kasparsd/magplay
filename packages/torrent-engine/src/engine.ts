@@ -42,7 +42,7 @@ export const DEFAULT_LIVE: LiveOptions = {
   checkingTimeoutMs: 7_200_000,
   idleMs: 30 * 60_000,
   cacheMaxBytes: 50 * 1024 ** 3,
-  seeding: { enabled: false, ratio: 1 },
+  seeding: { enabled: true, ratio: 1 },
 }
 
 /** Seeded torrents kept loaded at once; extras being watched may exceed it until they finish. */

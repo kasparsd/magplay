@@ -2,4 +2,4 @@
 "@magplay/server": minor
 ---
 
-Completed downloads can be shared until a chosen ratio. Sharing is off until turned on, and watching keeps priority over uploads.
+Completed downloads are shared until they have uploaded their own size. Watching keeps priority over uploads, and sharing can be turned off.

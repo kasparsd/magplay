@@ -159,7 +159,7 @@ const seedingLive = (overrides: Partial<LiveOptions> = {}): LiveOptions => ({ ..
 
 test('with seeding off, uploads are not throttled and completed torrents unload on the playback idle timeout', async t => {
   const throttle = t.mock.method(WebTorrent.prototype, 'throttleUpload')
-  const { dir, engine } = await setup(t, { ...DEFAULT_LIVE, idleMs: 0 })
+  const { dir, engine } = await setup(t, { ...DEFAULT_LIVE, idleMs: 0, seeding: { enabled: false, ratio: 1 } })
   const { folder } = await load(engine, dir, 'done.bin')
   assert.equal(engine.stats().seeded, 0)
   await tick()

@@ -243,7 +243,7 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion cache limit', help: 'Maximum disk space for temporary video conversion files.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
 
   // Sharing completed downloads
-  { key: 'seeding.enabled', section: 'storage', scope: 'server', type: 'toggle', label: 'Share completed downloads', help: 'After a download finishes, keep sharing it until the selected ratio. Watching always comes first.', group: 'Sharing', env: ['SEEDING_ENABLED'], default: false },
+  { key: 'seeding.enabled', section: 'storage', scope: 'server', type: 'toggle', label: 'Share completed downloads', help: 'After a download finishes, keep sharing it until the selected ratio. Watching always comes first.', group: 'Sharing', env: ['SEEDING_ENABLED'], default: true },
   {
     key: 'seeding.ratio',
     section: 'storage',

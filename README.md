@@ -200,7 +200,7 @@ env vars are listed first and locked; sources added in Settings follow them.
 | `EXTRA_TRACKERS` | opentrackr, stealth.si, torrent.eu.org, explodie.org, desync.com | Comma-separated, added to every torrent (BitMagnet magnets often have none) |
 | `METADATA_TIMEOUT_S` | `60` | Give up fetching a torrent's file list after this |
 | `IDLE_TORRENT_MIN` | `30` | Unload torrents nobody has streamed or watched for this long (data stays on disk) |
-| `SEEDING_ENABLED` | `false` | Keep sharing a loaded torrent once all its data is downloaded. Playback keeps priority; needs a reachable `TORRENT_PORT`. |
+| `SEEDING_ENABLED` | `true` | Keep sharing a loaded torrent once all its data is downloaded. Playback keeps priority; needs a reachable `TORRENT_PORT`. |
 | `SEEDING_RATIO` | `1` | Stop sharing after uploading this multiple of the torrent's size: `0.5`, `1`, `2` or `5` |
 | `ALLOW_VIDEO_TRANSCODE` | `false` | Enable the libx264 path (slow on the server CPU) |
 | `TRANSCODE_MAX_HEIGHT` | `720` | Downscale target when transcoding |

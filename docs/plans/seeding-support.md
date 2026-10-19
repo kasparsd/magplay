@@ -2,15 +2,15 @@
 
 ## Goal
 
-Let magplay give completed downloads back to the swarm, on an opt-in basis, without hurting playback or the cache and resource limits.
+Let magplay give completed downloads back to the swarm without hurting playback or the cache and resource limits. Sharing is on until a download has uploaded its own size, and can be turned off.
 
 ## Motivation
 
-magplay is a leecher by default: torrents load on demand (`deselect: true`) and are destroyed once idle. In-order streaming gives little back to the swarm; sharing completed downloads up to a ratio is the middle ground.
+Torrents load on demand (`deselect: true`). In-order streaming gives little back to the swarm, so a finished download keeps sharing until it has uploaded its own size.
 
 ## Owner decision (2026-10-19)
 
-- Settings are only a toggle (`seeding.enabled`, default off, `SEEDING_ENABLED`) and a ratio (`seeding.ratio`: 0.5×, 1×, 2×, 5×, default 1×, `SEEDING_RATIO`), in Storage under a "Sharing" group. The ratio is disabled, not hidden, while sharing is off.
+- Settings are only a toggle (`seeding.enabled`, default on, `SEEDING_ENABLED`) and a ratio (`seeding.ratio`: 0.5×, 1×, 2×, 5×, default 1×, `SEEDING_RATIO`), in Storage under a "Sharing" group. The ratio is disabled, not hidden, while sharing is off. The default ratio means upload the torrent's size once, then stop. It is not a split of download and upload bandwidth.
 - The app, not the user, owns concurrency, upload rate, idle unloading and playback priority. No upload-limit, max-torrents or idle-timeout settings, no per-torrent controls, no Debug or torrent-page UI.
 
 ## Design
