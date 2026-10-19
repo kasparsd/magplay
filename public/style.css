@@ -432,6 +432,7 @@ button.switch:disabled { opacity: 0.5; cursor: default; }
 .list-items { display: flex; flex-direction: column; gap: 10px; }
 fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.list-title { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; overflow-wrap: anywhere; }
 .list-extras { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .list-item .row { border-top: 0; }
 .button.add { margin-top: 2px; }

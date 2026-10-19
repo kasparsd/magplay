@@ -46,6 +46,8 @@ export interface SecretDef extends Common {
   type: 'secret'
   default: string
   placeholder?: string
+  /** An empty value is allowed. */
+  optional?: boolean
 }
 
 export interface NumberDef extends Common {
@@ -72,8 +74,6 @@ export interface ChoiceDef extends Common {
   type: 'select' | 'segmented'
   default: string | number
   options: readonly SettingOption[]
-  /** Also accept a language code that isn't listed (the Player remembers track languages as files name them: "eng"). */
-  otherLanguages?: boolean
 }
 
 /** A field inside a list item. Its key is relative to the item: 'url'. */
@@ -111,18 +111,6 @@ export type SettingType = SettingDef['type']
 
 export const isValueDef = (def: SettingDef): def is ValueDef => def.type !== 'action' && def.type !== 'readout'
 
-const LANGUAGES: readonly SettingOption[] = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-  { value: 'it', label: 'Italian' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'ru', label: 'Russian' },
-  { value: 'lv', label: 'Latvian' },
-  { value: 'ja', label: 'Japanese' },
-]
-
 export const SETTINGS: readonly SettingDef[] = [
   // Sources
   {
@@ -144,7 +132,7 @@ export const SETTINGS: readonly SettingDef[] = [
         options: [{ value: 'torznab', label: 'Torznab' }, { value: 'jackett', label: 'Jackett' }, { value: 'prowlarr', label: 'Prowlarr' }],
       },
       { key: 'url', type: 'url', label: 'Address', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
-      { key: 'apiKey', type: 'secret', label: 'API key', default: '', placeholder: 'Paste the key' },
+      { key: 'apiKey', type: 'secret', label: 'API key', help: 'Jackett and Prowlarr need one; a plain Torznab feed usually doesn’t.', default: '', optional: true, placeholder: 'Paste the key' },
       { key: 'indexer', type: 'text', label: 'Indexer filter', help: 'Jackett: an indexer id, all, or a filter. Prowlarr: comma-separated ids, -2 for all.', default: '', optional: true, placeholder: 'All' },
     ],
   },
@@ -177,38 +165,8 @@ export const SETTINGS: readonly SettingDef[] = [
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
   },
 
-  // Playback, this browser
-  {
-    key: 'player.subtitleLanguage',
-    section: 'playback',
-    scope: 'browser',
-    type: 'select',
-    label: 'Preferred subtitles',
-    help: 'The Player also remembers the last subtitles you chose.',
-    default: 'off',
-    otherLanguages: true,
-    options: [{ value: 'off', label: 'Off' }, { value: 'any', label: 'Any available' }, ...LANGUAGES],
-  },
-  {
-    key: 'player.audioLanguage',
-    section: 'playback',
-    scope: 'browser',
-    type: 'select',
-    label: 'Preferred audio',
-    help: 'The Player also remembers the last audio language you chose.',
-    default: '',
-    otherLanguages: true,
-    options: [{ value: '', label: 'First track' }, ...LANGUAGES],
-  },
-  {
-    key: 'player.speed',
-    section: 'playback',
-    scope: 'browser',
-    type: 'segmented',
-    label: 'Default speed',
-    default: 1,
-    options: [0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value, label: `${value}×` })),
-  },
+  // Playback, this browser: state the Player remembers (its own recall()/remember() keys), kept in the
+  // schema so stored values are validated and diagnostics can include them. Nothing here is on the page.
   { key: 'player.volume', section: 'playback', scope: 'browser', type: 'number', label: 'Volume', default: 1, min: 0, max: 1, step: 0.05, hidden: true },
   { key: 'player.muted', section: 'playback', scope: 'browser', type: 'toggle', label: 'Muted', default: false, hidden: true },
 
@@ -252,7 +210,6 @@ function validateScalar (def: Exclude<FieldDef, ListDef>, value: unknown): Valid
     case 'secret': {
       if (typeof value !== 'string') return fail('must be text')
       const text = value.trim()
-      if (def.type === 'secret') return pass(text)
       if (!text) return def.optional ? pass('') : fail('can’t be empty')
       if (def.type === 'url' && !isHttpUrl(text)) return fail('must be an http:// or https:// address')
       return pass(text)
@@ -274,7 +231,6 @@ function validateScalar (def: Exclude<FieldDef, ListDef>, value: unknown): Valid
     case 'segmented': {
       // Env values arrive as strings, so '720' matches the option 720
       const match = def.options.find(o => o.value === value || String(o.value) === String(value))
-      if (!match && 'otherLanguages' in def && def.otherLanguages && typeof value === 'string' && /^[a-z]{2,3}([-_][a-z0-9]+)?$/i.test(value)) return pass(value)
       return match ? pass(match.value) : fail(`must be one of ${def.options.map(o => o.label).join(', ')}`)
     }
   }

@@ -2,7 +2,6 @@
 // (label, help, env note, error) and decides what a change means (a draft for the server, or saved at once here).
 import { isMaskedSecret } from '@magplay/api-contract'
 import type { ActionDef, ChoiceDef, ItemFieldDef, ListDef, ListItem, NumberDef, SecretDef, SettingDef, TextDef } from '@magplay/api-contract'
-import { languageName } from './naming.ts'
 import { el } from './ui.ts'
 import type { Child } from './ui.ts'
 
@@ -31,6 +30,10 @@ export interface ControlContext {
 
 type Field = TextDef | SecretDef | NumberDef | ChoiceDef | ItemFieldDef
 
+/** A muted "(optional)" for the label of a field that can be left empty; null otherwise. */
+export const optionalNote = (def: SettingDef | ItemFieldDef): Child =>
+  'optional' in def && def.optional ? el('span', { className: 'optional', textContent: '(optional)' }) : null
+
 /** A stored value as input text: only strings and numbers are shown. */
 const text = (value: unknown): string => typeof value === 'string' || typeof value === 'number' ? String(value) : ''
 
@@ -45,11 +48,13 @@ function textInput (def: Field & { type: 'text' | 'url' }, value: unknown, ctx: 
 
 function secretInput (def: Field & { type: 'secret' }, value: unknown, ctx: ControlContext): HTMLElement {
   const saved = isMaskedSecret(value) ? value.set : !!value
-  if (ctx.disabled) return el('span', { className: 'control-note', textContent: saved ? 'Saved' : 'None' })
-  const input = el('input', { id: ctx.id, type: 'password', autocomplete: 'off', placeholder: def.placeholder ?? '' })
+  const input = el('input', { id: ctx.id, type: 'password', autocomplete: 'off', placeholder: def.placeholder ?? '', disabled: !!ctx.disabled })
   input.setAttribute('aria-label', ctx.label)
   input.addEventListener('input', () => ctx.onChange?.(input.value, false))
   input.addEventListener('change', () => ctx.onChange?.(input.value, true))
+  // Locked and empty looks like every other locked empty field; locked with a key says so,
+  // since the value itself never comes back from the server.
+  if (ctx.disabled) return saved ? el('span', { className: 'control-note', textContent: 'Saved' }) : input
   if (!saved || typeof value === 'string') {
     if (typeof value === 'string') input.value = value
     return input
@@ -92,14 +97,10 @@ function toggle (value: unknown, ctx: ControlContext): HTMLButtonElement {
 }
 
 function select (def: Pick<ChoiceDef, 'options'>, value: unknown, ctx: ControlContext): HTMLSelectElement {
-  // A language the Player remembered from a file ("eng") that isn't in the list is shown as itself
-  const options = typeof value === 'string' && value && !def.options.some(o => o.value === value)
-    ? [{ value, label: languageName(value) }, ...def.options]
-    : def.options
   const box = el('select', { id: ctx.id, disabled: !!ctx.disabled },
-    ...options.map(o => el('option', { value: String(o.value), textContent: o.label, selected: o.value === value })))
+    ...def.options.map(o => el('option', { value: String(o.value), textContent: o.label, selected: o.value === value })))
   box.setAttribute('aria-label', ctx.label)
-  box.addEventListener('change', () => ctx.onChange?.(options[box.selectedIndex]?.value, true))
+  box.addEventListener('change', () => ctx.onChange?.(def.options[box.selectedIndex]?.value, true))
   return box
 }
 
@@ -136,22 +137,22 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
   const title = (item: ListItem): string => (def.titleField && text(item[def.titleField])) || host(item.url) || `New ${def.itemLabel}`
   const card = (item: ListItem, i: number, locked: boolean, update: (next: ListItem | null, committed?: boolean) => void): HTMLElement => {
     const n = `${def.itemLabel} ${i + 1}`
+    const remove = el('button', { type: 'button', className: 'button', textContent: 'Remove' })
+    remove.setAttribute('aria-label', `Remove ${n}`)
+    remove.addEventListener('click', () => update(null))
     const head = el('div', { className: 'list-head' },
-      el('strong', { textContent: title(item) }),
+      el('span', { className: 'list-title' },
+        el('strong', { textContent: title(item) }),
+        locked && el('span', { className: 'control-note', textContent: 'Set in the environment' })),
       el('span', { className: 'list-extras' },
         ...(ctx.itemExtras?.(item, i) ?? []),
-        locked
-          ? el('span', { className: 'control-note', textContent: 'Set in the environment' })
-          : (() => {
-              const remove = el('button', { type: 'button', className: 'button', textContent: 'Remove' })
-              remove.setAttribute('aria-label', `Remove ${n}`)
-              remove.addEventListener('click', () => update(null))
-              return remove
-            })()))
+        !locked && remove))
     // Not a disabled fieldset: that would also disable the item's Test button
     return el('fieldset', { className: `list-item${locked ? ' locked' : ''}` }, head,
       ...def.item.map(f => el('div', { className: 'row' },
-        el('label', { className: 'row-label', htmlFor: `${ctx.id}-${i}-${f.key}`, textContent: f.label }),
+        el('div', { className: 'row-text' },
+          el('label', { className: 'row-label', htmlFor: `${ctx.id}-${i}-${f.key}` }, f.label, optionalNote(f)),
+          f.help && el('p', { className: 'help', textContent: f.help })),
         el('div', { className: 'row-control' }, field(f, item[f.key], {
           id: `${ctx.id}-${i}-${f.key}`,
           label: `${f.label}, ${n}`,

@@ -1,6 +1,6 @@
 // This browser's settings (the "browser" scope of the settings schema), in localStorage.
 // Each one has its own key, the same keys the Player reads and writes through recall()/remember():
-// the schema key 'player.speed' is stored as JSON under 'magplay:player:speed'.
+// the schema key 'player.volume' is stored as JSON under 'magplay:player:volume'.
 import { SETTINGS, isValueDef, validate } from '@magplay/api-contract'
 
 /** localStorage keys this client owns, in one place so every page and the Player agree on them. */
@@ -13,24 +13,15 @@ export const STORAGE_KEYS = {
 export const PREFERENCE = {
   volume: 'player.volume',
   muted: 'player.muted',
-  speed: 'player.speed',
-  audioLanguage: 'player.audioLanguage',
-  subtitleLanguage: 'player.subtitleLanguage',
 } as const
 
-/** The localStorage key for one browser setting: 'player.speed' → 'magplay:player:speed'. */
+/** The localStorage key for one browser setting: 'player.volume' → 'magplay:player:volume'. */
 export const preferenceStorageKey = (key: string): string => `magplay:${key.replace(/\./g, ':')}`
 
 export interface Preferences {
   /** 0–1. */
   'player.volume': number
   'player.muted': boolean
-  /** Playback rate: 0.75, 1, 1.25 or 1.5. */
-  'player.speed': number
-  /** A language code ("en", or "eng" as a file names it), or '' for the first track. The Player stores null for that. */
-  'player.audioLanguage': string
-  /** A language code, 'off', or 'any' for whichever track there is. */
-  'player.subtitleLanguage': string
 }
 export type PreferenceKey = keyof Preferences
 
@@ -72,10 +63,8 @@ export function setPreference<K extends PreferenceKey> (key: K, value: Preferenc
   const def = browserDefs.find(d => d.key === key)
   const result = def && validate(def, value)
   if (!result?.ok) return false
-  // The Player keeps "no audio preference" as null
-  const stored = key === PREFERENCE.audioLanguage && result.value === '' ? null : result.value
   try {
-    store?.setItem(preferenceStorageKey(key), JSON.stringify(stored))
+    store?.setItem(preferenceStorageKey(key), JSON.stringify(result.value))
   } catch {}
   return true
 }

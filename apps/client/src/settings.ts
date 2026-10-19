@@ -3,7 +3,7 @@
 import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
 import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
 import { api, ApiError } from './lib/api.ts'
-import { fillReadout, renderControl } from './lib/controls.ts'
+import { fillReadout, optionalNote, renderControl } from './lib/controls.ts'
 import type { ControlContext, ReadoutValue } from './lib/controls.ts'
 import { readPreferences, setPreference } from './lib/preferences.ts'
 import type { PreferenceKey, Preferences } from './lib/preferences.ts'
@@ -223,8 +223,8 @@ function row (def: SettingDef): HTMLElement {
   const head = el('div', { className: 'row-text' },
     // Buttons and lists keep their own names ("Test now", each item's fields), so only single value controls get a <label for>
     !(wide && def.type === 'readout') && (isValueDef(def) && def.type !== 'list'
-      ? el('label', { className: 'row-label', htmlFor: id, textContent: def.label })
-      : el('span', { className: 'row-label', textContent: def.label })),
+      ? el('label', { className: 'row-label', htmlFor: id }, def.label, optionalNote(def))
+      : el('span', { className: 'row-label' }, def.label, optionalNote(def))),
     def.help && el('p', { className: 'help', textContent: def.help }),
     envNote(def, meta))
   return el('div', { className: `row${wide ? ' wide' : ''}`, id: `row-${id}` },
@@ -272,7 +272,9 @@ function renderSection (id: SectionId): HTMLElement {
   // Where values are saved is a quiet line: under the intro when the whole section is one scope, else above each part
   const scopes = (['server', 'browser'] as const).filter(scope => defs.some(d => d.scope === scope && isValueDef(d)))
   const head = el('div', { className: 'section-head' },
-    el('h2', { id: `${id}-title` }, section.label, el('span', { className: 'section-status', id: `${id}-status` })),
+    // No id on the status slot: one stylesheet serves every page, so a generated id here
+    // could collide with a page's own styled id (#playback-status is the Player's wait overlay).
+    el('h2', { id: `${id}-title` }, section.label, el('span', { className: 'section-status' })),
     el('p', { className: 'intro', textContent: section.intro }),
     scopes.length === 1 && scopeNote(scopes[0]!))
   const parts: Child[] = [head]
@@ -299,7 +301,7 @@ function sectionLevel (id: SectionId): StatusLevel | null {
 /** A dot next to the heading of a section with a failing check. */
 function renderSectionStatus (): void {
   for (const s of SECTIONS) {
-    const slot = document.getElementById(`${s.id}-status`)
+    const slot = document.getElementById(s.id)?.querySelector('.section-status')
     const level = sectionLevel(s.id)
     if (slot) fill(slot, level && el('span', { className: `status-dot lvl-${level}`, title: level === 'error' ? 'Has a problem' : 'Needs attention' }))
   }

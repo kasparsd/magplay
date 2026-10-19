@@ -120,19 +120,6 @@ test('the connection test runs, and a slow result warns on every page', async ({
   await expect(check.getByRole('link', { name: /Test again/ })).toHaveAttribute('href', '/settings#connection')
 })
 
-test('browser preferences save at once, under the keys the Player reads', async ({ page, app }) => {
-  await page.goto(app.origin)
-  // As the Player remembers them: the file's language code
-  await page.evaluate(() => localStorage.setItem('magplay:player:audioLanguage', '"lav"'))
-  await page.goto(`${app.origin}/settings#playback`)
-  await expect(page.locator('#setting-player-audioLanguage')).toHaveValue('lav')
-  await page.locator('#setting-player-speed').getByText('1.25×').click()
-  await page.locator('#setting-player-subtitleLanguage').selectOption('en')
-  await expect(page.locator('#savebar')).toBeHidden()
-  const stored = await page.evaluate(() => ['speed', 'subtitleLanguage'].map(k => localStorage.getItem(`magplay:player:${k}`)))
-  expect(stored).toEqual(['1.25', '"en"'])
-})
-
 test('Settings is one page with every section stacked in order, and #section links scroll to it', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings#debug`)
   const sections = page.locator('main.settings > #settings-body > section.settings-section')
@@ -149,11 +136,48 @@ test('Settings is one page with every section stacked in order, and #section lin
 test('only the settings people tune are on the page, and Sources has a labelled list', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings`)
   await expect(page.locator('#sources')).toBeVisible()
-  for (const gone of ['Extra trackers', 'Web port', 'Torrent port', 'Find peers with DHT', 'Cache folder', 'Simultaneous conversions', 'Close idle torrents after', 'Wait for torrent metadata', 'Needs a restart', 'Play the next episode automatically', 'Show playback stats on the video', 'Log requests to the browser console', 'Not set; managed here']) {
+  for (const gone of ['Extra trackers', 'Web port', 'Torrent port', 'Find peers with DHT', 'Cache folder', 'Simultaneous conversions', 'Close idle torrents after', 'Wait for torrent metadata', 'Needs a restart', 'Play the next episode automatically', 'Show playback stats on the video', 'Log requests to the browser console', 'Not set; managed here', 'Preferred subtitles', 'Preferred audio', 'Default speed']) {
     await expect(page.getByText(gone, { exact: false })).toHaveCount(0)
   }
   await expect(page.locator('#row-setting-sources > .row-text > .row-label')).toHaveText('Indexers')
   await expect(page.locator('#row-setting-sources > .row-text > .help')).toBeVisible()
+  // One stylesheet serves every page: the Player's wait-overlay id must not appear here, or its padding renders a huge empty box
+  await expect(page.locator('#playback-status')).toHaveCount(0)
+  // Fields that can be left empty say so next to their label; required ones don't
+  await expect(page.locator('#row-setting-explore-bitmagnetUrl .row-label')).toContainText('(optional)')
+  await expect(page.locator('#row-setting-search-timeoutS .row-label')).not.toContainText('optional')
+  const item = page.locator('.list-item').first()
+  await expect(item.locator('.row-label', { hasText: 'API key' })).toContainText('(optional)')
+  await expect(item.locator('.row-label', { hasText: 'Indexer filter' })).toContainText('(optional)')
+  await expect(item.locator('.row-label', { hasText: 'Address' })).not.toContainText('(optional)')
+  await expect(item).toContainText('Jackett and Prowlarr need one')
+})
+
+test('environment labels stay beside source names and empty API keys remain inputs', async ({ page, app }) => {
+  await page.goto(`${app.origin}/settings#sources`)
+  const source = page.locator('.list-item.locked').first()
+  const title = source.locator('.list-title strong')
+  const note = source.locator('.list-title .control-note')
+  await expect(note).toHaveText('Set in the environment')
+  await expect(source.locator('.list-extras')).not.toContainText('Set in the environment')
+  const key = source.getByLabel('API key, source 1', { exact: true })
+  await expect(key).toHaveAttribute('type', 'password')
+  await expect(key).toHaveValue('')
+  await expect(key).toBeDisabled()
+  await expect(source.getByText('None', { exact: true })).toHaveCount(0)
+  await expect(source.getByRole('button', { name: /^Test / })).toBeEnabled()
+  for (const width of [1100, 375]) {
+    await page.setViewportSize({ width, height: 800 })
+    const nameBox = await title.boundingBox()
+    const noteBox = await note.boundingBox()
+    expect(noteBox.x - (nameBox.x + nameBox.width)).toBeCloseTo(8, 0)
+    expect(Math.abs(noteBox.y - nameBox.y)).toBeLessThan(4)
+  }
+  await page.getByRole('button', { name: '+ Add source' }).click()
+  const editableKey = page.getByLabel('API key, source 2', { exact: true })
+  await expect(editableKey).toHaveAttribute('type', 'password')
+  await expect(editableKey).toHaveValue('')
+  await expect(editableKey).toBeEnabled()
 })
 
 test('Debug explains capture level and preserves expanded structured records during polling', async ({ page, app }) => {
