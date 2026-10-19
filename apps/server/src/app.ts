@@ -81,7 +81,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
     metrics,
     live: () => {
       const c = current()
-      return { ffprobePath: c.ffprobePath, ffmpegPath: c.ffmpegPath, maxProbes: c.maxProbes, maxSubtitleJobs: c.maxSubtitleJobs }
+      return { ffprobePath: c.ffprobePath, ffmpegPath: c.ffmpegPath, vaapiDevice: c.vaapiDevice, maxProbes: c.maxProbes, maxSubtitleJobs: c.maxSubtitleJobs }
     },
   })
   media.refreshEncoders().then(e => { detectedEncoders = e }).catch(() => {})

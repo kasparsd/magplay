@@ -4,6 +4,7 @@ import type { Logger, Metrics, OperationContext } from '@magplay/observability'
 // What a file holds (ffprobe), how this browser should play it, and the ffmpeg work behind it.
 // Inputs are URLs or paths; the app passes its /raw loopback URL.
 import { execFile } from 'node:child_process'
+import type { ExecFileOptions } from 'node:child_process'
 import type { AudioTrack, BrowserCapabilities, ProbeResult, SubtitleTrack, VideoCodecKey, VideoTrack } from '@magplay/api-contract'
 import { MediaToolError, NoSuchTrackError, PlaybackBusyError, UnplayableError } from './errors.ts'
 import { createLimiter } from './limits.ts'
@@ -180,11 +181,12 @@ export function isTranscodeEncoder (value: unknown): value is TranscodeEncoder {
 }
 
 const PRIORITY = ['h264_nvenc', 'h264_vaapi', 'h264_videotoolbox', 'h264_qsv', 'libx264'] as const
+const HARDWARE_ENCODERS = PRIORITY.filter(name => name !== 'libx264')
 
 export function resolveTranscodeEncoder (requested: string | undefined, available: readonly string[] = []): TranscodeEncoder {
   const req = (requested ?? 'auto').trim()
   if (req && req !== 'auto') {
-    if (isTranscodeEncoder(req) && (req === 'libx264' || available.length === 0 || available.includes(req))) return req
+    if (isTranscodeEncoder(req) && (req === 'libx264' || available.includes(req))) return req
     return 'libx264'
   }
   for (const name of PRIORITY) {
@@ -205,6 +207,33 @@ export function parseEncoders (text: string): string[] {
 // aliases for tests
 export const parseEncoderList = parseEncoders
 export const detectEncodersFromOutput = parseEncoders
+
+export type EncoderCommandRunner = (command: string, args: string[], options: ExecFileOptions) => Promise<{ stdout: string }>
+
+export interface EncoderDetectionOptions {
+  vaapiDevice?: string
+  logger?: Logger
+  run?: EncoderCommandRunner
+}
+
+const runEncoderCommand: EncoderCommandRunner = (command, args, options) => new Promise((resolve, reject) => {
+  execFile(command, args, options, (err, stdout, stderr) => {
+    if (err) {
+      const detail = lastLine(String(stderr)) || err.message
+      reject(new Error(detail, { cause: err }))
+    } else {
+      resolve({ stdout: String(stdout ?? '') })
+    }
+  })
+})
+
+/** Arguments for a one-frame encode that exercises the candidate's real hardware path. */
+export function encoderProbeArgs (encoder: Exclude<TranscodeEncoder, 'libx264'>, vaapiDevice = '/dev/dri/renderD128'): string[] {
+  const input = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-f', 'lavfi', '-i', 'nullsrc=s=16x16:d=0.1', '-frames:v', '1']
+  const output = ['-f', 'null', '-']
+  if (encoder === 'h264_vaapi') return [...input, '-vaapi_device', vaapiDevice, '-vf', 'format=nv12,hwupload', '-c:v', encoder, ...output]
+  return [...input, '-c:v', encoder, ...output]
+}
 
 export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMaxHeight, transcodeEncoder, vaapiDevice }: FfmpegArgsOptions): string[] {
   const a = info.audio[audio]
@@ -266,6 +295,7 @@ export function subtitleToVtt (input: string, track: number | null, { ffmpegPath
 export interface MediaLive {
   ffprobePath: string
   ffmpegPath: string
+  vaapiDevice?: string
   maxProbes: number
   maxSubtitleJobs: number
 }
@@ -296,14 +326,10 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
   const ids = new Map<string, string>()
   let encoderCache: { ffmpegPath: string, encoders: string[] } | null = null
   const refreshEncoders = async (): Promise<string[]> => {
-    const ffmpegPath = live().ffmpegPath
-    return new Promise(resolve => {
-      execFile(ffmpegPath, ['-hide_banner', '-encoders'], { timeout: 10_000, maxBuffer: 4 * 1024 ** 2 }, (err, stdout) => {
-        const encoders = err ? [] : parseEncoders(stdout ?? '')
-        encoderCache = { ffmpegPath, encoders }
-        resolve(encoders)
-      })
-    })
+    const { ffmpegPath, vaapiDevice } = live()
+    const encoders = await detectTranscodeEncoders(ffmpegPath, { logger, ...(vaapiDevice ? { vaapiDevice } : {}) })
+    encoderCache = { ffmpegPath, encoders }
+    return encoders
   }
   const detectedEncoders = (): string[] => (encoderCache && encoderCache.ffmpegPath === live().ffmpegPath) ? encoderCache.encoders : []
   return {
@@ -334,12 +360,25 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
   }
 }
 
-/** Detects available transcode encoders by running ffmpeg. Never throws; returns [] on failure. */
-export function detectTranscodeEncoders (ffmpegPath = 'ffmpeg'): Promise<string[]> {
-  return new Promise(resolve => {
-    execFile(ffmpegPath, ['-hide_banner', '-encoders'], { timeout: 10_000, maxBuffer: 4 * 1024 ** 2 }, (err, stdout) =>
-      resolve(err ? [] : parseEncoders(stdout ?? '')))
-  })
+/** Detects available transcode encoders and verifies each compiled hardware encoder with a real encode. Never throws. */
+export async function detectTranscodeEncoders (ffmpegPath = 'ffmpeg', { vaapiDevice = '/dev/dri/renderD128', logger = noopLogger, run = runEncoderCommand }: EncoderDetectionOptions = {}): Promise<string[]> {
+  try {
+    const { stdout } = await run(ffmpegPath, ['-hide_banner', '-encoders'], { timeout: 10_000, maxBuffer: 4 * 1024 ** 2 })
+    const compiled = parseEncoders(stdout)
+    const hardware = HARDWARE_ENCODERS.filter(encoder => compiled.includes(encoder))
+    const probes = await Promise.all(hardware.map(async encoder => {
+      try {
+        await run(ffmpegPath, encoderProbeArgs(encoder, vaapiDevice), { timeout: 3_000, maxBuffer: 1024 * 1024 })
+        return encoder
+      } catch (err) {
+        logger.warn('ffmpeg.encoder.probe.failed', { encoder, err })
+        return null
+      }
+    }))
+    return compiled.filter(encoder => encoder === 'libx264' || probes.includes(encoder as typeof HARDWARE_ENCODERS[number]))
+  } catch {
+    return []
+  }
 }
 export const detectAvailableEncoders = detectTranscodeEncoders
 export const detectEncoders = detectTranscodeEncoders

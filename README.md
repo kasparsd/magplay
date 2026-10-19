@@ -204,7 +204,7 @@ env vars are listed first and locked; sources added in Settings follow them.
 | `SEEDING_RATIO` | `1` | Stop sharing after uploading this multiple of the torrent's size: `0.5`, `1`, `2` or `5` |
 | `ALLOW_VIDEO_TRANSCODE` | `false` | Enable the libx264 path (slow on the server CPU) |
 | `TRANSCODE_MAX_HEIGHT` | `720` | Downscale target when transcoding |
-| `TRANSCODE_ENCODER` | `auto` | Encoder: `auto`, `libx264`, or `h264_nvenc`/`h264_vaapi`/`h264_videotoolbox`/`h264_qsv` |
+| `TRANSCODE_ENCODER` | `auto` | Encoder: `auto`, `libx264`, or `h264_nvenc`/`h264_vaapi`/`h264_videotoolbox`/`h264_qsv`. Hardware choices fall back to libx264 unless a startup probe succeeds. |
 | `VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI render device |
 | `FFMPEG_PATH`, `FFPROBE_PATH` | `ffmpeg`, `ffprobe` | Paths to the binaries when they aren't on `PATH` |
 
@@ -492,7 +492,7 @@ from `tools/docker/*/config/`, writes them to `.env`, and recreates magplay.
 Override `MAGPLAY_PORT` and `TORRENT_PORT` in `.env` if those ports are taken.
 The stack's network is pinned to `10.89.82.0/24` (`DOCKER_SUBNET`).
 
-For hardware transcoding in Docker, set `TRANSCODE_ENCODER` (e.g. `h264_vaapi`) and uncomment the `devices:` block in `compose.yml` so `/dev/dri` is passed through.
+For hardware transcoding in Docker, set `TRANSCODE_ENCODER` (for example `h264_vaapi`) and uncomment the `devices:` block in `compose.yml` so `/dev/dri` is passed through. Passing `/dev/dri` is not enough on its own: the published image's ffmpeg includes VAAPI and Quick Sync support, but the image includes neither VAAPI driver libraries nor the Intel oneVPL GPU runtime. NVENC is not compiled into its ffmpeg, and VideoToolbox does not exist on Linux. At startup and encoder refreshes, magplay tests each compiled hardware encoder with a one-frame encode; `auto` therefore uses libx264 in the stock image unless one of those probes succeeds.
 
 
 ## License

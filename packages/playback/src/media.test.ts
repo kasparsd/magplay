@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decide, ffmpegArgs, parseProbe, sampleAspect } from './media.ts'
-import type { DecideInput, MediaInfo } from './media.ts'
+import { decide, detectTranscodeEncoders, ffmpegArgs, parseProbe, resolveTranscodeEncoder, sampleAspect } from './media.ts'
+import type { DecideInput, EncoderCommandRunner, MediaInfo } from './media.ts'
 import { MediaToolError, NoSuchTrackError, UnplayableError } from './errors.ts'
 
 const info = (overrides: Partial<DecideInput> = {}): DecideInput => ({
@@ -90,6 +90,44 @@ test('sample aspect ratios: anamorphic, square and unknown', () => {
   assert.equal(sampleAspect('4:3'), 4 / 3)
   assert.equal(sampleAspect('1:1'), 1)
   for (const value of [undefined, '', '0:1', 'N/A', '1:0']) assert.equal(sampleAspect(value), 1)
+})
+
+const encoderList = (...encoders: string[]): string => encoders.map(encoder => ` V..... ${encoder} test encoder`).join('\n')
+
+test('hardware encoder detection requires a successful one-frame probe', async () => {
+  const { createLogging } = await import('@magplay/observability')
+  const logging = createLogging({ level: 'debug', sink: { write () {} } })
+  const commands: string[][] = []
+  const run: EncoderCommandRunner = (_command, args) => {
+    commands.push(args)
+    if (args.includes('-encoders')) return Promise.resolve({ stdout: encoderList('h264_vaapi', 'libx264') })
+    return Promise.reject(new Error('No VA display found'))
+  }
+  const available = await detectTranscodeEncoders('fake-ffmpeg', { vaapiDevice: '/dev/dri/custom', logger: logging.logger, run })
+  assert.deepEqual(available, ['libx264'])
+  assert.equal(resolveTranscodeEncoder('auto', available), 'libx264')
+  assert.equal(resolveTranscodeEncoder('h264_vaapi', available), 'libx264')
+  assert.deepEqual(commands[1], [
+    '-hide_banner', '-nostdin', '-loglevel', 'error',
+    '-f', 'lavfi', '-i', 'nullsrc=s=16x16:d=0.1', '-frames:v', '1',
+    '-vaapi_device', '/dev/dri/custom', '-vf', 'format=nv12,hwupload',
+    '-c:v', 'h264_vaapi', '-f', 'null', '-',
+  ])
+  assert.equal(logging.tail().filter(record => record.event === 'ffmpeg.encoder.probe.failed').length, 1)
+})
+
+test('a compiled hardware encoder is available only after its probe succeeds', async () => {
+  const run: EncoderCommandRunner = (_command, args) => Promise.resolve({
+    stdout: args.includes('-encoders') ? encoderList('h264_qsv', 'libx264') : '',
+  })
+  const available = await detectTranscodeEncoders('fake-ffmpeg', { run })
+  assert.deepEqual(available, ['h264_qsv', 'libx264'])
+  assert.equal(resolveTranscodeEncoder('auto', available), 'h264_qsv')
+})
+
+test('encoder-list failure still returns no available encoders', async () => {
+  const run: EncoderCommandRunner = () => Promise.reject(new Error('ffmpeg missing'))
+  assert.deepEqual(await detectTranscodeEncoders('fake-ffmpeg', { run }), [])
 })
 
 test('ffprobe JSON parses into tracks; junk is a media tool error', () => {

@@ -103,6 +103,20 @@ test('a low disk reserve rejects admission without killing another player', asyn
   assert.equal(hls.get(first.s.id), first.s)
 })
 
+test('an unavailable configured encoder falls back to libx264 and warns once', async t => {
+  const { createLogging } = await import('@magplay/observability')
+  const logging = createLogging({ level: 'debug', sink: { write () {} } })
+  const { hls, live } = await setup(t, { logger: logging.logger })
+  live.transcodeEncoder = 'h264_vaapi'
+  live.detectedEncoders = ['libx264']
+  const options = { input: 'x', info, audio: 0, start: 0, mode: 'transcode' as const }
+  const first = hls.start(options)
+  const second = hls.start(options)
+  assert.equal(hls.stats(first).encoder, 'libx264')
+  assert.equal(hls.stats(second).encoder, 'libx264')
+  assert.equal(logging.tail().filter(record => record.event === 'hls.encoder.fallback').length, 1)
+})
+
 test('disk budget stops the producer, removes HLS output and retains a useful failure', async t => {
   const { hls, live, start } = await setup(t)
   const { s, proc } = start()
