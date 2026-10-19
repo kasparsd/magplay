@@ -301,6 +301,7 @@ async function start (at = 0, message = ''): Promise<void> {
   if (gen !== generation) return
   updateTimeline()
 
+  let startPlayback = true
   if (decision.mode === 'direct') {
     video.src = decision.url
     if (at) video.currentTime = at
@@ -317,15 +318,21 @@ async function start (at = 0, message = ''): Promise<void> {
     if (!Hls.isSupported() || (navigator.vendor.includes('Apple') && video.canPlayType('application/vnd.apple.mpegurl'))) {
       video.src = decision.url
     } else {
+      // hls.js only attaches a media source after it has parsed the manifest, so
+      // calling play() synchronously here can be lost on slower or incomplete streams.
+      startPlayback = false
       const player = hls = new Hls({ startPosition: 0, maxBufferLength: 60 })
       player.on(Hls.Events.ERROR, (_, data) => { if (current() && data.fatal) failPlayback('Playback stopped', `Playback error: ${data.details}`) })
+      player.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!current()) return
+        video.play().catch(handlePlayError)
+      })
       player.loadSource(decision.url)
       player.attachMedia(video)
     }
   }
   renderFacts()
-  // Browsers may block autoplay with sound until the page has been clicked; start muted then
-  video.play().catch((err: Failure) => {
+  const handlePlayError = (err: Failure): void => {
     if (!current()) return
     if (err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err.message)
     video.muted = true
@@ -336,7 +343,9 @@ async function start (at = 0, message = ''): Promise<void> {
         if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
         else failPlayback('Playback could not start', err.message)
       })
-  })
+  }
+  // Browsers may block autoplay with sound until the page has been clicked; start muted then
+  if (startPlayback) video.play().catch(handlePlayError)
   loadSubtitles(gen).catch(console.error)
 }
 

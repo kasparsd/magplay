@@ -57,7 +57,7 @@ const fileLabel = f => episodeLabel(f) || baseName(f.name)
 function progressBar (bars, f) {
   const fillEl = el('span')
   bars.set(f.idx, fillEl)
-  return el('div', { className: 'bar', title: 'Downloaded to the server' }, fillEl)
+  return el('div', { className: 'bar', title: 'Downloaded to the server (not playback position)', 'aria-label': 'Download progress on the server' }, fillEl)
 }
 
 /** "6 episodes · 829 MB · ID d797d14f…" under the name. */
