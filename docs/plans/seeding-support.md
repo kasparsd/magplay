@@ -2,90 +2,39 @@
 
 ## Goal
 
-Let magplay contribute completed pieces back to the swarm, on an opt-in basis, while preserving the resource and cache limits that currently unload idle torrents.
+Let magplay give completed downloads back to the swarm, on an opt-in basis, without hurting playback or the cache and resource limits.
 
 ## Motivation
 
-magplay is a leecher today: torrents are loaded on demand (`deselect: true`) and destroyed once idle (`housekeeping()` calls `t.destroy()`). The torrent-streaming article (Kragujević) notes that in-order streaming gives nothing back to the swarm; seeding completed downloads is the ethical middle ground. This is a backburner item (see roadmap.md).
+magplay is a leecher by default: torrents load on demand (`deselect: true`) and are destroyed once idle. In-order streaming gives little back to the swarm; sharing completed downloads up to a ratio is the middle ground.
 
-## Scope
+## Owner decision (2026-10-19)
 
-- New settings `seeding.enabled` (default off), `seeding.uploadSpeedLimitBytesPerSec` (or a friendlier KB/s unit in the UI), and `seeding.maxTorrents`.
-- A separate seeding idle timeout (longer than playback's), or an explicit "no peers / no upload" condition.
-- Keep completed torrents loaded instead of destroying them when idle, up to `maxTorrents`.
-- Skip cache eviction for seeded data until necessary; unload and evict the oldest seeded torrent first under disk pressure.
-- Surface seeding state (peers, upload speed, seeded count) in the torrent page and Debug view.
-- Upload throttle passed to the WebTorrent client, applied dynamically when settings change.
-- Per-torrent "stop seeding" control and port-reachability feedback.
+- Settings are only a toggle (`seeding.enabled`, default off, `SEEDING_ENABLED`) and a ratio (`seeding.ratio`: 0.5×, 1×, 2×, 5×, default 1×, `SEEDING_RATIO`), in Storage under a "Sharing" group. The ratio is disabled, not hidden, while sharing is off.
+- The app, not the user, owns concurrency, upload rate, idle unloading and playback priority. No upload-limit, max-torrents or idle-timeout settings, no per-torrent controls, no Debug or torrent-page UI.
 
-## Boundaries to preserve
+## Design
 
-- Default-off: current leecher behavior unchanged, including default upload throttle of 0.
-- Seeding must not starve playback: upload limit, cap on seeded torrents, and skipping active streams when enforcing the cap.
-- Keep `torrentPort` reachability documented and surfaced; seeding is ineffective otherwise.
-- Don't break cache LRU or resource limits; seeding torrents count against them.
-- Seeding stops automatically when disk pressure evicts that torrent's data.
-
-## Design decisions from review
-
-- "Completed" means `progress === 1` / `downloaded === length`, detected via WebTorrent's `'done'` event and verified in `housekeeping()`. Partially downloaded torrents are never treated as seedable.
-- Track a set of seeded info hashes in the engine so retention, eviction, stats, and UI can distinguish seeded from merely loaded torrents.
-- Seeded torrents are not subject to the playback idle timeout while under `maxTorrents`; the separate timeout only applies as a fallback for seeded torrents with no peers and no upload for an extended period.
-- When enforcing `maxTorrents`, skip torrents with open streams; the cap may be temporarily soft until they finish.
-- Under disk pressure, unload the oldest seeded torrent first, then evict. Evict non-seeded LRU data before seeded data. Never let seeding bypass `cacheMaxBytes`.
-- The upload cap is global, matching WebTorrent's single `throttleGroups.up`. Per-torrent caps are unnecessary because `maxTorrents` already bounds total work.
-- Settings apply without a restart, so the engine must call `client.throttleUpload()` on changes and unload seeded torrents when seeding is disabled.
-- Upload limits should be expressed in a human-friendly unit (KB/s or MB/s) in the UI, converted to bytes/sec in `deriveSettings`.
+- The live engine option is `seeding: { enabled, ratio }`, read from `live()` on each use.
+- Only a torrent that is already loaded and complete (`done` or `progress === 1`) is seeded. Partial torrents never are, and the cache is not scanned to load torrents the user has not opened.
+- The ratio uses the torrent's size. WebTorrent's `uploaded` restarts at zero on every add, so `<cache>/<infoHash>/seed.json` stores `{ uploaded }`; the running total is the file's value at load plus this session's `torrent.uploaded`. Housekeeping writes it, as does every unload and `close()`. A zero-length torrent is never seeded.
+- Reaching the ratio stops seeding. Without an open stream or pending load the handle is destroyed so it stops announcing; the data stays. Nothing is flagged permanently, so a higher ratio lets the next load seed it again.
+- Engine constants: `MAX_SEEDED = 3` (oldest seeded without a stream or pending load are unloaded first; the cap is soft while extras are watched), `PLAYBACK_UPLOAD_BYTES_PER_SEC = 128 KiB/s` while any stream is open, no throttle (`throttleUpload(-1)`) otherwise, and `SEED_IDLE_MS = 24 h` with no peers and no upload before unloading.
+- Every housekeeping pass, including the first, applies the throttle, so a settings change needs no restart. Turning seeding off unloads seeded torrents that are not streaming or loading and marks no new ones.
+- Eviction deletes non-seeded LRU folders first, then the oldest seeded, unloading a seeded torrent before deleting its folder. A torrent with an open stream or a pending load is never unloaded or deleted. Seeding never bypasses `cacheMaxBytes`.
+- `stats()` reports `seeded` (count) and `uploadSpeed` (sum) alongside `loads` and `loaded`.
 
 ## Work items
 
-- [ ] Add settings schema entries + UI in `/settings`, including env vars (`SEEDING_ENABLED`, `SEEDING_UPLOAD_LIMIT_BYTES_PER_SEC`, `SEEDING_MAX_TORRENTS`, and a seeding idle timeout).
-- [ ] Add seeding fields to `Config`, `LiveOptions`, `DEFAULT_LIVE`, and the `live()` factory in `app.ts`.
-- [ ] Modify `housekeeping()` to retain seeded torrents, enforce `maxTorrents`, and handle completion detection.
-- [ ] Add eviction ordering: non-seeded LRU first, then oldest seeded; unload before evict.
-- [ ] Hook WebTorrent `'done'` events to mark torrents as seeded when enabled.
-- [ ] Apply upload throttle to WebTorrent client options and via `client.throttleUpload()` on setting changes.
-- [ ] Unload seeded torrents and reset throttle when seeding is disabled.
-- [ ] Extend `stats()` and `DebugInfo` with seeded count and total upload speed.
-- [ ] Add seeding status (upload speed, "seeding" badge) to the torrent page activity line.
-- [ ] Add per-torrent "stop seeding" control and port-reachability feedback.
-- [ ] Add consent/privacy copy to settings help text.
-- [ ] Tests: retention, completion-triggered seeding, eviction exemption and seeded-first eviction, soft cap with active streams, default-off byte-identical behavior, throttle applied on toggle.
-- [ ] Changeset (minor, since this adds user-facing settings).
+- [x] Settings schema: `seeding.enabled` toggle and `seeding.ratio` segmented control with a disable rule; help text kept clear of the settings e2e denylist.
+- [x] `Config.seedingEnabled`/`seedingRatio`, `LiveOptions.seeding`, `DEFAULT_LIVE` and the `live()` factory in `app.ts`.
+- [x] README env table: `SEEDING_ENABLED`, `SEEDING_RATIO`.
+- [x] Engine: completion detection, `seed.json` totals, ratio stop, cap, 24 h idle unload, playback upload throttle, disable path, listeners registered once per added torrent.
+- [x] Eviction order in `store.ts`: non-seeded first, then oldest seeded; open streams and pending loads protected.
+- [x] Tests in `engine.test.ts`: seeding off, retention past the playback idle timeout, ratio reached, partial torrent, open stream versus cap and eviction, eviction order, throttle with and without a stream.
+- [x] Roadmap, resources and changeset.
 
-## Open questions (resolved)
+## Not in this change
 
-- Should seeding stop automatically when disk pressure triggers eviction of that torrent? Yes.
-- Should there be a global upload cap separate from per-torrent? The single global cap is sufficient and matches WebTorrent's throttle group.
-
-## Review findings folded in
-
-### Gaps and edge cases
-
-- Completion detection is undefined in the original plan; it must be explicit.
-- Partial torrents must not be seeded.
-- Seeded vs. loaded distinction is missing from engine state and stats.
-- Dynamic settings are not handled by "pass upload limit to client options" alone.
-- The "idle while seeding" semantics are contradictory without a no-peer/no-upload condition.
-- `maxTorrents` must not kill active streams.
-- Eviction priority must be specified to avoid breaking `cacheMaxBytes`.
-- Settings need section, scope, env vars, validation, and a fourth idle-timeout setting.
-- Per-torrent control and port reachability are missing but important for UX.
-- Privacy/consent copy is missing.
-
-### Performance implications
-
-- Memory scales with retained torrents; default `maxTorrents` should be small (3-5).
-- Each retained torrent keeps announcing to trackers and DHT; the cap is a resource knob.
-- Seeding reads from disk and can contend with playback; consider pausing seeding on torrents with active streams.
-- Reuse the existing housekeeping pass instead of adding a second full-tree walk.
-- Hook `'done'` events rather than polling progress.
-
-### UX implications
-
-- The torrent page activity line must show `↑ speed` and a "seeding" badge; otherwise a completed torrent looks inactive.
-- Debug view needs seeded count and total upload speed, requiring contract changes.
-- Bytes/sec is not a usable setting unit; prefer KB/s or MB/s.
-- Port unreachability must be reported honestly rather than showing a green seeding state.
-- Users streaming single episodes will never reach "completed"; settings help and the torrent page should state this.
-- Seeding settings fit best in the `storage` section under a "Seeding" group.
+- Listen-port reachability feedback. Seeding only helps the swarm when `TORRENT_PORT` is reachable from outside.
+- A seeding badge or upload speed on the torrent page.

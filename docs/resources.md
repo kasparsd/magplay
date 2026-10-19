@@ -17,7 +17,7 @@ Overload returns HTTP **503**, JSON with a useful message, `Retry-After: 5` and 
 
 Before admitting HLS, the server checks session capacity and filesystem free space without terminating an existing session on rejection. Every two seconds it checks total output and free space. If a disk limit is crossed, it stops the largest-output session(s), removes their generated HLS files, and retains a failed status with the disk-limit explanation. Torrent data is **never** deleted by this monitor. Published segment sizes are cached to avoid repeatedly statting every immutable segment.
 
-This is a **soft budget**, not an operating-system disk quota: output and other processes can consume space between checks. Use a dedicated filesystem/container storage quota if a hard bound is required. Startup probing/subtitle work and raw downloads can still grow the torrent cache; active torrents remain protected from its LRU eviction. The reserve does not promise a whole-machine free-space guarantee.
+This is a **soft budget**, not an operating-system disk quota: output and other processes can consume space between checks. Use a dedicated filesystem/container storage quota if a hard bound is required. Startup probing/subtitle work and raw downloads can still grow the torrent cache; active torrents remain protected from its LRU eviction. Data kept for seeding is evicted only after all other cache data, oldest first, and never while a stream of it is open or it is loading; seeding never lets the cache exceed `CACHE_MAX_GB`. The reserve does not promise a whole-machine free-space guarantee.
 
 ## In-memory caches
 

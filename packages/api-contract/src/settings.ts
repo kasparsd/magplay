@@ -242,11 +242,21 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: 'cache.minFreeGb', section: 'storage', scope: 'server', type: 'number', label: 'Minimum free disk space', help: 'Stop video conversions when free disk space falls below this amount.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05 },
   { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion cache limit', help: 'Maximum disk space for temporary video conversion files.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
 
-  // Seeding
-  { key: 'seeding.enabled', section: 'storage', scope: 'server', type: 'toggle', label: 'Seed completed torrents', help: 'Upload completed downloads back to the swarm. Off by default. Requires a reachable torrent port.', group: 'Seeding', env: ['SEEDING_ENABLED'], default: false },
-  { key: 'seeding.uploadSpeedLimitBytesPerSec', section: 'storage', scope: 'server', type: 'number', label: 'Upload speed limit', help: 'Global upload cap while seeding. 0 means unlimited.', group: 'Seeding', env: ['SEEDING_UPLOAD_LIMIT_BYTES_PER_SEC'], default: 0, unit: 'B/s', min: 0 },
-  { key: 'seeding.maxTorrents', section: 'storage', scope: 'server', type: 'number', label: 'Maximum seeded torrents', help: 'Cap on torrents kept loaded for seeding.', group: 'Seeding', env: ['SEEDING_MAX_TORRENTS'], default: 3, min: 1, max: 64, integer: true },
-  { key: 'seeding.idleMin', section: 'storage', scope: 'server', type: 'number', label: 'Seeding idle timeout', help: 'Unload a seeded torrent with no peers and no upload after this many minutes.', group: 'Seeding', env: ['SEEDING_IDLE_TORRENT_MIN'], default: 1440, unit: 'min', min: 1 },
+  // Sharing completed downloads
+  { key: 'seeding.enabled', section: 'storage', scope: 'server', type: 'toggle', label: 'Share completed downloads', help: 'After a download finishes, keep sharing it until the selected ratio. Watching always comes first.', group: 'Sharing', env: ['SEEDING_ENABLED'], default: false },
+  {
+    key: 'seeding.ratio',
+    section: 'storage',
+    scope: 'server',
+    type: 'segmented',
+    label: 'Share ratio',
+    help: "Share this multiple of the torrent's size, then stop.",
+    group: 'Sharing',
+    rules: [{ when: { key: 'seeding.enabled', equals: false }, disabled: true }],
+    env: ['SEEDING_RATIO'],
+    default: 1,
+    options: [{ value: 0.5, label: '0.5×' }, { value: 1, label: '1×' }, { value: 2, label: '2×' }, { value: 5, label: '5×' }],
+  },
 
   // Debug
   { key: 'debug.server', section: 'debug', scope: 'server', type: 'readout', label: 'Server', group: 'Server' },

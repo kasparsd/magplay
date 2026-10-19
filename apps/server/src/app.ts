@@ -101,16 +101,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
         checkingTimeoutMs: c.checkingTimeoutMs,
         idleMs: c.idleTorrentMs,
         cacheMaxBytes: c.cacheMaxBytes,
-        seedingEnabled: c.seedingEnabled,
-        seedingUploadSpeedLimitBytesPerSec: c.seedingUploadSpeedLimitBytesPerSec,
-        seedingMaxTorrents: c.seedingMaxTorrents,
-        seedingIdleMs: c.seedingIdleMs,
-        seeding: {
-          enabled: c.seedingEnabled,
-          uploadSpeedLimitBytesPerSec: c.seedingUploadSpeedLimitBytesPerSec,
-          maxTorrents: c.seedingMaxTorrents,
-          idleMs: c.seedingIdleMs,
-        },
+        seeding: { enabled: c.seedingEnabled, ratio: c.seedingRatio },
       }
     },
   })
