@@ -1,5 +1,5 @@
 ---
-"@magplay/server": patch
+"@magplay/server": minor
 ---
 
-Distinguish natively playable releases from ones that need a cheap remux or a full server transcode in the "plays in browser" labeling.
+Show honest title-based playback estimates: likely direct, likely remux, or needs transcode. Best release now favors the lowest estimated video effort without claiming that a title proves browser support.

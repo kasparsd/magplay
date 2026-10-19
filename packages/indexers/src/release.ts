@@ -1,6 +1,6 @@
 // The common shape every source adapter returns, so search, dedupe and the UI don't care where a result came from.
-import { badges } from '@magplay/release-info'
-import type { PlaybackEffort } from '@magplay/release-info'
+import { badges } from '../../release-info/src/index.ts'
+import type { PlaybackEffort } from '../../release-info/src/index.ts'
 import { SourceError, fetchFailure, isAbort } from './errors.ts'
 
 /** fetch() as the adapters use it; tests pass a stand-in. */
