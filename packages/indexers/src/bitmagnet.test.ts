@@ -29,9 +29,14 @@ test('groups releases into titles, skipping unmatched and adult ones', () => {
   assert.equal(bunny.source, 'tmdb')
   assert.ok(bunny.genres.length > 0)
   assert.ok(bunny.links.some(l => l.source === 'imdb'))
-  // The best release plays in a browser when any does, otherwise it's the most seeded
+  // The best release has the lowest title-estimated effort, then the most seeders
+  const direct = { ...items.find(i => i.content && !i.content.adult)!, infoHash: 'direct', seeders: 4, torrent: { name: 'Film.1080p.H264.AAC', size: 1 } }
+  const remuxLow = { ...direct, infoHash: 'remux-low', seeders: 20, torrent: { name: 'Film.1080p.H264.DDP5.1', size: 1 } }
+  const remuxHigh = { ...remuxLow, infoHash: 'remux-high', seeders: 30 }
+  const ranked = groupTitles([remuxLow, direct, remuxHigh])
+  assert.equal(ranked[0]?.best, 'direct')
+  assert.equal(groupTitles([remuxLow, remuxHigh])[0]?.best, 'remux-high')
   const releases = rawItems.filter(i => i.content?.title === 'Big Buck Bunny')
-  assert.ok(releases.some(r => r.infoHash === bunny.best))
   assert.equal(bunny.seeders, Math.max(...releases.map(r => r.seeders)))
 })
 

@@ -1,6 +1,6 @@
 // BitMagnet's GraphQL API, for browsing: it classifies torrents against TMDB, so it can filter by type, genre, year and
 // resolution and return titles with metadata. Search still goes through Torznab (torznab.ts).
-import { badges } from '@magplay/release-info'
+import { badges, playbackRank } from '@magplay/release-info'
 import type { TitleBadges } from '@magplay/release-info'
 import { SearchTimeout, SourceError } from './errors.ts'
 import { asArray, asNumber, asRecord, asString, readJson, request } from './release.ts'
@@ -225,9 +225,9 @@ export function groupTitles (items: BitmagnetItem[], showAdult = false): Explore
   return [...groups.values()].map(({ title, releases }) => {
     const bySeeders = [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
     const top = bySeeders[0]!
-    const best = bySeeders.find(r => r.likelyDirect) ?? top
+    const best = [...releases].sort((a, b) => playbackRank(a.playbackEffort) - playbackRank(b.playbackEffort) || (b.seeders ?? 0) - (a.seeders ?? 0))[0] ?? top
     // Only this page's releases are grouped here, so there's no release count: the title page has the full list
-    return { ...title, seeders: top.seeders, playable: releases.some(r => r.likelyDirect), best: best.infoHash }
+    return { ...title, seeders: top.seeders, playable: releases.some(r => r.playbackEffort === 'direct' || r.playbackEffort === 'remux'), best: best.infoHash }
   })
 }
 

@@ -81,7 +81,7 @@ Playback explanations have a separate channel from transient speed, subtitle and
 
 ### Visual and layout
 
-- Dark, low-contrast chrome so video and titles stand out. One accent colour for actions and links; green identifies "plays in browser" and observed ready states.
+- Dark, low-contrast chrome so video and titles stand out. One accent colour for actions and links; green identifies the "likely direct" and "likely remux" estimates and observed ready states.
 - Same side gutter on every page, including the Player. The Player's video band is the one exception: it runs edge to edge, and everything under it keeps the gutter.
 - Nothing is loaded from outside the server: no posters, fonts or scripts from third parties. Explore tiles have no posters, so their shape should earn its space instead of imitating a poster grid.
 - Works at 375 px wide: no horizontal scroll, metadata wraps under names instead of squeezing them, and touch targets are comfortably sized.

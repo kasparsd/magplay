@@ -1,5 +1,6 @@
 // The common shape every source adapter returns, so search, dedupe and the UI don't care where a result came from.
 import { badges } from '@magplay/release-info'
+import type { PlaybackEffort } from '@magplay/release-info'
 import { SourceError, fetchFailure, isAbort } from './errors.ts'
 
 /** fetch() as the adapters use it; tests pass a stand-in. */
@@ -18,6 +19,7 @@ export interface Release {
   sources: string[]
   badges: string[]
   likelyDirect: boolean
+  playbackEffort: PlaybackEffort | null
   warning: string | null
 }
 

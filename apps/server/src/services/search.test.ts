@@ -31,6 +31,7 @@ test('magnet search keeps warnings already learned from torrent files', async ()
   const out = await search('Download only · no video files').search(`magnet:?xt=urn:btih:${hash}&dn=Movie.x264`, null)
   assert.equal(out.results[0]?.warning, 'Download only · no video files')
   assert.equal(out.results[0]?.likelyDirect, false)
+  assert.equal(out.results[0]?.playbackEffort, null)
 })
 
 test('malformed and unsupported magnets return a readable client error', async () => {
