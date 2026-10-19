@@ -1,3 +1,4 @@
+import { SETTINGS } from '@magplay/api-contract'
 import { test, expect } from './fixtures.js'
 
 const statusButton = page => page.locator('.status-button')
@@ -150,6 +151,13 @@ test('Settings is one page with every section stacked in order, and #section lin
 test('only the settings people tune are on the page, and Sources has a labelled list', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings`)
   await expect(page.locator('#sources')).toBeVisible()
+  // The page shows exactly the schema's top-level value settings. Source-item fields sit inside the Sources row, not in the top-level set.
+  const rowId = def => `row-setting-${def.key.replace(/\./g, '-')}`
+  const nonValue = SETTINGS.filter(d => d.type === 'action' || d.type === 'readout').map(rowId)
+  const expected = SETTINGS.filter(d => !d.hidden && d.type !== 'action' && d.type !== 'readout').map(d => d.label)
+  const shown = await page.locator('[id^="row-setting-"]:not([hidden]) > .row-text > .row-label').evaluateAll(
+    (labels, skip) => labels.filter(l => !skip.includes(l.closest('.row').id)).map(l => l.firstChild.textContent.trim()), nonValue)
+  expect(shown.sort()).toEqual(expected.sort())
   await expect(page.locator('#row-setting-sources > .row-text > .row-label')).toHaveText('Search sources')
   await expect(page.locator('#row-setting-sources > .row-text > .help')).toBeVisible()
   // One stylesheet serves every page: the Player's wait-overlay id must not appear here, or its padding renders a huge empty box

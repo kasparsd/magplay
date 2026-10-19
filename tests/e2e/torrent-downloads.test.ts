@@ -30,7 +30,7 @@ async function cacheDownload (cache: string, files: Record<string, string>): Pro
   }
 }
 
-test('a single non-video file has a primary download that returns its original bytes', { tag: '@slow' }, async ({ page, app }, testInfo) => {
+test('a single non-video file has a primary download that returns its original bytes', async ({ page, app }, testInfo) => {
   const { origin, cache } = app
   const fixture = await cacheDownload(cache, { 'linux-image.iso': 'Original test disk image bytes — not a bootable image.\n' })
   await page.goto(`${origin}/t/${fixture.ih}`)
@@ -53,7 +53,7 @@ test('a single non-video file has a primary download that returns its original b
   await expect(torrent.getByRole('link', { name: 'Open in your torrent client' })).toHaveAttribute('href', /^magnet:/)
 })
 
-test('a download-only pack has a primary tar download, individual downloads and usable phone layout', { tag: '@slow' }, async ({ page, app }, testInfo) => {
+test('a download-only pack has a primary tar download, individual downloads and usable phone layout', async ({ page, app }, testInfo) => {
   const { origin, cache } = app
   const files = { 'release-notes.txt': 'Original release notes for the download fixture.\n', 'audio-recording.flac': 'Original audio fixture bytes.\n' }
   const { ih } = await cacheDownload(cache, files)
@@ -89,7 +89,7 @@ test('a download-only pack has a primary tar download, individual downloads and 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
 
-test('mixed torrents keep resume and video menus while offering downloads for other files', { tag: '@slow' }, async ({ page, app }) => {
+test('mixed torrents keep resume and video menus while offering downloads for other files', async ({ page, app }) => {
   const { origin } = app
   // The existing browser fixture has real videos and an external subtitle.
   const info = await (await page.request.get(app.torrent.replace('/t/', '/api/torrents/'))).json() as TorrentInfo
@@ -111,7 +111,7 @@ test('mixed torrents keep resume and video menus while offering downloads for ot
   await expect(torrent).not.toContainText('No videos in this torrent')
 })
 
-test('the adult setting explicitly describes Explore-only coverage', { tag: '@slow' }, async ({ page, app }) => {
+test('the adult setting explicitly describes Explore-only coverage', async ({ page, app }) => {
   const { origin } = app
   await page.goto(`${origin}/settings#sources`)
   await expect(page.getByLabel('Show adult content in Explore', { exact: true })).toBeVisible()

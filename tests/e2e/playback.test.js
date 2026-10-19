@@ -126,13 +126,15 @@ test('direct playback can load external subtitles without an HLS session', async
   expect(await fs.readdir(path.join(app.cache, 'hls'))).toEqual([])
 })
 
-test('failed or malformed playback responses are visible and retryable', async ({ page, app }) => {
+test('failed playback request offers retry and recovers', async ({ page, app }) => {
   await page.route('**/api/play', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Fixture startup failure' }) }), { times: 1 })
   await page.goto(app.player(direct))
   await expect(page.locator('#playback-status')).toContainText('Fixture startup failure')
   await page.getByRole('button', { name: 'Try again', exact: true }).click()
   await expectPlaying(page)
+})
 
+test('a malformed successful playback response is visible and retryable', async ({ page, app }) => {
   await page.route('**/api/play', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Proxy error page</html>' }), { times: 1 })
   await page.goto(app.player(direct))
   await expect(page.locator('#playback-status')).toContainText('Invalid JSON response')
@@ -158,28 +160,15 @@ test('Back cleans the HLS session; Forward plays again', async ({ page, app }) =
   await expectPlaying(page)
 })
 
-test('next-episode countdown can be cancelled or cleared by pagehide without later navigation or polling', async ({ page, app }) => {
-  // Cancelled by the user
+test('next-episode countdown can be cancelled and does not navigate later', async ({ page, app }) => {
   await openPlayer(page, app, direct)
   await page.clock.install()
   await page.locator('#video').evaluate(v => { v.currentTime = v.duration - 0.2 })
   await expect(page.locator('#overlay')).toContainText('Next: S01E02')
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(page.locator('#overlay')).toBeEmpty()
+  // Media playback above used real time; advance only the UI timer now.
   await page.clock.runFor(11_000)
-  await expect(page).toHaveURL(app.player(direct))
-
-  // Cleared by pagehide: no status polling continues
-  await openPlayer(page, app, direct)
-  let polls = 0
-  page.on('request', request => { if (request.url().includes('/status?')) polls++ })
-  await page.clock.install()
-  await page.locator('#video').evaluate(v => { v.currentTime = v.duration - 0.2 })
-  await expect(page.locator('#overlay')).toContainText('Next: S01E02')
-  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })))
-  const before = polls
-  await page.clock.runFor(11_000)
-  expect(polls).toBe(before)
   await expect(page).toHaveURL(app.player(direct))
 })
 
@@ -234,6 +223,20 @@ test('leaving with an unknown playback response closes its server-side session',
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })))
     await expectPlaying(page)
   } finally { release() }
+})
+
+test('pagehide clears next-episode countdown and status polling', async ({ page, app }) => {
+  await openPlayer(page, app, direct)
+  let polls = 0
+  page.on('request', request => { if (request.url().includes('/status?')) polls++ })
+  await page.clock.install()
+  await page.locator('#video').evaluate(v => { v.currentTime = v.duration - 0.2 })
+  await expect(page.locator('#overlay')).toContainText('Next: S01E02')
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })))
+  const before = polls
+  await page.clock.runFor(11_000)
+  expect(polls).toBe(before)
+  await expect(page).toHaveURL(app.player(direct))
 })
 
 test('direct playback persists per-file progress and offers resume or start over', async ({ page, app }) => {
