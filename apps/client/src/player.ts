@@ -1,10 +1,12 @@
 import Hls from 'hls.js'
 // The player page, /play/<infohash>/<file index>. One chrome over the video for every playback mode:
-// direct files play from /raw, remux and transcode through an HLS session whose timeline starts at cur.offset.
+// direct files play from /raw, a browser remux repackages /raw in the page, and remux and transcode
+// go through an HLS session whose timeline starts at cur.offset.
 import type { PlaybackDecision, ProbeResult, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@magplay/api-contract'
 import { api } from './lib/api.ts'
 import type { ApiError } from './lib/api.ts'
-import { measureCaps } from './lib/capabilities.ts'
+import type { BrowserRemux } from './lib/browser-remux.ts'
+import { browserCanRemux, measureCaps } from './lib/capabilities.ts'
 import { icon } from './lib/icons.ts'
 import { pickByLanguage, releaseName } from './lib/naming.ts'
 import { performanceView, record } from './lib/performance.ts'
@@ -48,6 +50,7 @@ let lastProgressSave = 0
 let info: ProbeResult | null = null
 let cur: Current | null = null
 let hls: Hls | null = null
+let remux: BrowserRemux | null = null // the in-page conversion in browser-remux mode
 let audio = 0
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
@@ -85,6 +88,9 @@ function toggleFlowPin (): void {
   wake()
 }
 
+/** Direct and browser-remux play the whole file's timeline locally: no server session, seeking inside the browser. */
+const isLocal = (decision: { mode: string } | null | undefined): boolean => decision?.mode === 'direct' || decision?.mode === 'browser-remux'
+
 /** The file's ranges on the server, from the latest poll. */
 const fileRanges = (): Array<[number, number]> | null => lastStatus?.loaded ? lastStatus.file?.ranges ?? null : null
 
@@ -114,6 +120,7 @@ function renderPlaybackStatus (): void {
     slowSamples,
     problem: playbackProblem,
     ...(sourceSnapshot ? { source: { status: sourceSnapshot.status, age: now - sourceSnapshot.at } } : {}),
+    ...(remux ? { remux: remux.stats() } : {}),
   }, flowPinned)
   if (model && !file) model.actions = model.actions.filter(name => name !== 'external' && name !== 'release')
   showPlaybackStatus(model, now - waitingAt, starting ? `${starting} · Waiting ${Math.floor((now - waitingAt) / 1000)} s` : '')
@@ -227,10 +234,11 @@ function renderFacts (): void {
 }
 
 const caps = measureCaps(video, window)
+const browserRemux = browserCanRemux(window)
 
 const position = (): number => cur ? cur.offset + video.currentTime : pendingPosition
 /** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
-const duration = (): number => cur?.duration || info?.duration || (cur?.mode === 'direct' && Number.isFinite(video.duration) ? video.duration : 0)
+const duration = (): number => cur?.duration || info?.duration || (isLocal(cur) && Number.isFinite(video.duration) ? video.duration : 0)
 /** Seconds the browser has buffered past the playhead. */
 function bufferedAhead (): number {
   const now = video.currentTime
@@ -243,7 +251,7 @@ function persistProgress (force = false, ended = false): void {
   const now = Date.now()
   if (!force && now - lastProgressSave < 5000) return
   // A growing HLS playlist's local duration is not the whole file duration.
-  const total = cur.duration ?? (cur.mode === 'direct' ? video.duration : null)
+  const total = cur.duration ?? (isLocal(cur) ? video.duration : null)
   const entry = progressEntry(position(), total, { ended, at: now })
   if (entry) {
     remember(progressKey(ih, idx), entry)
@@ -257,6 +265,8 @@ function teardown (): void {
   cancelNext()
   hls?.destroy()
   hls = null
+  remux?.dispose()
+  remux = null
   if (cur?.session) navigator.sendBeacon(`/api/play/${cur.session}`)
   video.removeAttribute('src')
   video.load()
@@ -289,7 +299,7 @@ async function start (at = 0, message = ''): Promise<void> {
   try {
     const result = await requestPlayback(async current => {
       if (gen !== generation) return null
-      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, tab: requestTab }, signal: pageSignal })
+      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, browserRemux, tab: requestTab }, signal: pageSignal })
       if (!current() || gen !== generation) {
         if (result.session) navigator.sendBeacon(`/api/play/${result.session}`)
         return null
@@ -317,6 +327,18 @@ async function start (at = 0, message = ''): Promise<void> {
   let startPlayback = true
   if (decision.mode === 'direct') {
     video.src = decision.url
+    if (at) video.currentTime = at
+  } else if (decision.mode === 'browser-remux') {
+    setPlaybackPhase('playlist')
+    try {
+      const { startBrowserRemux } = await import('./lib/browser-remux.ts')
+      const started = await startBrowserRemux(video, { url: decision.url, audio: decision.audio, duration: decision.duration, start: at, onError: (title, detail) => { if (current()) failPlayback(title, detail) } })
+      if (!current()) { started.dispose(); return }
+      remux = started
+    } catch (err) {
+      if (current()) failPlayback('This browser could not repackage the file', (err as Failure).message, ['external', 'release'])
+      return
+    }
     if (at) video.currentTime = at
   } else {
     setPlaybackPhase('playlist')
@@ -378,8 +400,8 @@ async function waitForPlaylist (url: string, gen: number, signal: AbortSignal): 
 function seekTo (t: number): void {
   if (!cur) return
   t = Math.max(0, Math.min(t, (duration() || Infinity) - 1))
-  if (cur.mode === 'direct') {
-    video.currentTime = t
+  if (isLocal(cur)) {
+    video.currentTime = t // a browser remux restarts its own conversion when the target isn't buffered
     return
   }
   const rel = t - cur.offset
@@ -412,6 +434,8 @@ async function loadSubtitles (gen = generation): Promise<void> {
   } else if (session.mode === 'direct') {
     url = `/subs/${ih}/${idx}/${n}.vtt`
     notify('Extracting subtitles (needs the whole file downloaded)…', 'busy')
+  } else if (session.mode === 'browser-remux') {
+    return notify('Embedded subtitles need ffmpeg on the server; add an .srt file to the torrent folder.', 'warn')
   } else {
     url = session.subtitles.find(s => s.index === Number(n))?.url
   }
@@ -907,7 +931,7 @@ video.addEventListener('playing', () => {
   // For "Continue" on the torrent page and the home page
   if (file) remember(`last:${ih}`, { idx, label: fileLabel(file), at: Date.now() })
 })
-video.addEventListener('error', () => { if (cur?.mode === 'direct') failPlayback('Playback stopped', video.error?.message || `Media error ${video.error?.code}`) })
+video.addEventListener('error', () => { if (isLocal(cur)) failPlayback('Playback stopped', video.error?.message || `Media error ${video.error?.code}`) })
 video.addEventListener('ended', () => { persistProgress(true, true); setPlaybackPhase('idle'); countdownToNext() })
 video.addEventListener('volumechange', () => {
   renderVolume()
@@ -928,7 +952,7 @@ disclosure($('#perf-toggle'), $('#performance'), renderPerformance)
 
 /** Redrawn on each poll, only while the disclosure is open. */
 function renderPerformance (): void {
-  fill($('#performance'), ...performanceView(history, { direct: cur?.mode === 'direct' }))
+  fill($('#performance'), ...performanceView(history, { direct: isLocal(cur) }))
 }
 
 // Theater layout: the stage takes the largest box that fits the band's width and the viewport height

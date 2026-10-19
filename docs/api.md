@@ -18,13 +18,13 @@ document holds the full table. Paths are relative to the server root.
 | `GET /raw/:ih/:idx[/:name][?download=1]` | The file, with `Range`, `ETag` and `If-Range` support. `download=1` adds `Content-Disposition: attachment`. |
 | `GET /tar/:ih[/:name.tar]` | Every file in the torrent as one tar archive (PAX headers), with known length and Range support for resuming |
 | `GET /playlist.m3u?ih=[&idx=]` | `.m3u` for external players: one file, or every video in the torrent |
-| `GET /api/probe/:ih/:idx` | ffprobe summary: duration, container, video, audio and subtitle tracks, external subtitle files |
-| `POST /api/play` `{ih, idx, audio, start, caps, tab}` | `{mode, reason, url, offset, duration, session, subtitles}`, or 422 with an explanation. Stops the tab's previous session. |
+| `GET /api/probe/:ih/:idx` | What the file holds, read from its headers in Node: duration, container (`mp4`, `mov`, `matroska`, `webm`, `mpegts`…), video, audio and subtitle tracks, external subtitle files |
+| `POST /api/play` `{ih, idx, audio, start, caps, browserRemux, tab}` | `{mode, reason, url, offset, duration, session, subtitles}`, or 422 with an explanation. Stops the tab's previous session. `mode` is `direct`, `remux`, `transcode` or, on a server without ffmpeg whose page can repackage (`browserRemux`, default yes), `browser-remux` (`url` is the `/raw` file, `offset` 0, `audio` the track index, no `session`). A page that can't (`browserRemux: false`) gets `remux` produced in Node instead of by ffmpeg. |
 | `GET /hls/:session/:file` | Playlist, init segment, segments and `sub_N.vtt` |
 | `DELETE` or `POST /api/play/:session` | Stops ffmpeg and deletes the session directory. `POST` is for `navigator.sendBeacon` when the tab closes. Sessions with no requests for 45 s are also stopped. |
 | `POST /api/play/tab/:tab` | Closes a page activation, including a session whose POST result has not reached the browser yet; late requests for that activation are fenced briefly. |
 | `GET /subs/:ih/:idx/:track.vtt` | Embedded text subtitle `track` as WebVTT (direct mode; reads the whole file), or `file.vtt` to convert a `.srt`/`.vtt`/`.ass` file in the torrent |
-| `GET /api/status` | `{level, checks:[{id, label, level, required, value, message, action}]}`. Checks run when asked and are cached (sources and Explore 60 s, disk 30 s, ffmpeg once). |
+| `GET /api/status` | `{level, checks:[{id, label, level, required, value, message, action}]}`. Checks run when asked and are cached (sources and Explore 60 s, disk 30 s, ffmpeg once; a missing ffmpeg is `warn`, not `error`). |
 | `GET /api/settings` | Server settings in use, secrets masked as `{set}`, with `meta[key] = {source: env\|file\|default, env, locked}` |
 | `PATCH /api/settings` | A partial update, validated as a whole (400 with `fields` per key, nothing saved) and written atomically. Same-origin only (403 otherwise), like every write below. |
 | `POST /api/settings/test` `{key: 'sources', item}` | Checks a source with unsaved values; returns a check result |

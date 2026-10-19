@@ -5,6 +5,10 @@
   "type": "module",
   "devDependencies": {
     "@magplay/api-contract": "*",
-    "hls.js": "1.7.3"
+    "@mediabunny/aac-encoder": "1.61.6",
+    "@mediabunny/ac3": "1.61.6",
+    "@mediabunny/dts": "1.61.6",
+    "hls.js": "1.7.3",
+    "mediabunny": "1.61.6"
   }
 }

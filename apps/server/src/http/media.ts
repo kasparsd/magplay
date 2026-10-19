@@ -58,7 +58,7 @@ function send (req: IncomingMessage, res: ServerResponse, engine: TorrentEngine,
   })
 }
 
-/** GET /raw/:ih/:idx: the file's bytes with Range support. The single source for the browser, ffmpeg, ffprobe and downloads. */
+/** GET /raw/:ih/:idx: the file's bytes with Range support. The single source for the browser, the probe, ffmpeg and downloads. */
 export async function serveRaw (req: IncomingMessage, res: ServerResponse, engine: TorrentEngine, ih: string, idx: number, { download = false } = {}): Promise<void> {
   const file = await engine.file(ih, idx)
   send(req, res, engine, ih, { size: file.length, type: file.type, etag: `"${ih}-${idx}"`, filename: download && file.name }, file.read)

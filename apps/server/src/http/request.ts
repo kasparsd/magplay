@@ -40,6 +40,7 @@ export function parsePlayRequest (body: Record<string, unknown>): PlayRequest {
     audio,
     start,
     ...(tab !== undefined && { tab }),
+    ...(typeof body.browserRemux === 'boolean' && { browserRemux: body.browserRemux }),
     caps: Object.fromEntries(Object.entries(caps).map(([key, value]) => [key, !!value])),
   }
 }

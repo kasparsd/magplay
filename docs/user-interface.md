@@ -51,7 +51,7 @@ Numbers shown side by side must mean the same thing. A seeder count, a release c
 - The external-player route (Open in, ⋯ menus, Copy stream link) is a first-class alternative, not an error path, and offers the same actions everywhere a file appears.
 - On the Player page the video, its controls and the title row fit in the viewport together on common laptop and phone sizes. The video is as large as the viewport allows for its aspect ratio (see [Theater layout](#2-theater-layout-by-default)).
 - Every playback mode (direct, remux, transcode) uses the same player chrome, and every control, including Audio and Subtitles, works in fullscreen (see [One player chrome](#1-one-player-chrome-for-every-mode)).
-- Technical detail (codecs, container, peers) lives behind ⓘ Details and uses human labels ("MP4", "MP3 stereo"), not raw ffprobe strings. During a playback wait, show the evidence that explains the wait directly on the video, including file availability, conversion speed and buffered seconds.
+- Technical detail (codecs, container, peers) lives behind ⓘ Details and uses human labels ("MP4", "MP3 stereo"), not raw probe strings. During a playback wait, show the evidence that explains the wait directly on the video, including file availability, conversion speed and buffered seconds.
 
 ### Playback wait explanations
 
@@ -164,7 +164,7 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
   #stage { --ar: 16 / 9; width: min(100%, calc((100dvh - var(--topbar-h) - var(--title-row-h)) * var(--ar))); margin-inline: auto; }
   ```
 
-  `--ar` comes from the probe: `info.video.width / info.video.height`, corrected by the sample aspect ratio when ffprobe reports a non-square one. It stays 16:9 until the probe returns, so the page doesn't jump twice. `--topbar-h` and `--title-row-h` are measured once and on resize, not hard-coded.
+  `--ar` comes from the probe: `info.video.width / info.video.height`, corrected by the sample aspect ratio when the probe reports a non-square one. It stays 16:9 until the probe returns, so the page doesn't jump twice. `--topbar-h` and `--title-row-h` are measured once and on resize, not hard-coded.
 - **Title row** under the band, one line where it fits:
   - Left: the back link to the torrent and the title. The title is the parsed name and episode ("Fleabag · S01E01"), using `episodeLabel`, with the file name moved into ⓘ Details.
   - Right: Open in, and the ⓘ Details toggle.

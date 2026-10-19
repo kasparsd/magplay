@@ -1,7 +1,12 @@
 // Subtitle files for direct play: an embedded track (reading the whole file) or an external subtitle file, as WebVTT.
+// SubRip and WebVTT files convert here; embedded tracks and other formats (ASS) go through ffmpeg.
+import { isTextSubtitleFile, subtitleFileToVtt, UnplayableError } from '@magplay/playback'
 import type { MediaTools } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
 import { HttpError } from '../http/errors.ts'
+
+/** Subtitle files are small; anything bigger is not a subtitle file. */
+const FILE_LIMIT = 16 * 1024 ** 2
 
 export interface SubtitleOptions {
   engine: TorrentEngine
@@ -52,7 +57,18 @@ export function createSubtitles ({ engine, media, input, limit = SUBTITLE_CACHE_
         return job
       }
       const started = (async () => {
-        await engine.file(ih, idx)
+        const file = await engine.file(ih, idx)
+        if (track === 'file' && isTextSubtitleFile(file.name)) {
+          const res = await fetch(input(ih, idx))
+          if (!res.ok) throw new HttpError(502, `Reading the subtitle file failed: HTTP ${res.status}`)
+          if (Number(res.headers.get('content-length')) > FILE_LIMIT) throw new UnplayableError('This subtitle file is too large to be one.')
+          return subtitleFileToVtt(await res.text())
+        }
+        if (!media.serverConversion()) {
+          throw new UnplayableError(track === 'file'
+            ? 'This server has no ffmpeg to convert this subtitle format; only .srt and .vtt files work here.'
+            : 'This server has no ffmpeg to extract embedded subtitles; add an .srt file to the torrent folder or open the file in an external player.')
+        }
         return media.subtitleToVtt(input(ih, idx), track === 'file' ? null : Number(track))
       })()
       job = started

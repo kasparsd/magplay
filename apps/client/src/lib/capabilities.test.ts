@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CODEC_KEYS } from '@magplay/api-contract'
-import { measureCaps } from './capabilities.ts'
+import { browserCanRemux, measureCaps } from './capabilities.ts'
 
 // Exact MIME probes are a compatibility contract with the existing player.
 const types = {
@@ -22,6 +22,8 @@ test('capability helper imports without DOM/window and reports every server code
   assert.equal(typeof document, 'undefined')
   assert.deepEqual(measureCaps({ canPlayType: () => '' }), all(false))
   assert.deepEqual(Object.keys(measureCaps({ canPlayType: () => '' })), [...CODEC_KEYS])
+  assert.equal(browserCanRemux(), false)
+  assert.equal(browserCanRemux({ MediaSource: { isTypeSupported: () => true } }), true)
 })
 
 test('MSE receives the unchanged MIME probes and supported types need no native fallback', () => {

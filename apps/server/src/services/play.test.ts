@@ -21,7 +21,7 @@ function setup () {
     engine: { get: () => Promise.resolve({ files }), file: () => Promise.resolve(files[0]), describe: () => ({ files: [] }) },
     media: { probe: () => { const job = deferred(); probes.push(job); return job.promise } },
     tabs: { stop: () => {} },
-    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    policy: () => ({ serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }),
     input: () => 'http://raw',
   } as unknown as PlayOptions
   return { play: createPlay(options), probes }
@@ -67,7 +67,7 @@ test('cancelled preparation has one metric outcome and no false error or session
     engine: {},
     media: {},
     tabs: { start: () => { throw new Error('must not start') } },
-    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    policy: () => ({ serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }),
     input: () => '',
     logger: logging.logger,
     metrics: telemetry.metrics,
@@ -116,7 +116,7 @@ test('non-faststart MP4 is remuxed instead of played directly', async () => {
     engine: { get: () => Promise.resolve({ files }), file: () => Promise.resolve(files[0]), describe: () => ({ files: [] }) },
     media: { probe: () => Promise.resolve(info) },
     tabs: { stop: () => {}, start: () => ({ id: 's' }) },
-    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    policy: () => ({ serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }),
     input: () => 'http://raw',
   } as unknown as PlayOptions
   const play = createPlay(options)
@@ -125,13 +125,13 @@ test('non-faststart MP4 is remuxed instead of played directly', async () => {
 })
 
 test('a remux reports the keyframe it starts on, not the later requested time', async () => {
-  const mkv: MediaInfo = { ...info, container: 'matroska,webm', audio: [{ index: 0, codec: 'aac', channels: 2, language: null, title: null, default: true }] }
+  const mkv: MediaInfo = { ...info, container: 'matroska', audio: [{ index: 0, codec: 'aac', channels: 2, language: null, title: null, default: true }] }
   let started = -1
   const options = {
     engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
     media: { probe: () => Promise.resolve(mkv), keyframeBefore: (_input: string, at: number) => { assert.equal(at, 35.2); return Promise.resolve(34) } },
     tabs: { stop: () => {}, start: (_tab: string, opts: { start: number }) => { started = opts.start; return { id: 's' } } },
-    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    policy: () => ({ serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }),
     input: () => 'http://raw',
   } as unknown as PlayOptions
   const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 35.2, caps: { h264: true, aac: true } }, () => false)
@@ -147,7 +147,7 @@ test('a transcode keeps the requested time instead of snapping to a keyframe', a
     engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
     media: { probe: () => Promise.resolve(mpeg4), keyframeBefore: () => Promise.reject(new Error('must not look up a keyframe')) },
     tabs: { stop: () => {}, start: (_tab: string, opts: { start: number }) => { started = opts.start; return { id: 's' } } },
-    policy: () => ({ allowTranscode: true, transcodeMaxHeight: 720 }),
+    policy: () => ({ serverConversion: true, allowTranscode: true, transcodeMaxHeight: 720 }),
     input: () => 'http://raw',
   } as unknown as PlayOptions
   const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 35.2, caps: { aac: true } }, () => false)
@@ -162,10 +162,45 @@ test('faststart MP4 is still played directly', async () => {
     engine: { get: () => Promise.resolve({ files }), file: () => Promise.resolve(files[0]), describe: () => ({ files: [] }) },
     media: { probe: () => Promise.resolve(info) },
     tabs: { stop: () => {}, start: () => ({ id: 's' }) },
-    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    policy: () => ({ serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }),
     input: () => 'http://raw',
   } as unknown as PlayOptions
   const play = createPlay(options)
   const result = await play.play({ ih: 'ih', idx: 0, caps: { h264: true } }, () => false)
   assert.equal(result.mode, 'direct')
+})
+
+test('without ffmpeg an MKV is repackaged in the browser: no session, the whole-file timeline and the audio track', async () => {
+  const mkv: MediaInfo = { ...info, container: 'matroska', audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }, { index: 1, codec: 'aac', channels: 2, language: null, title: null, default: false }] }
+  const options = {
+    engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(mkv), keyframeBefore: () => Promise.reject(new Error('the browser finds its own keyframe')) },
+    tabs: { stop: () => {}, start: () => { throw new Error('no server session without ffmpeg') } },
+    policy: () => ({ serverConversion: false, allowTranscode: true, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 35.2, audio: 1, caps: { h264: true, aac: true } }, () => false)
+  assert.equal(result.mode, 'browser-remux')
+  assert.equal(result.offset, 0)
+  assert.equal(result.url, '/raw/ih/0')
+  assert.equal(result.audio, 1)
+  assert.equal(result.session, undefined)
+})
+
+test('without ffmpeg a browser that cannot repackage gets an HLS session produced in Node', async () => {
+  const mkv: MediaInfo = { ...info, container: 'matroska', audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }] }
+  let started = ''
+  const options = {
+    engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(mkv), keyframeBefore: (_input: string, at: number) => Promise.resolve(at) },
+    tabs: { stop: () => {}, start: (_tab: string, opts: { mode: string }) => { started = opts.mode; return { id: 's' } } },
+    policy: () => ({ serverConversion: false, allowTranscode: true, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 12, caps: { h264: true }, browserRemux: false }, () => false)
+  assert.equal(started, 'node-remux')
+  assert.equal(result.mode, 'remux')
+  assert.equal(result.session, 's')
+  assert.equal(result.offset, 12)
+  assert.deepEqual(result.subtitles, [])
 })

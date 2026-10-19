@@ -23,7 +23,7 @@ export function factRows ({ decision, file, info, audio, status, buffered }: Fac
   const rows: Array<[string, string | null | undefined | false]> = [
     ['Mode', decision && `${decision.mode}: ${decision.reason}`],
     ['File', file && `${baseName(file.name)} (${formatBytes(file.size)})`],
-    ['Container', containerLabel(info?.container, file?.name)],
+    ['Container', containerLabel(info?.container)],
     ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.width}×${v.height}, ${(v.width * (v.sampleAspect || 1) / v.height).toFixed(2)}:1, ${v.bitDepth}-bit`],
     ['Audio', a && [audioFormat(a.codec, a.channels), languageName(a.language)].filter(Boolean).join(', ')],
     ['Peers', status?.loaded && `${status.peers.length} · ↓ ${formatSpeed(status.downloadSpeed)}`],

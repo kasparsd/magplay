@@ -1,6 +1,6 @@
 // The settings page, /settings#<section>: a loop over the settings schema, one control per entry.
 // Server settings collect in a save bar and are saved together; browser settings apply as they change.
-import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
+import { SECTIONS, SERVER_CONVERSION_KEY, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
 import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, optionalNote, renderControl } from './lib/controls.ts'
@@ -98,7 +98,7 @@ const READOUTS: Record<string, () => ReadoutValue> = {
     return { text: `Torrent cache: ${gb(disk.cacheBytes)} / ${gb(disk.cacheMaxBytes)} · Free disk space: ${gb(disk.free)}`, fraction: disk.cacheBytes / disk.cacheMaxBytes }
   },
   'debug.server': () => debug
-    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`], ['Encoders', (debug.encoders ?? []).join(', ') || 'none'], ['Transcode encoder', debug.transcodeEncoder ?? 'auto']])
+    ? infoList([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg', debug.ffmpeg ?? 'not installed'], ['Conversion', debug.serverConversion ? 'on the server (ffmpeg)' : 'in the browser when it can, otherwise in Node; nothing is re-encoded'], ['Encoders', (debug.encoders ?? []).join(', ') || 'none'], ['Transcode encoder', debug.transcodeEncoder ?? 'auto']])
     : 'Loading…',
   'debug.resources': () => {
     if (!debug) return 'Loading…'
@@ -166,6 +166,7 @@ async function loadDebug (): Promise<void> {
     return
   }
   for (const key of ['cache.usage', 'debug.server', 'debug.resources', 'debug.log']) refreshReadout(key)
+  syncPresentation() // the transcode settings depend on whether this server has ffmpeg
 }
 
 // ---- Rows ----
@@ -275,7 +276,7 @@ function syncPresentation (): void {
     if (!def.rules?.length) continue
     const row = document.getElementById(`row-setting-${def.key.replace(/\./g, '-')}`)
     if (!row) continue
-    const presented = presentSetting(def, key => serverValue(key))
+    const presented = presentSetting(def, key => key === SERVER_CONVERSION_KEY ? debug?.serverConversion ?? true : serverValue(key))
     row.hidden = !!presented.hidden
     row.classList.toggle('inactive', !!presented.disabled)
     const disabled = !!presented.disabled || metaOf(def.key)?.source === 'env'

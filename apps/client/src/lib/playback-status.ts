@@ -18,6 +18,8 @@ export interface PlaybackSignals {
   problem: PlaybackProblem | null
   /** Recent source-only observation retained through a seek/session restart. */
   source?: { status: Extract<TorrentStatus, { loaded: true }>, age: number }
+  /** The in-page conversion's progress in browser-remux mode. */
+  remux?: { ahead: number, speed: number | null, done: boolean }
 }
 export interface PlaybackExplanation extends PlaybackProblem {
   key: string
@@ -61,7 +63,7 @@ export function explainPlayback (input: PlaybackSignals): PlaybackExplanation | 
   }
   if (waitingMs < 1000) return result('brief', 'Preparing playback…', '')
   if (!fresh) return result('unknown', 'Playback is waiting', 'The latest playback status is unavailable. Checking again automatically.')
-  if (decision?.mode !== 'direct' && decision && status && !status.session) {
+  if (decision?.session && status && !status.session) {
     return result('session-lost', 'The playback session ended', 'The prepared stream is no longer available. Try again to start a new session.', ['retry', 'external'], 'error')
   }
   // During cache verification, unverified local pieces can temporarily look
@@ -89,7 +91,10 @@ export function explainPlayback (input: PlaybackSignals): PlaybackExplanation | 
     return result('slow', decision.mode === 'transcode' ? 'Converting video too slowly' : 'Preparing the stream too slowly',
       'The file is fully downloaded, but the server is preparing video more slowly than your selected playback speed.', ['external', 'release'])
   }
-  if (decision.mode !== 'direct' && ahead < 1) {
+  if (decision.mode === 'browser-remux' && buffer < 1 && (input.remux?.ahead ?? 0) < 1 && !input.remux?.done) {
+    return result('conversion', 'Repackaging in the browser', 'This browser is reading the file and preparing its audio itself. Waiting for playable media.')
+  }
+  if (decision.session && ahead < 1) {
     return result('conversion', decision.mode === 'transcode' ? 'Converting the video' : 'Preparing the stream',
       decision.mode === 'transcode'
         ? 'This browser needs a different video format. Waiting for playable converted segments.'

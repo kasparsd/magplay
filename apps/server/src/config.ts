@@ -24,7 +24,6 @@ export interface Config {
   showAdult: boolean
   cacheDir: string
   ffmpegPath: string
-  ffprobePath: string
   cacheMaxBytes: number
   maxHlsSessions: number
   maxTorrentLoads: number
@@ -148,7 +147,6 @@ const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'torrentPort', env: ['TORRENT_PORT'], type: 'number', default: 6881, min: 0, max: 65535, integer: true },
   { key: 'cacheDir', env: ['CACHE_DIR'], type: 'text', default: 'data' },
   { key: 'ffmpegPath', env: ['FFMPEG_PATH'], type: 'text', default: 'ffmpeg' },
-  { key: 'ffprobePath', env: ['FFPROBE_PATH'], type: 'text', default: 'ffprobe' },
   { key: 'vaapiDevice', env: ['VAAPI_DEVICE'], type: 'text', default: '/dev/dri/renderD128' },
   { key: 'dhtEnabled', env: ['DHT_ENABLED'], type: 'toggle', default: true },
   { key: 'lsdEnabled', env: ['LSD_ENABLED'], type: 'toggle', default: true },
@@ -161,7 +159,7 @@ const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1, max: 10_080 },
 ]
 
-type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'vaapiDevice' | 'dhtEnabled' | 'lsdEnabled' |
+type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'vaapiDevice' | 'dhtEnabled' | 'lsdEnabled' |
   'maxHlsSessions' | 'maxTorrentLoads' | 'maxProbes' | 'maxSubtitleJobs' | 'extraTrackers' | 'metadataTimeoutMs' | 'checkingTimeoutMs' | 'idleTorrentMs'>
 
 type Values = Readonly<Record<string, unknown>>
@@ -191,7 +189,6 @@ export function envOnlyConfig (env: Env): EnvOnlyConfig {
     torrentPort: num(v, 'torrentPort'),
     cacheDir: path.resolve(str(v, 'cacheDir')),
     ffmpegPath: str(v, 'ffmpegPath'),
-    ffprobePath: str(v, 'ffprobePath'),
     vaapiDevice: str(v, 'vaapiDevice'),
     dhtEnabled: bool(v, 'dhtEnabled'),
     lsdEnabled: bool(v, 'lsdEnabled'),
