@@ -45,7 +45,7 @@ downloads what's needed.
 See [docs/roadmap.md](docs/roadmap.md) for the current review, verification
 limits, architecture recommendations and prioritized next steps.
 
-Released changes are listed in [apps/server/CHANGELOG.md](apps/server/CHANGELOG.md), starting with the first release after `0.1.0`. [docs/releases.md](docs/releases.md) explains release notes and how a release is prepared.
+Released changes are listed in [CHANGELOG.md](CHANGELOG.md), starting with the first release after `0.1.0`. [docs/releases.md](docs/releases.md) explains release notes and how a release is prepared.
 
 ## Quick start
 
@@ -432,8 +432,8 @@ npm start                 # builds the client, then serves; cache lands in ./dat
 npm run dev               # rebuilds the client and restarts the server on change
 npm run typecheck         # tsc -b over every workspace
 npm run lint              # ESLint (neostandard + type-aware rules), no warnings allowed
-npm run changeset         # add a release note (see docs/releases.md)
-npm run changeset:check -- --base origin/main   # what CI checks on a pull request
+npm run release -- note --patch -m "..."   # add a release note (see docs/releases.md)
+npm run release -- status --since origin/main   # what CI checks on a pull request
 npm test                    # Fast Node regression tests
 npx playwright install chromium
 npm run test:e2e             # Generated local media + real Chromium playback

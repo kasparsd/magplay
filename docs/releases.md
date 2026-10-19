@@ -1,20 +1,21 @@
 # Releases and release notes
 
-magplay has one version: `apps/server/package.json`. The server ships the whole app (the bundled client, the packages, `public/` and the Docker image), so every release note names `@magplay/server`, whatever part of the repository changed. The other workspaces are private, ignored by Changesets and stay at `0.0.0`. Startup logs, `/api/debug` and metrics read the version from that manifest (`apps/server/src/version.ts`).
+magplay has one version: `apps/server/package.json`. The server ships the whole app (the bundled client, the packages, `public/` and the Docker image), so every release note names `@magplay/server`, whatever part of the repository changed. The other workspaces stay at `0.0.0`. Startup logs, `/api/debug` and metrics read the version from that manifest (`apps/server/src/version.ts`).
 
-[Changesets](https://github.com/changesets/changesets) (`@changesets/cli`, pinned in the root `package.json`) collects the notes in `.changeset/` and turns them into the next version and [`apps/server/CHANGELOG.md`](../apps/server/CHANGELOG.md). History starts with adoption; `0.1.0` is the baseline, not a published release.
+`@magplay/release` (`packages/release`, run with `npm run release`) collects the notes in `.changeset/` and turns them into the next version and [`CHANGELOG.md`](../CHANGELOG.md) at the repository root. History starts here; `0.1.0` is the baseline, not a published release, and it is not tagged because it has no changelog section.
+
+Nothing is published to npm.
 
 ## Adding a note
 
 Add one in the same change as the code:
 
 ```bash
-npm run changeset -- --patch @magplay/server -m "Seeking past the converted part restarts conversion instead of stalling."
-npm run changeset                       # the same, interactively
-npm run changeset -- --empty            # nothing users would notice
+npm run release -- note --patch -m "Seeking past the converted part restarts conversion instead of stalling."
+npm run release -- note --empty
 ```
 
-Each command writes a file such as `.changeset/brave-cats-sing.md`:
+`--empty` needs no summary. Each command writes a file such as `.changeset/brave-cats-sing.md`:
 
 ```md
 ---
@@ -32,31 +33,30 @@ Write for the person running magplay: what behaves differently, and what they ne
 - **minor:** new capabilities. Below `1.0.0`, also changes that break existing configuration or behaviour; say what the operator must change.
 - **major:** reserved for the deliberate `1.0.0` release.
 
-**Empty notes** (`--empty`) are for refactoring, tests, plans and contributor documentation. They count as "this change needs no release note"; the release consumes them without a bump or changelog entry. Documentation that corrects operator instructions deserves a real note.
+**Empty notes** are for refactoring, tests, plans and contributor documentation. They count as "this change needs no release note". A release consumes them without a changelog entry, and they do not open a release pull request on their own. Documentation that corrects operator instructions deserves a real note.
 
 ## What CI checks
 
-`npm run changeset:check` (`tools/scripts/check-changesets.mjs`) runs in the `changesets` job:
+The `changesets` job runs `npm run release -- status`. On a pull request it passes `--since origin/<base>`, and the job fails when that range adds no note. Notes already on the base do not count, and neither does editing one. The comparison includes the working tree, so a staged note counts before it is committed; an untracked one does not. Pull requests from `release/*` are the prepared version and are not checked.
 
-- `.changeset/config.json` ignores every workspace except `@magplay/server`, all workspaces are private, and `fixed`/`linked` are empty. A new workspace fails until it is added to `ignore`.
-- Each pending note is empty or names only `@magplay/server` with `patch`, `minor` or `major` and a summary. `changeset status` accepts a note for an ignored package without complaint, so this check is what catches it.
-- On a pull request, against the PR base: the branch adds a note, or it is a release. Notes already on the base don't count, and neither does editing one. A release deletes notes and changes only `apps/server/package.json` (with a higher version), `apps/server/CHANGELOG.md` and `package-lock.json` (with the same version).
+A push to `main` runs `status` with no `--since`, which only checks that the pending notes are valid: empty, or naming only `@magplay/server` with `patch`, `minor` or `major` and a summary.
 
-Run it locally with `npm run changeset:check -- --base origin/main`. It compares the working tree with the merge base, so a staged note counts before it is committed; an untracked one doesn't.
+Run it locally with `npm run release -- status --since origin/main`.
 
-Pushes straight to `main` only get the first two checks, so a direct push still needs its own note.
+## What happens on main
 
-## Preparing a release
+A push to `main` that changes `.changeset/`, `packages/release/` or the prepare workflow runs [prepare-release.yml](../.github/workflows/prepare-release.yml). When a note requests a bump, `version` deletes the notes (including empty ones), raises the server version by the highest bump and prepends the changelog section. The workflow then refreshes `package-lock.json` and opens or updates the pull request on `release/next`. The title is `Release <version>`.
 
-1. On a release branch from an up-to-date `main`, review what is pending with `npm run changeset:status`.
-2. Run `npm run release:version`. It runs `changeset version`, which deletes the notes, raises the server version by the highest bump requested and writes the changelog section, then refreshes `package-lock.json`. It doesn't commit, tag or publish.
-3. Review the diff (version, changelog section, deleted notes, lockfile only) and run `npm run typecheck`, `npm run lint` and `npm test`. Open a PR; the `changesets` job validates it as a release.
-4. After merging, publish a GitHub Release tagged `v<version>` at the merge commit, with the changelog section as its body. [`publish-image.yml`](../.github/workflows/publish-image.yml) builds and pushes the versioned GHCR image from it. Check that the tag, `apps/server/package.json` and `/api/debug` agree.
+Empty notes alone leave the tree unchanged, so no pull request is opened. They stay until a real note is released with them.
 
-Ordinary pushes to `main` keep publishing `edge` without consuming notes or changing the version. Don't use `changeset publish`; nothing goes to npm.
+Merging `release/next` runs [tag-release.yml](../.github/workflows/tag-release.yml). `tag` creates `v<version>` at the merge commit when that tag is absent, and does not move a tag that already exists. The workflow publishes the GitHub Release with the changelog section as its body. [publish-image.yml](../.github/workflows/publish-image.yml) builds and pushes the versioned GHCR image from that release. Ordinary pushes to `main` still publish `edge`.
 
-**Undoing a mistaken `release:version`** before it is committed: `git checkout -- .changeset apps/server/package.json package-lock.json && git clean -f apps/server/CHANGELOG.md` (the last part only if the changelog didn't exist yet). Check with `git status` that the notes are back.
+Both workflows use the `RELEASE_TOKEN` secret. Events created with `GITHUB_TOKEN` do not start other workflows, so the release pull request would not be tested and the GitHub Release would not build the image. Until the secret is set, the jobs log that they skipped.
 
-## Not automated
+`version` and `tag` do not commit. `npm run release -- version --dry-run` prints the plan and leaves the tree alone. `npm run release -- status` lists what is pending.
 
-Release PRs, tags, GitHub Releases and prereleases are manual. Automating them later needs the Changesets action generation that matches v3, and a token other than `GITHUB_TOKEN` if the release should trigger other workflows.
+**Undoing a mistaken `version`** before it is committed: `git checkout -- .changeset apps/server/package.json && git clean -f CHANGELOG.md` (the last part only if the changelog did not exist yet). Check with `git status` that the notes are back.
+
+## Owner setup
+
+Create a fine-grained personal access token or a GitHub App token with Contents and Pull requests write on this repository, and store it as `RELEASE_TOKEN`. Add it after this is on `main`, unless the notes already in `.changeset/` should become the first release pull request immediately. The first successful prepare run includes every pending note. `workflow_dispatch` on Prepare release runs it without waiting for another note.

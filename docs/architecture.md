@@ -37,6 +37,8 @@ apps/server ──► indexers ──────► release-info
 | `observability` | Structured logs, bounded Debug capture, metrics and runtime collectors | Logger/metrics options, lifecycle ownership | Domain operations and HTTP responses |
 | `api-contract` | Types for the server JSON API (replaces `api-types.js`), the codec keys, the settings schema with `validate()` and the status level helpers, which run on both sides | — | Node or DOM APIs |
 
+`@magplay/release` collects release notes and writes the application version and the root changelog. The server and the client do not import it.
+
 Each package throws its own typed errors (busy, timeout, not found, cancelled, invalid input). `apps/server` maps them to HTTP statuses in one place.
 
 Torrent detail requests use `torrent-engine.info()` to describe a ready torrent or read its saved `meta.torrent` directly. A cached file list does not activate WebTorrent, occupy an initialization slot, or wait for cached-piece verification; file indices and content warnings use the same description logic as active torrents. Missing or invalid saved metadata falls back to the normal discovery path. Playback and downloads still use `get()`/`file()` and wait for torrent readiness before reading bytes.

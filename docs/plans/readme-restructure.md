@@ -105,8 +105,8 @@ Secondary (contributor/operator) goals, not on the main path:
       (move content, keep links back to README).
 - [ ] Rewrite README per proposed outline, preserving all facts.
 - [ ] Update cross-links in `docs/` that point at README anchors.
-- [ ] Add a changeset (`npm run changeset -- --empty` or docs bump).
-- [ ] Verify `npm run changeset:check` and link integrity (grep for moved anchors).
+- [ ] Add a release note (`npm run release -- note --empty`, or a real note when the docs change what an operator does).
+- [ ] Verify `npm run release -- status --since origin/main` and link integrity (grep for moved anchors).
 
 ## Open questions
 
