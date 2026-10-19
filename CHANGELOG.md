@@ -1,5 +1,15 @@
 # magplay
 
+## 0.3.0
+
+### Minor
+
+- `@magplay/api-contract` 0.1.0, `@magplay/client` 0.1.0, `@magplay/playback` 0.1.0: magplay runs without ffmpeg. Next to `ghcr.io/kasparsd/magplay` (unchanged: with ffmpeg) there is now `ghcr.io/kasparsd/magplay-core`, which has no ffmpeg: MP4/WebM play directly, MKV and AC3/E-AC3/DTS audio are repackaged in the browser (new `browser-remux` mode, whole-file timeline, seeking and audio switching without the server), `.srt`/`.vtt` files in the torrent still work, and anything that needs converting opens in an external player. A browser that cannot repackage a file itself (no Media Source Extensions) gets that repackaging done in Node and plays the result as HLS. Files are probed in Node instead of ffprobe, so `FFPROBE_PATH` is gone and ffprobe is no longer needed anywhere. On the full image a missing or broken ffmpeg is now a status warning instead of a failed start, and the transcode settings are disabled while it is missing. Container names in Details and the probe API are now short ids (`mp4`, `matroska`, `webm`).
+
+### Patch
+
+- The container images are smaller to download: about 40 MB without ffmpeg and about 90 MB with it.
+
 ## 0.2.1
 
 ### Patch
