@@ -1,7 +1,7 @@
 // The settings schema: one declarative entry per setting, shared by the server (resolution,
 // validation, persistence) and the client (the /settings page renders one control per entry).
 
-export type SectionId = 'sources' | 'playback' | 'connection' | 'storage' | 'debug'
+export type SectionId = 'sources' | 'playback' | 'storage' | 'debug'
 /** Server settings apply to everyone and are saved on the server; browser settings live in one browser's localStorage. */
 export type SettingScope = 'server' | 'browser'
 
@@ -12,11 +12,10 @@ export interface SectionDef {
 }
 
 export const SECTIONS: readonly SectionDef[] = [
-  { id: 'sources', label: 'Sources', intro: 'Where search and Explore get their results.' },
-  { id: 'playback', label: 'Playback', intro: 'How files play, on the server and in this browser’s player.' },
-  { id: 'connection', label: 'Connection', intro: 'The link between this device and the server: the part of playback nothing else measures.' },
-  { id: 'storage', label: 'Storage', intro: 'How much of the server’s disk torrents and conversions may use.' },
-  { id: 'debug', label: 'Debug', intro: 'What the server is doing right now, for working out why something is slow or broken.' },
+  { id: 'sources', label: 'Sources', intro: 'Sources for search results and Explore.' },
+  { id: 'playback', label: 'Playback', intro: 'Convert videos this browser cannot play.' },
+  { id: 'storage', label: 'Storage', intro: 'Disk space for downloaded torrents and temporary video files.' },
+  { id: 'debug', label: 'Debug', intro: 'Server status, logs and troubleshooting details.' },
 ]
 
 interface Common {
@@ -118,8 +117,8 @@ export const SETTINGS: readonly SettingDef[] = [
     section: 'sources',
     scope: 'server',
     type: 'list',
-    label: 'Indexers',
-    help: 'Torznab feeds, Jackett or Prowlarr. Every search asks them all at once.',
+    label: 'Search sources',
+    help: 'Add Torznab, Jackett or Prowlarr sources. Each search checks all sources.',
     itemLabel: 'source',
     env: ['TORZNAB_URL', 'JACKETT_URL', 'PROWLARR_URL'],
     default: [],
@@ -127,13 +126,13 @@ export const SETTINGS: readonly SettingDef[] = [
       {
         key: 'type',
         type: 'select',
-        label: 'Type',
+        label: 'Source type',
         default: 'torznab',
         options: [{ value: 'torznab', label: 'Torznab' }, { value: 'jackett', label: 'Jackett' }, { value: 'prowlarr', label: 'Prowlarr' }],
       },
-      { key: 'url', type: 'url', label: 'Address', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
-      { key: 'apiKey', type: 'secret', label: 'API key', help: 'Jackett and Prowlarr need one; a plain Torznab feed usually doesn’t.', default: '', optional: true, placeholder: 'Paste the key' },
-      { key: 'indexer', type: 'text', label: 'Indexer filter', help: 'Jackett: an indexer id, all, or a filter. Prowlarr: comma-separated ids, -2 for all.', default: '', optional: true, placeholder: 'All' },
+      { key: 'url', type: 'url', label: 'Source URL', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
+      { key: 'apiKey', type: 'secret', label: 'API key', default: '', optional: true, placeholder: 'Paste the key' },
+      { key: 'indexer', type: 'text', label: 'Indexer filter', default: '', optional: true, placeholder: 'All' },
     ],
   },
   {
@@ -141,25 +140,25 @@ export const SETTINGS: readonly SettingDef[] = [
     section: 'sources',
     scope: 'server',
     type: 'url',
-    label: 'BitMagnet address',
-    help: 'For Explore. Found from a Torznab address when it uses BitMagnet’s path.',
+    label: 'BitMagnet URL',
+    help: 'Used by Explore. Detected automatically from a BitMagnet Torznab URL.',
     env: ['BITMAGNET_URL'],
     default: '',
     optional: true,
     placeholder: 'http://bitmagnet:3333',
   },
-  { key: 'content.showAdult', section: 'sources', scope: 'server', type: 'toggle', label: 'Show adult content', help: 'Includes adult titles and the Adult category in Explore.', env: ['SHOW_ADULT_CONTENT', 'ALLOW_ADULT'], default: false },
-  { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Slow sources are dropped from results after this.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
+  { key: 'content.showAdult', section: 'sources', scope: 'server', type: 'toggle', label: 'Show adult content', help: 'Show adult titles in search results and Explore.', env: ['SHOW_ADULT_CONTENT', 'ALLOW_ADULT'], default: false },
+  { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Stop waiting for a source after this many seconds.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
 
   // Playback, server
-  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Allow video transcoding', help: 'Converts video the browser can’t play. Uses a lot of server CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false },
+  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Convert unsupported video', help: 'Convert unsupported video formats on the server. Uses more CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false },
   {
     key: 'transcode.maxHeight',
     section: 'playback',
     scope: 'server',
     type: 'segmented',
-    label: 'Transcode resolution',
-    help: 'Higher looks better and needs a faster server.',
+    label: 'Conversion resolution',
+    help: 'Maximum resolution for converted video. Higher resolutions use more CPU.',
     env: ['TRANSCODE_MAX_HEIGHT'],
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
@@ -170,22 +169,21 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: 'player.volume', section: 'playback', scope: 'browser', type: 'number', label: 'Volume', default: 1, min: 0, max: 1, step: 0.05, hidden: true },
   { key: 'player.muted', section: 'playback', scope: 'browser', type: 'toggle', label: 'Muted', default: false, hidden: true },
 
-  // Connection
-  { key: 'connection.result', section: 'connection', scope: 'browser', type: 'readout', label: 'Last test' },
-  { key: 'connection.test', section: 'connection', scope: 'browser', type: 'action', label: 'Speed test', help: 'Downloads from the server for about 5 seconds. The result stays in this browser.', button: 'Test now' },
-
   // Storage
-  { key: 'cache.usage', section: 'storage', scope: 'server', type: 'readout', label: 'Disk' },
-  { key: 'cache.maxGb', section: 'storage', scope: 'server', type: 'number', label: 'Torrent cache limit', help: 'Oldest torrents are removed past this.', env: ['CACHE_MAX_GB'], default: 50, unit: 'GB', min: 1 },
-  { key: 'cache.minFreeGb', section: 'storage', scope: 'server', type: 'number', label: 'Keep free on disk', help: 'Conversions stop below this.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05 },
-  { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion storage', help: 'Space for remux and transcode segments.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
+  { key: 'cache.usage', section: 'storage', scope: 'server', type: 'readout', label: 'Disk usage' },
+  { key: 'cache.maxGb', section: 'storage', scope: 'server', type: 'number', label: 'Torrent cache limit', help: 'Remove least recently used torrents when the cache exceeds this limit.', env: ['CACHE_MAX_GB'], default: 50, unit: 'GB', min: 1 },
+  { key: 'cache.minFreeGb', section: 'storage', scope: 'server', type: 'number', label: 'Minimum free disk space', help: 'Stop video conversions when free disk space falls below this amount.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05 },
+  { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion cache limit', help: 'Maximum disk space for temporary video conversion files.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
 
   // Debug
   { key: 'debug.server', section: 'debug', scope: 'server', type: 'readout', label: 'Server', group: 'Server' },
   { key: 'debug.resources', section: 'debug', scope: 'server', type: 'readout', label: 'In use', group: 'Server' },
-  { key: 'debug.diagnostics', section: 'debug', scope: 'server', type: 'action', label: 'Diagnostics', help: 'Versions, settings and status as JSON, with secrets removed.', button: 'Copy diagnostics', group: 'Server' },
+  { key: 'debug.diagnostics', section: 'debug', scope: 'server', type: 'action', label: 'Diagnostics', help: 'Copy server details, settings and logs as JSON. API keys are hidden.', button: 'Copy diagnostics', group: 'Server' },
+  { key: 'connection.result', section: 'debug', scope: 'browser', type: 'readout', label: 'Last test', group: 'Speed test' },
+  { key: 'connection.test', section: 'debug', scope: 'browser', type: 'action', label: 'Connection to server', group: 'Speed test', help: 'Download test data for about 5 seconds. Results are saved in this browser.', button: 'Run speed test' },
+
   { key: 'debug.log', section: 'debug', scope: 'server', type: 'readout', label: 'Log', group: 'Log' },
-  { key: 'debug.clearHls', section: 'debug', scope: 'server', type: 'action', label: 'Clear conversion cache', help: 'Stops conversions in progress and deletes their segments. Torrents stay.', button: 'Clear', confirm: true, danger: true, group: 'Maintenance' },
+  { key: 'debug.clearHls', section: 'debug', scope: 'server', type: 'action', label: 'Clear conversion cache', help: 'Stop active conversions and delete temporary video files. Downloaded torrents are kept.', button: 'Clear conversion cache', confirm: true, danger: true, group: 'Maintenance' },
 ]
 
 export const settingDef = (key: string): SettingDef | undefined => SETTINGS.find(d => d.key === key)

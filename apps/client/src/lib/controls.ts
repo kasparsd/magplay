@@ -22,6 +22,8 @@ export interface ControlContext {
   readout?: () => ReadoutValue
   /** list: extra header content per item (a status badge, a Test button). */
   itemExtras?: (item: ListItem, index: number) => Child[]
+  /** list: fields and guidance for the current item, recalculated when its type changes. */
+  itemFields?: (item: ListItem) => readonly ItemFieldDef[]
   /** list: items from env vars, shown read-only first. */
   locked?: readonly ListItem[]
   /** list: with no items at all, show one blank item to fill in (it becomes a change only once edited). */
@@ -40,7 +42,7 @@ const text = (value: unknown): string => typeof value === 'string' || typeof val
 function textInput (def: Field & { type: 'text' | 'url' }, value: unknown, ctx: ControlContext): HTMLInputElement {
   const input = el('input', { id: ctx.id, type: def.type === 'url' ? 'url' : 'text', value: text(value), disabled: !!ctx.disabled, spellcheck: false, autocomplete: 'off' })
   input.setAttribute('aria-label', ctx.label)
-  if (def.placeholder) input.placeholder = def.placeholder
+  if (!ctx.disabled && def.placeholder) input.placeholder = def.placeholder
   input.addEventListener('input', () => ctx.onChange?.(input.value, false))
   input.addEventListener('change', () => ctx.onChange?.(input.value, true))
   return input
@@ -48,7 +50,7 @@ function textInput (def: Field & { type: 'text' | 'url' }, value: unknown, ctx: 
 
 function secretInput (def: Field & { type: 'secret' }, value: unknown, ctx: ControlContext): HTMLElement {
   const saved = isMaskedSecret(value) ? value.set : !!value
-  const input = el('input', { id: ctx.id, type: 'password', autocomplete: 'off', placeholder: def.placeholder ?? '', disabled: !!ctx.disabled })
+  const input = el('input', { id: ctx.id, type: 'password', autocomplete: 'off', placeholder: ctx.disabled ? '' : def.placeholder ?? '', disabled: !!ctx.disabled })
   input.setAttribute('aria-label', ctx.label)
   input.addEventListener('input', () => ctx.onChange?.(input.value, false))
   input.addEventListener('change', () => ctx.onChange?.(input.value, true))
@@ -147,18 +149,27 @@ function list (def: ListDef, value: unknown, ctx: ControlContext): HTMLElement {
       el('span', { className: 'list-extras' },
         ...(ctx.itemExtras?.(item, i) ?? []),
         !locked && remove))
+    const fields = el('div')
+    const renderFields = (): void => fields.replaceChildren(...(ctx.itemFields?.(item) ?? def.item).map(f => el('div', { className: 'row' },
+      el('div', { className: 'row-text' },
+        el('label', { className: 'row-label', htmlFor: `${ctx.id}-${i}-${f.key}` }, f.label, optionalNote(f)),
+        f.help && el('p', { className: 'help', textContent: f.help })),
+      el('div', { className: 'row-control' }, field(f, item[f.key], {
+        id: `${ctx.id}-${i}-${f.key}`,
+        label: `${f.label}, ${n}`,
+        disabled: locked,
+        onChange: (v, committed) => {
+          item = { ...item, [f.key]: v }
+          update(item, committed)
+          if (f.key === 'type' && ctx.itemFields) {
+            renderFields()
+            fields.querySelector<HTMLElement>(`#${ctx.id}-${i}-${f.key}`)?.focus()
+          }
+        },
+      })))))
+    renderFields()
     // Not a disabled fieldset: that would also disable the item's Test button
-    return el('fieldset', { className: `list-item${locked ? ' locked' : ''}` }, head,
-      ...def.item.map(f => el('div', { className: 'row' },
-        el('div', { className: 'row-text' },
-          el('label', { className: 'row-label', htmlFor: `${ctx.id}-${i}-${f.key}` }, f.label, optionalNote(f)),
-          f.help && el('p', { className: 'help', textContent: f.help })),
-        el('div', { className: 'row-control' }, field(f, item[f.key], {
-          id: `${ctx.id}-${i}-${f.key}`,
-          label: `${f.label}, ${n}`,
-          disabled: locked,
-          onChange: (v, committed) => update({ ...item, [f.key]: v }, committed),
-        })))))
+    return el('fieldset', { className: `list-item${locked ? ' locked' : ''}` }, head, fields)
   }
   const blank = (): ListItem => ({ id: `new-${Date.now().toString(36)}`, ...Object.fromEntries(def.item.map(f => [f.key, f.default])) })
   // Removing the blank starter item shows the empty state instead of bringing it back

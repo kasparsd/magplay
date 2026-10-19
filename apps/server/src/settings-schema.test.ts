@@ -31,13 +31,13 @@ test('list items get ids and field defaults, and name the item that is wrong', (
   const [item] = ok.value as Array<Record<string, unknown>>
   assert.equal(typeof item?.id, 'string')
   assert.equal(item?.apiKey, '')
-  assert.deepEqual(validate(def('sources'), [{ type: 'torznab', url: 'ftp://x' }]), { ok: false, error: 'source 1: address must be an http:// or https:// address' })
+  assert.deepEqual(validate(def('sources'), [{ type: 'torznab', url: 'ftp://x' }]), { ok: false, error: 'source 1: source url must be an http:// or https:// address' })
 })
 
 test('the fields that may be left empty are exactly the ones marked optional', () => {
   const fields: Array<SettingDef | ItemFieldDef> = SETTINGS.flatMap((d): Array<SettingDef | ItemFieldDef> => d.type === 'list' ? [...d.item] : [d])
   const marked = fields.filter(f => 'optional' in f && f.optional).map(f => f.label)
-  assert.deepEqual(marked, ['API key', 'Indexer filter', 'BitMagnet address'])
+  assert.deepEqual(marked, ['API key', 'Indexer filter', 'BitMagnet URL'])
 })
 
 test('defaults are split by scope', () => {

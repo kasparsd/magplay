@@ -1,13 +1,13 @@
 // The settings page, /settings#<section>: a loop over the settings schema, one control per entry.
 // Server settings collect in a save bar and are saved together; browser settings apply as they change.
 import { SECTIONS, SETTINGS, isMaskedSecret, isValueDef, redactDeep, validate } from '@magplay/api-contract'
-import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
+import type { DebugInfo, ItemFieldDef, ListItem, SectionId, SettingDef, SettingMeta, SettingsErrorResponse, SettingsResponse, StatusCheck, StatusLevel, StatusResponse, ValueDef } from '@magplay/api-contract'
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, optionalNote, renderControl } from './lib/controls.ts'
 import type { ControlContext, ReadoutValue } from './lib/controls.ts'
 import { readPreferences, setPreference } from './lib/preferences.ts'
 import type { PreferenceKey, Preferences } from './lib/preferences.ts'
-import { connectionLevel, measureConnection, readConnection, saveConnection } from './lib/speedtest.ts'
+import { connectionLevel, measureConnection, readConnection, saveConnection, SLOW_BYTES_PER_SEC, SLOW_LATENCY_MS } from './lib/speedtest.ts'
 import { onStatus, refreshStatus, updateBrowserChecks } from './lib/status-menu.ts'
 import type { MergedStatus } from './lib/status-menu.ts'
 import './lib/topbar.ts'
@@ -62,9 +62,9 @@ function logView (): HTMLElement {
       ? lines.map(l => el('div', { className: `log-line lvl-${l.level}` },
         el('time', { textContent: new Date(l.time).toLocaleTimeString([], { hour12: false }) }),
         el('span', { className: 'log-level', textContent: l.level }),
-        el('details', {}, el('summary', { textContent: `${l.component} · ${l.event}: ${l.msg}` }), el('pre', { textContent: JSON.stringify(l, null, 2) }))))
-      : [el('span', { className: 'muted', textContent: debug ? 'Nothing at this level yet.' : 'Loading…' })]))
-  return el('div', {}, el('p', { className: 'muted', textContent: `Server capture: ${debug?.logging.level ?? '…'} · Dropped: ${debug?.logging.dropped ?? 0}. The filter only changes what is shown.` }), filter, pre)
+        el('details', {}, el('summary', { textContent: l.msg !== l.event ? l.msg : l.event.replace(/[._-]+/g, ' ').replace(/^./, c => c.toUpperCase()) }), el('pre', { textContent: JSON.stringify(l, null, 2) }))))
+      : [el('span', { className: 'muted', textContent: debug ? 'No log entries at this level.' : 'Loading…' })]))
+  return el('div', {}, el('p', { className: 'muted', textContent: `Server log level: ${debug?.logging.level ?? '…'} · Dropped entries: ${debug?.logging.dropped ?? 0}. Filter the recorded entries below.` }), filter, pre)
 }
 
 function grid (cells: Array<[string, ReadoutValue]>): HTMLElement {
@@ -78,7 +78,7 @@ function grid (cells: Array<[string, ReadoutValue]>): HTMLElement {
 const READOUTS: Record<string, () => ReadoutValue> = {
   'connection.result': () => {
     const r = readConnection()
-    if (!r) return 'Not tested in this browser yet.'
+    if (!r) return 'No speed test results yet.'
     const level = connectionLevel(r)
     return el('div', { className: 'speed' },
       el('p', { className: 'speed-numbers' },
@@ -87,23 +87,29 @@ const READOUTS: Record<string, () => ReadoutValue> = {
         el('span', { className: 'muted', textContent: `tested ${timeAgo(r.at)}` })),
       el('p', {}, el('span', { className: `status-dot lvl-${level}` }), ' ',
         level === 'warn'
-          ? 'Slow for a local network. High-bitrate files may stall even with a fast swarm.'
-          : level === 'ok' ? 'Fast enough for any file this server streams.' : 'Over a week old: test again.'))
+          ? 'This connection may be too slow for high-bitrate video.'
+          : level === 'ok' ? `At least ${formatSpeed(SLOW_BYTES_PER_SEC)} download and no more than ${SLOW_LATENCY_MS} ms latency.` : 'These results are over a week old. Run the test again.'))
   },
   'cache.usage': () => {
     const disk = debug?.disk
     if (!disk) return debug ? 'Can’t read the cache folder.' : 'Loading…'
     // GB here are the same binary gigabytes the limit settings use
-    return { text: `Torrent cache using ${gb(disk.cacheBytes)} of ${gb(disk.cacheMaxBytes)} · ${gb(disk.free)} free on disk`, fraction: disk.cacheBytes / disk.cacheMaxBytes }
+    return { text: `Torrent cache: ${gb(disk.cacheBytes)} / ${gb(disk.cacheMaxBytes)} · Free disk space: ${gb(disk.free)}`, fraction: disk.cacheBytes / disk.cacheMaxBytes }
   },
   'debug.server': () => debug
-    ? grid([['magplay', debug.version], ['Up for', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`]])
+    ? grid([['Version', debug.version], ['Uptime', uptime(debug.uptimeS)], ['Node', debug.node], ['ffmpeg / ffprobe', `${debug.ffmpeg ?? 'missing'} / ${debug.ffprobe ?? 'missing'}`]])
     : 'Loading…',
-  'debug.resources': () => debug
-    ? grid(debug.resources.map(r => [r.label, r.unit === 'bytes'
+  'debug.resources': () => {
+    if (!debug) return 'Loading…'
+    const resources = debug.resources
+    const capacity = new Set(['conversions', 'torrentLoads', 'torrents', 'probes', 'subtitles'])
+    const resourceGrid = (active: boolean): HTMLElement => grid(resources.filter(r => capacity.has(r.id) === active).map(r => [r.label, r.unit === 'bytes'
       ? { text: `${size(r.used)} of ${size(r.limit)}`, fraction: r.used / r.limit }
       : r.limit ? { text: `${r.used} of ${r.limit}`, fraction: r.used / r.limit } : String(r.used)]))
-    : 'Loading…',
+    return el('div', { className: 'resource-groups' },
+      el('details', { id: 'debug-capacity' }, el('summary', { textContent: 'Active jobs and limits' }), resourceGrid(true)),
+      el('details', { id: 'debug-caches' }, el('summary', { textContent: 'Storage and caches' }), resourceGrid(false)))
+  },
   'debug.log': logView,
 }
 
@@ -135,7 +141,21 @@ function refreshReadout (key: string, force = false): void {
   const read = READOUTS[key]
   // Keep an investigation readable while the normal background poll continues.
   if (!force && key === 'debug.log' && box?.querySelector('details[open]')) return
-  if (box && read) fillReadout(box, read())
+  if (box && read) {
+    // Keep resource disclosures and keyboard focus stable while their numbers update.
+    if (key === 'debug.resources' && box.querySelector('.resource-groups')) {
+      const next = read()
+      if (next instanceof HTMLElement) {
+        for (const group of box.querySelectorAll('details')) {
+          const current = group.querySelector('.readout-grid')
+          const updated = next.querySelector(`#${group.id} .readout-grid`)
+          if (current && updated) current.replaceChildren(...updated.childNodes)
+        }
+        return
+      }
+    }
+    fillReadout(box, read())
+  }
 }
 
 async function loadDebug (): Promise<void> {
@@ -155,7 +175,17 @@ const serverValue = (key: string): unknown => key in draft ? draft[key] : saved?
 /** Only when an env var actually sets the value: then the field is read-only and names the variable. */
 function envNote (def: SettingDef, meta: SettingMeta | undefined): Child {
   if (def.scope !== 'server' || def.type === 'list' || meta?.source !== 'env') return null // locked list items say so themselves
-  return el('p', { className: 'env-note' }, 'Set by ', el('code', { textContent: meta.env ?? def.env?.[0] ?? '' }), ' in the environment, so it can’t be changed here.')
+  return el('p', { className: 'env-note' }, 'Set by ', el('code', { textContent: meta.env ?? def.env?.[0] ?? '' }), '. Change this environment variable to edit the setting.')
+}
+
+/** Source-specific presentation; hidden fields keep their values in the draft. */
+function sourceFields (fields: readonly ItemFieldDef[], item: ListItem): ItemFieldDef[] {
+  return fields.filter(f => f.key !== 'indexer' || item.type === 'jackett' || item.type === 'prowlarr').map(f => {
+    if (f.key === 'apiKey') return { ...f, help: item.type === 'torznab' ? 'Leave blank if this feed does not require an API key.' : `Use the API key from ${item.type === 'jackett' ? 'Jackett' : 'Prowlarr'} settings.` }
+    if (f.key === 'indexer') return { ...f, help: item.type === 'jackett' ? 'Enter an indexer ID or filter. Leave blank to search all indexers.' : 'Enter indexer IDs separated by commas. Leave blank to search all indexers.' }
+    if (f.key === 'url' && f.type === 'url') return { ...f, placeholder: item.type === 'jackett' ? 'http://jackett:9117' : item.type === 'prowlarr' ? 'http://prowlarr:9696' : f.placeholder ?? '' }
+    return f
+  })
 }
 
 /** Source items get their live status and a Test button that checks the unsaved values. */
@@ -200,8 +230,9 @@ function row (def: SettingDef): HTMLElement {
   if (def.type === 'action') ctx.run = ACTIONS[def.key] ?? (() => Promise.resolve('Not available'))
   if (def.type === 'readout') ctx.readout = READOUTS[def.key] ?? (() => '')
   if (def.type === 'list' && meta?.locked) ctx.locked = meta.locked
-  if (def.key === 'sources') {
+  if (def.key === 'sources' && def.type === 'list') {
     ctx.itemExtras = sourceExtras
+    ctx.itemFields = item => sourceFields(def.item, item)
     ctx.startWithOne = true // with no sources, the form to add one is already open
   }
   if (isValueDef(def)) {
@@ -221,7 +252,7 @@ function row (def: SettingDef): HTMLElement {
 
   const wide = def.type === 'list' || (def.type === 'readout' && (def.key.startsWith('debug.') || def.key === 'connection.result'))
   const head = el('div', { className: 'row-text' },
-    // Buttons and lists keep their own names ("Test now", each item's fields), so only single value controls get a <label for>
+    // Buttons and lists keep their own names, so only single value controls get a <label for>
     !(wide && def.type === 'readout') && (isValueDef(def) && def.type !== 'list'
       ? el('label', { className: 'row-label', htmlFor: id }, def.label, optionalNote(def))
       : el('span', { className: 'row-label' }, def.label, optionalNote(def))),
@@ -244,12 +275,21 @@ function editServer (def: ValueDef, next: unknown, committed: boolean): void {
     slot.textContent = result.ok ? '' : `${def.label} ${result.error}`
   }
   renderSaveBar()
+  syncTranscoding()
+}
+
+/** Disabling transcoding leaves the chosen resolution intact for the next time it is enabled. */
+function syncTranscoding (): void {
+  const row = document.getElementById('row-setting-transcode-maxHeight')
+  if (!row) return
+  const inactive = serverValue('transcode.allow') !== true
+  row.classList.toggle('inactive', inactive)
+  for (const input of row.querySelectorAll<HTMLInputElement>('input')) input.disabled = inactive || metaOf('transcode.maxHeight')?.source === 'env'
+  const help = row.querySelector('.help')
+  if (help) help.textContent = inactive ? 'Turn on video conversion to change the resolution.' : 'Maximum resolution for converted video. Higher resolutions use more CPU.'
 }
 
 // ---- Sections ----
-
-const scopeNote = (scope: 'server' | 'browser'): HTMLElement => el('p', { className: 'scope-note' },
-  scope === 'server' ? 'Saved on the server, for everyone.' : 'Saved in this browser only, as you change it.')
 
 function cards (defs: SettingDef[]): HTMLElement[] {
   const groups = new Map<string, SettingDef[]>()
@@ -269,25 +309,17 @@ function cards (defs: SettingDef[]): HTMLElement[] {
 function renderSection (id: SectionId): HTMLElement {
   const section = SECTIONS.find(s => s.id === id)!
   const defs = SETTINGS.filter(d => d.section === id && !d.hidden)
-  // Where values are saved is a quiet line: under the intro when the whole section is one scope, else above each part
-  const scopes = (['server', 'browser'] as const).filter(scope => defs.some(d => d.scope === scope && isValueDef(d)))
   const head = el('div', { className: 'section-head' },
     // No id on the status slot: one stylesheet serves every page, so a generated id here
     // could collide with a page's own styled id (#playback-status is the Player's wait overlay).
     el('h2', { id: `${id}-title` }, section.label, el('span', { className: 'section-status' })),
-    el('p', { className: 'intro', textContent: section.intro }),
-    scopes.length === 1 && scopeNote(scopes[0]!))
+    el('p', { className: 'intro', textContent: section.intro }))
   const parts: Child[] = [head]
-  for (const scope of ['server', 'browser'] as const) {
-    const scoped = defs.filter(d => d.scope === scope)
-    if (!scoped.length) continue
-    const stored = scoped.filter(isValueDef)
-    if (scopes.length > 1 && stored.length) parts.push(scopeNote(scope))
-    if (scope === 'server' && stored.length && stored.every(d => metaOf(d.key)?.source === 'env' && d.type !== 'list')) {
-      parts.push(el('p', { className: 'muted', textContent: 'All of these are set in the environment, so they can’t be changed here.' }))
-    }
-    parts.push(...cards(scoped))
+  const stored = defs.filter(isValueDef)
+  if (stored.length && stored.every(d => d.scope === 'server' && metaOf(d.key)?.source === 'env' && d.type !== 'list')) {
+    parts.push(el('p', { className: 'muted', textContent: 'These settings are controlled by environment variables.' }))
   }
+  parts.push(...cards(defs))
   const box = el('section', { id, className: 'settings-section' }, ...parts)
   box.setAttribute('aria-labelledby', `${id}-title`)
   return box
@@ -333,8 +365,13 @@ function render (): void {
   fill(body, ...SECTIONS.map(s => renderSection(s.id)))
   renderSectionStatus()
   renderSaveBar()
+  syncTranscoding()
   if (observer) watchLiveSections()
 }
+
+const navigation = el('nav', { className: 'settings-nav' }, ...SECTIONS.map(s => el('a', { href: `#${s.id}`, textContent: s.label })))
+navigation.setAttribute('aria-label', 'Settings sections')
+body.before(navigation)
 
 /** Scrolls to the section the hash names (#debug), once it has been rendered. */
 function scrollToHash (): void {

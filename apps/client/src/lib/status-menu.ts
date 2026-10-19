@@ -14,7 +14,7 @@ const POLL_MS = 30_000
 export function connectionCheck (now = Date.now()): StatusCheck {
   const result = readConnection()
   const level = connectionLevel(result, now)
-  const href = '/settings#connection'
+  const href = '/settings#debug'
   return {
     id: 'connection',
     label: 'Your connection',

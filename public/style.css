@@ -392,13 +392,12 @@ details.status-menu .menu-items { width: min(380px, calc(100vw - 32px)); max-wid
 main.settings { max-width: 760px; padding-top: 24px; }
 main.settings > h1 { font-size: 26px; margin: 0 0 8px; }
 .settings-section { scroll-margin-top: 72px; padding: 28px 0 8px; }
-.settings-section + .settings-section { border-top: 1px solid var(--line); margin-top: 20px; }
+.settings-nav { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 12px 0 0; }
+.settings-nav a { padding: 8px 0; }
+.settings-section + .settings-section { margin-top: 20px; }
 .section-head h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; margin: 0 0 4px; }
 .settings-section .intro { color: var(--muted); margin: 0 0 4px; max-width: 60ch; }
-.scope-note { margin: 18px 0 8px; font-size: 13px; color: var(--muted); }
-.section-head .scope-note { margin: 6px 0 0; }
 .section-head { margin-bottom: 14px; }
-.scope-note strong { color: var(--fg); }
 .card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .card-head h3 { font-size: 15px; margin: 0; }
@@ -407,6 +406,8 @@ main.settings > h1 { font-size: 26px; margin: 0 0 8px; }
 .row + .row { border-top: 1px solid var(--line); }
 .row.wide { grid-template-columns: minmax(0, 1fr); }
 .row-label { font-weight: 600; }
+.row.inactive .seg { opacity: 0.6; }
+.row .seg:has(input:disabled) label { cursor: default; }
 .row-label .optional { margin-left: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .row-text .help, .env-note { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 .env-note code { font-size: 12px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; }
@@ -448,6 +449,9 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
 .readout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px 16px; margin: 0; }
 .readout-grid dt { font-size: 13px; color: var(--muted); }
 .readout-grid dd { margin: 2px 0 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+.resource-groups > details + details { margin-top: 8px; }
+.resource-groups summary { cursor: pointer; padding: 8px 0; color: var(--fg); }
+.resource-groups .readout-grid { margin: 8px 0; }
 .speed-numbers { margin: 0 0 6px; color: var(--muted); }
 .speed-numbers strong { font-size: 24px; color: var(--fg); }
 .speed p { margin: 0; color: var(--fg); }
@@ -473,6 +477,8 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
   .row-control { justify-self: start; }
   .row-control input[type="text"], .row-control input[type="url"], .row-control input[type="password"], .row-control select { width: 100%; }
   .row-control:has(> input, > select, > .secret) { justify-self: stretch; }
+  .readout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .readout-grid > div { min-width: 0; overflow-wrap: anywhere; }
 }
 
 /* Playback explanations own their channel; transient notices cannot replace them. */
