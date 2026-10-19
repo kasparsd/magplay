@@ -1,7 +1,6 @@
 // A film or show from Explore, /title/<type>/<source>/<id>?title=&year=: what it is, and its releases in BitMagnet.
 import './lib/topbar.ts'
-import type { ExploreRelease, TitleResponse } from '../../../packages/api-contract/src/index.ts'
-import { playbackRank } from '../../../packages/release-info/src/index.ts'
+import type { ExploreRelease, TitleResponse } from '@magplay/api-contract'
 import { api } from './lib/api.ts'
 import { requireElement, count, el, fill, posterTile, releaseRow, setError, setStatus } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
@@ -18,6 +17,9 @@ Object.assign(requireElement('#back', HTMLAnchorElement), { href: back.href, tex
 if (back.history) requireElement('#back', HTMLAnchorElement).addEventListener('click', e => { e.preventDefault(); history.back() })
 
 const LINK_NAMES: Record<string, string> = { imdb: 'IMDb', tmdb: 'TMDB', tvdb: 'TheTVDB' }
+
+const playbackRank = (effort: ExploreRelease['playbackEffort'] | undefined): number =>
+  effort === 'direct' ? 0 : effort === 'remux' ? 1 : 2
 
 /** Most seeded first, the same order as Explore's "Most seeded" and the seeders on its tile. */
 const bySeeders = (releases: ExploreRelease[]): ExploreRelease[] => [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))

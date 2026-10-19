@@ -6,7 +6,7 @@ import { createSearch, createSources, release } from '@magplay/indexers'
 import { readMagnet } from '@magplay/torrent-engine'
 import type { Search, SourceConfig } from '@magplay/indexers'
 import type { TorrentEngine } from '@magplay/torrent-engine'
-import type { SearchResponse } from '../../../../packages/api-contract/src/index.ts'
+import type { SearchResponse } from '@magplay/api-contract'
 import { HttpError } from '../http/errors.ts'
 
 export interface SearchService extends Pick<Search, 'linkFor' | 'linkStats'> {
