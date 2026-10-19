@@ -63,6 +63,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   const metrics = telemetry.metrics
   let configurationRevision = 0
 
+  let detectedEncoders: string[] = []
   const tabs = createTabs(() => hls)
   const hls = createHlsSessions({
     dir: path.join(boot.cacheDir, 'hls'),
@@ -70,7 +71,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
     metrics,
     live: () => {
       const c = current()
-      return { ffmpegPath: c.ffmpegPath, maxSessions: c.maxHlsSessions, hlsMaxBytes: c.hlsMaxBytes, minFreeBytes: c.minFreeBytes, transcodeMaxHeight: c.transcodeMaxHeight }
+      return { ffmpegPath: c.ffmpegPath, maxSessions: c.maxHlsSessions, hlsMaxBytes: c.hlsMaxBytes, minFreeBytes: c.minFreeBytes, transcodeMaxHeight: c.transcodeMaxHeight, transcodeEncoder: c.transcodeEncoder, vaapiDevice: c.vaapiDevice, detectedEncoders }
     },
     onStop: tabs.forget,
     ...(spawnProcess && { spawnProcess }),
@@ -83,6 +84,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
       return { ffprobePath: c.ffprobePath, ffmpegPath: c.ffmpegPath, maxProbes: c.maxProbes, maxSubtitleJobs: c.maxSubtitleJobs }
     },
   })
+  media.refreshEncoders().then(e => { detectedEncoders = e }).catch(() => {})
   const engine = createTorrentEngine({
     dir: path.join(boot.cacheDir, 'torrents'),
     logger: log.child({ component: 'torrent' }),
@@ -125,6 +127,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   const unsubscribe = config.onChange((_config, changed) => {
     configurationRevision++
     log.info('settings.changed', { changed, configurationRevision })
+    if (changed.includes('ffmpegPath') || changed.includes('transcode.encoder')) media.refreshEncoders().then(e => { detectedEncoders = e }).catch(() => {})
     if (changed.includes('sources') || changed.includes('search.timeoutS')) search.rebuild()
     if (changed.includes('sources') || changed.includes('explore.bitmagnetUrl')) explore.rebuild()
     checks.settingsChanged(changed)

@@ -41,6 +41,8 @@ export interface Config {
   idleTorrentMs: number
   allowTranscode: boolean
   transcodeMaxHeight: number
+  transcodeEncoder: string
+  vaapiDevice: string
 }
 
 /** The first label of an http(s) URL's host, as a default source name; anything else throws. */
@@ -145,6 +147,7 @@ const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'cacheDir', env: ['CACHE_DIR'], type: 'text', default: 'data' },
   { key: 'ffmpegPath', env: ['FFMPEG_PATH'], type: 'text', default: 'ffmpeg' },
   { key: 'ffprobePath', env: ['FFPROBE_PATH'], type: 'text', default: 'ffprobe' },
+  { key: 'vaapiDevice', env: ['VAAPI_DEVICE'], type: 'text', default: '/dev/dri/renderD128' },
   { key: 'dhtEnabled', env: ['DHT_ENABLED'], type: 'toggle', default: true },
   { key: 'lsdEnabled', env: ['LSD_ENABLED'], type: 'toggle', default: true },
   count('maxHlsSessions', 'MAX_HLS_SESSIONS', 2, 16),
@@ -156,7 +159,7 @@ const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1, max: 10_080 },
 ]
 
-type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'dhtEnabled' | 'lsdEnabled' |
+type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'vaapiDevice' | 'dhtEnabled' | 'lsdEnabled' |
   'maxHlsSessions' | 'maxTorrentLoads' | 'maxProbes' | 'maxSubtitleJobs' | 'extraTrackers' | 'metadataTimeoutMs' | 'checkingTimeoutMs' | 'idleTorrentMs'>
 
 type Values = Readonly<Record<string, unknown>>
@@ -187,6 +190,7 @@ export function envOnlyConfig (env: Env): EnvOnlyConfig {
     cacheDir: path.resolve(str(v, 'cacheDir')),
     ffmpegPath: str(v, 'ffmpegPath'),
     ffprobePath: str(v, 'ffprobePath'),
+    vaapiDevice: str(v, 'vaapiDevice'),
     dhtEnabled: bool(v, 'dhtEnabled'),
     lsdEnabled: bool(v, 'lsdEnabled'),
     maxHlsSessions: num(v, 'maxHlsSessions'),
@@ -213,6 +217,7 @@ export function deriveSettings (v: Values): Omit<Config, keyof EnvOnlyConfig> {
     minFreeBytes: num(v, 'cache.minFreeGb') * GB,
     allowTranscode: bool(v, 'transcode.allow'),
     transcodeMaxHeight: num(v, 'transcode.maxHeight'),
+    transcodeEncoder: str(v, 'transcode.encoder'),
   }
 }
 

@@ -34,6 +34,9 @@ services:
       - magplay_data:/data
       # The host's avahi-daemon resolves .local (mDNS) names in source URLs; harmless where avahi isn't installed
       - /run/avahi-daemon:/run/avahi-daemon:ro
+    # Uncomment for hardware transcoding: GPU device access (VAAPI/NVENC/QSV) and driver libraries on the host
+    # devices:
+    #   - /dev/dri:/dev/dri
     depends_on: [jackett, prowlarr]
     networks: [default, observability]
 

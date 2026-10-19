@@ -61,6 +61,10 @@ export interface DebugInfo {
   uptimeS: number
   ffmpeg: string | null
   ffprobe: string | null
+  /** Encoders ffmpeg reports (H.264). */
+  encoders?: string[]
+  /** Configured transcode encoder setting. */
+  transcodeEncoder?: string
   /** Busy slots and limits for each kind of heavy work. */
   resources: DebugResource[]
   disk: { free: number, size: number, cacheBytes: number, cacheMaxBytes: number } | null

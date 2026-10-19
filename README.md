@@ -202,6 +202,8 @@ env vars are listed first and locked; sources added in Settings follow them.
 | `IDLE_TORRENT_MIN` | `30` | Unload torrents nobody has streamed or watched for this long (data stays on disk) |
 | `ALLOW_VIDEO_TRANSCODE` | `false` | Enable the libx264 path (slow on the server CPU) |
 | `TRANSCODE_MAX_HEIGHT` | `720` | Downscale target when transcoding |
+| `TRANSCODE_ENCODER` | `auto` | Encoder: `auto`, `libx264`, or `h264_nvenc`/`h264_vaapi`/`h264_videotoolbox`/`h264_qsv` |
+| `VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI render device |
 | `FFMPEG_PATH`, `FFPROBE_PATH` | `ffmpeg`, `ffprobe` | Paths to the binaries when they aren't on `PATH` |
 
 Local safeguards reject excess jobs with a retryable 503 rather than an unbounded
@@ -240,7 +242,7 @@ Each video can be played these ways:
      audio (AC3, E-AC3, DTS, TrueHD…) isn't. ffmpeg copies the video into HLS
      (fMP4) and converts the audio to AAC stereo, which takes very little CPU.
   3. **transcode**: only with `ALLOW_VIDEO_TRANSCODE=true`. libx264 at
-     `TRANSCODE_MAX_HEIGHT`. This is too slow for 1080p on the server CPU.
+     `TRANSCODE_MAX_HEIGHT`. This is too slow for 1080p on the server CPU. Hardware H.264 encoders are used when available, otherwise CPU.
   4. Otherwise it **refuses** before streaming and explains why (for example
      HEVC in Firefox).
 - **In an external player** (the ⋯ menu, or **Open in** in the player). These
@@ -487,6 +489,8 @@ from `tools/docker/*/config/`, writes them to `.env`, and recreates magplay.
 
 Override `MAGPLAY_PORT` and `TORRENT_PORT` in `.env` if those ports are taken.
 The stack's network is pinned to `10.89.82.0/24` (`DOCKER_SUBNET`).
+
+For hardware transcoding in Docker, set `TRANSCODE_ENCODER` (e.g. `h264_vaapi`) and uncomment the `devices:` block in `compose.yml` so `/dev/dri` is passed through.
 
 
 ## License
