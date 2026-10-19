@@ -188,7 +188,7 @@ table.peers td:first-child, table.peers th:first-child { text-align: left; white
 table.peers td:nth-child(2), table.peers th:nth-child(2) { text-align: left; white-space: normal; overflow-wrap: anywhere; }
 table.peers tr.choking { opacity: 0.55; }
 .bar { height: 3px; margin-top: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
-.bar span { display: block; height: 100%; width: 0; background: #60a5fa; transition: width 0.5s; }
+.bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.5s; }
 
 /* Player */
 /* The stage is one grid cell: video, overlay, chrome and key sheet stack, so a tall message card makes the stage taller instead of spilling out.
@@ -407,6 +407,7 @@ main.settings > h1 { font-size: 26px; margin: 0 0 8px; }
 .row + .row { border-top: 1px solid var(--line); }
 .row.wide { grid-template-columns: minmax(0, 1fr); }
 .row-label { font-weight: 600; }
+.row-label .optional { margin-left: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .row-text .help, .env-note { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 .env-note code { font-size: 12px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; }
 .row-control { min-width: 0; justify-self: end; }
