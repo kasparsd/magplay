@@ -6,6 +6,7 @@ import type { SourceConfig } from '@magplay/indexers'
 import type { HlsSessions, MediaTools } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
 import type { DebugInfo, DebugResource, StatusAction } from '@magplay/api-contract'
+import { hostName } from '../config.ts'
 import type { Config } from '../config.ts'
 import type { LogRecord, LogLevel } from '@magplay/api-contract'
 import type { SettingsStore } from '../settings-store.ts'
@@ -81,7 +82,7 @@ export function createStatusChecks ({ status, settings, config, engine, media, h
       })
     }
     for (const source of sources) {
-      status.registerCheck({ id: `source:${source.id ?? source.name}`, label: source.name, ttl: 60_000, required: true, run: signal => checkSource(source, signal) })
+      status.registerCheck({ id: `source:${source.id ?? hostName(source.url)}`, label: hostName(source.url), ttl: 60_000, required: true, run: signal => checkSource(source, signal) })
     }
   }
 

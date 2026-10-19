@@ -133,7 +133,6 @@ export const SETTINGS: readonly SettingDef[] = [
     label: 'Indexers',
     help: 'Torznab feeds, Jackett or Prowlarr. Every search asks them all at once.',
     itemLabel: 'source',
-    titleField: 'name',
     env: ['TORZNAB_URL', 'JACKETT_URL', 'PROWLARR_URL'],
     default: [],
     item: [
@@ -144,7 +143,6 @@ export const SETTINGS: readonly SettingDef[] = [
         default: 'torznab',
         options: [{ value: 'torznab', label: 'Torznab' }, { value: 'jackett', label: 'Jackett' }, { value: 'prowlarr', label: 'Prowlarr' }],
       },
-      { key: 'name', type: 'text', label: 'Name', default: '', optional: true, placeholder: 'From the address' },
       { key: 'url', type: 'url', label: 'Address', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
       { key: 'apiKey', type: 'secret', label: 'API key', default: '', placeholder: 'Paste the key' },
       { key: 'indexer', type: 'text', label: 'Indexer filter', help: 'Jackett: an indexer id, all, or a filter. Prowlarr: comma-separated ids, -2 for all.', default: '', optional: true, placeholder: 'All' },

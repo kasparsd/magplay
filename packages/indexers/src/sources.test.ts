@@ -8,8 +8,8 @@ import { mockFetch } from './test-helpers.ts'
 test('Jackett preset builds the feed URL, or keeps a full one', async () => {
   const fetch = mockFetch(() => ({ body: '<rss><channel></channel></rss>' }))
   const [filtered, full] = createSources([
-    { type: 'jackett', name: 'J', url: 'http://jackett:9117/', apiKey: 'j', indexer: 'tag:tv,!type:private' },
-    { type: 'jackett', name: 'J2', url: 'http://jackett:9117/api/v2.0/indexers/example-source/results/torznab/api', apiKey: 'j' },
+    { type: 'jackett', url: 'http://jackett:9117/', apiKey: 'j', indexer: 'tag:tv,!type:private' },
+    { type: 'jackett', url: 'http://jackett:9117/api/v2.0/indexers/example-source/results/torznab/api', apiKey: 'j' },
   ], { fetch })
   await filtered!.search('x', { signal: AbortSignal.timeout(1000) })
   await full!.search('x', { signal: AbortSignal.timeout(1000) })

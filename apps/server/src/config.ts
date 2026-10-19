@@ -50,14 +50,14 @@ export function hostName (url: string): string {
     u = new URL(url)
   } catch {}
   if (!u || !/^https?:$/.test(u.protocol)) throw new Error('Not an http(s) URL; check source address settings')
-  return u.hostname.split('.')[0] ?? u.hostname
+  return u.hostname
 }
 
 const splitList = (s: string): string[] => s.split(',').map(x => x.trim()).filter(Boolean)
 
 /**
  * Source configs from env vars:
- * - TORZNAB_URL / TORZNAB_APIKEY / TORZNAB_NAME, and _2 … _9 for more Torznab feeds
+ * - TORZNAB_URL / TORZNAB_APIKEY, and _2 … _9 for more Torznab feeds
  * - JACKETT_URL / JACKETT_APIKEY / JACKETT_INDEXER (default `all`)
  * - PROWLARR_URL / PROWLARR_APIKEY / PROWLARR_INDEXERS (comma-separated ids, default -2 = all torrent indexers)
  * With none set, no sources are configured (search returns nothing); the server logs a warning at startup.
@@ -67,15 +67,16 @@ export function sourcesFromEnv (env: Env): SourceConfig[] {
   for (const n of ['', '_2', '_3', '_4', '_5', '_6', '_7', '_8', '_9']) {
     const url = env[`TORZNAB_URL${n}`]
     if (!url) continue
-    out.push({ type: 'torznab', name: env[`TORZNAB_NAME${n}`] || hostName(url), url, apiKey: env[`TORZNAB_APIKEY${n}`] || '' })
+    hostName(url)
+    out.push({ id: `env-${out.length}`, type: 'torznab', url, apiKey: env[`TORZNAB_APIKEY${n}`] || '' })
   }
   if (env.JACKETT_URL) {
     hostName(env.JACKETT_URL)
-    out.push({ type: 'jackett', name: env.JACKETT_NAME || 'Jackett', url: env.JACKETT_URL, apiKey: env.JACKETT_APIKEY || '', indexer: env.JACKETT_INDEXER || 'all' })
+    out.push({ id: `env-${out.length}`, type: 'jackett', url: env.JACKETT_URL, apiKey: env.JACKETT_APIKEY || '', indexer: env.JACKETT_INDEXER || 'all' })
   }
   if (env.PROWLARR_URL) {
     hostName(env.PROWLARR_URL)
-    out.push({ type: 'prowlarr', name: env.PROWLARR_NAME || 'Prowlarr', url: env.PROWLARR_URL, apiKey: env.PROWLARR_APIKEY || '', indexerIds: splitList(env.PROWLARR_INDEXERS || '-2') })
+    out.push({ id: `env-${out.length}`, type: 'prowlarr', url: env.PROWLARR_URL, apiKey: env.PROWLARR_APIKEY || '', indexerIds: splitList(env.PROWLARR_INDEXERS || '-2') })
   }
   return out
 }
@@ -87,7 +88,6 @@ export function sourceItemsFromEnv (env: Env): ListItem[] | null {
   return list.map((s, i) => ({
     id: `env-${i}`,
     type: s.type,
-    name: s.name,
     url: s.url,
     apiKey: s.apiKey ?? '',
     indexer: s.type === 'jackett' ? s.indexer ?? '' : s.type === 'prowlarr' ? s.indexerIds?.join(',') ?? '' : '',
@@ -107,11 +107,11 @@ export function sourceConfigs (items: readonly ListItem[]): SourceConfig[] {
   return items.map(item => {
     const type = field(item, 'type')
     if (!SOURCE_TYPES.includes(type as SourceType)) throw new Error('Unknown source type')
-    const [name, url, indexer] = [field(item, 'name'), field(item, 'url'), field(item, 'indexer')]
+    const [url, indexer] = [field(item, 'url'), field(item, 'indexer')]
     const base = { id: item.id, url, apiKey: field(item, 'apiKey') }
-    if (type === 'jackett') return { ...base, type, name: name || 'Jackett', indexer: indexer || 'all' }
-    if (type === 'prowlarr') return { ...base, type, name: name || 'Prowlarr', indexerIds: splitList(indexer || '-2') }
-    return { ...base, type: 'torznab', name: name || hostName(url) }
+    if (type === 'jackett') return { ...base, type, indexer: indexer || 'all' }
+    if (type === 'prowlarr') return { ...base, type, indexerIds: splitList(indexer || '-2') }
+    return { ...base, type: 'torznab' }
   })
 }
 

@@ -13,7 +13,7 @@ const r = (fields: RawRelease, source: string): Release => release({ title: 'Som
 test('merges duplicates across sources: best seeders, all source names', async () => {
   const searcher = createSearch([
     fakeSource('bitmagnet', () => [r({ infoHash: SAMPLE_HASH, seeders: null, size: 828725915 }, 'bitmagnet')]),
-    fakeSource('Jackett', () => [r({ infoHash: SAMPLE_HASH, seeders: 50 }, 'Jackett'), r({ infoHash: 'a'.repeat(40), seeders: 99 }, 'Jackett')]),
+    fakeSource('jackett', () => [r({ infoHash: SAMPLE_HASH, seeders: 50 }, 'jackett'), r({ infoHash: 'a'.repeat(40), seeders: 99 }, 'jackett')]),
   ])
   const { results, sources } = await searcher.search('x')
   assert.equal(results.length, 2)
@@ -21,8 +21,8 @@ test('merges duplicates across sources: best seeders, all source names', async (
   const sample = results.find(x => x.infoHash === SAMPLE_HASH)!
   assert.equal(sample.seeders, 50)
   assert.equal(sample.size, 828725915)
-  assert.deepEqual(sample.sources, ['bitmagnet', 'Jackett'])
-  assert.deepEqual(sources.map(s => [s.name, s.ok, s.ok && s.count]), [['bitmagnet', true, 1], ['Jackett', true, 2]])
+  assert.deepEqual(sample.sources, ['bitmagnet', 'jackett'])
+  assert.deepEqual(sources.map(s => [s.name, s.ok, s.ok && s.count]), [['bitmagnet', true, 1], ['jackett', true, 2]])
 })
 
 test('one failing and one hanging source still return the others, with reasons', async t => {
@@ -90,25 +90,25 @@ test('end to end with mocked BitMagnet, Jackett and Prowlarr over HTTP', async t
     if (url.host === 'down:1') return never()
   })
   const searcher = createSearch(createSources([
-    { type: 'torznab', name: 'bitmagnet', url: 'http://bitmagnet:3333/torznab/api' },
-    { type: 'jackett', name: 'Jackett', url: 'http://jackett:9117', apiKey: 'jk' },
-    { type: 'prowlarr', name: 'Prowlarr', url: 'http://prowlarr:9696', apiKey: 'pk' },
-    { type: 'torznab', name: 'down', url: 'http://down:1/api' },
+    { type: 'torznab', url: 'http://bitmagnet:3333/torznab/api' },
+    { type: 'jackett', url: 'http://jackett:9117', apiKey: 'jk' },
+    { type: 'prowlarr', url: 'http://prowlarr:9696', apiKey: 'pk' },
+    { type: 'torznab', url: 'http://down:1/api' },
   ], { fetch }), { timeoutMs: 100 })
   const { results, sources } = await searcher.search('Big Buck Bunny S01')
 
   assert.deepEqual(sources.map(s => [s.name, s.ok, s.ok ? s.count : s.error]), [
-    ['bitmagnet', true, 3], ['Jackett', true, 3], ['Prowlarr', true, 2], ['down', false, 'timed out after 0.1 s'],
+    ['bitmagnet', true, 3], ['jackett', true, 3], ['prowlarr', true, 2], ['down', false, 'timed out after 0.1 s'],
   ])
   // The OpenContent pack is in all three; private releases with only proxy links stay separate per source
   const sample = results.filter(x => x.infoHash === SAMPLE_HASH)
   assert.equal(sample.length, 1)
-  assert.deepEqual(sample[0]?.sources, ['bitmagnet', 'Jackett/Public Tracker', 'Prowlarr/ExampleIndexer'])
+  assert.deepEqual(sample[0]?.sources, ['bitmagnet', 'jackett/Public Tracker', 'prowlarr/ExampleIndexer'])
   assert.equal(sample[0]?.seeders, 61)
   // The private release is link-only in both Jackett and Prowlarr: matched by title and size
   const priv = results.filter(x => x.title.includes('WEB-DL'))
   assert.equal(priv.length, 1)
-  assert.deepEqual(priv[0]?.sources, ['Jackett/Private Tracker', 'Prowlarr/PrivateTracker'])
+  assert.deepEqual(priv[0]?.sources, ['jackett/Private Tracker', 'prowlarr/PrivateTracker'])
   assert.equal(results.length, 3 + 3 + 2 - 2 - 1)
   assert.equal(fetch.calls.find(c => c.url.host === 'jackett:9117')?.url.pathname, '/api/v2.0/indexers/all/results/torznab/api')
 })

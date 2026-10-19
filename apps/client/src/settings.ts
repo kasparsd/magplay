@@ -170,7 +170,7 @@ function sourceExtras (item: ListItem): Child[] {
   show(check)
   const message = el('span', { className: 'sr-only', role: 'status' })
   const test = el('button', { type: 'button', className: 'button', textContent: 'Test' })
-  test.setAttribute('aria-label', `Test ${[item.name, item.url].find(v => typeof v === 'string' && v) as string | undefined ?? 'source'}`)
+  test.setAttribute('aria-label', `Test ${typeof item.url === 'string' && item.url ? item.url : 'source'}`)
   test.addEventListener('click', () => {
     const current = ((serverValue('sources') as ListItem[] | undefined) ?? []).find(i => i.id === item.id) ?? metaOf('sources')?.locked?.find(i => i.id === item.id) ?? item
     test.disabled = true
