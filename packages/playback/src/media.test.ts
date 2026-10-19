@@ -73,12 +73,15 @@ test('HLS sessions keep track start offsets in fragment timestamps, never in edi
   // Edit lists are ignored by MSE; skip_sidx keeps an open GOP's first sample from being moved onto the previous segment
   assert.equal(value(resumed, '-hls_segment_options'), 'use_editlist=0:movflags=+frag_discont+skip_sidx:avoid_negative_ts=disabled')
   assert.equal(value(resumed, '-hls_segment_type'), 'fmp4')
+  // Copied video keeps the container's timebase, so millisecond MKV timestamps are not rounded into a codec-derived one
+  assert.deepEqual(resumed.slice(resumed.indexOf('-c:v'), resumed.indexOf('-c:v') + 4), ['-c:v', 'copy', '-copytb', '1'])
   const fresh = ffmpegArgs({ ...options, start: 0 })
   assert.ok(!fresh.includes('-ss') && !fresh.includes('-noaccurate_seek'))
   assert.equal(value(fresh, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
   // Re-encoded video can begin on the requested frame, so it does not disable accurate seeking
   const transcode = ffmpegArgs({ ...options, mode: 'transcode', start: 36.5 })
   assert.equal(transcode.includes('-noaccurate_seek'), false)
+  assert.equal(transcode.includes('-copytb'), false)
   assert.equal(value(transcode, '-ss'), '36.5')
   assert.equal(value(transcode, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
 })

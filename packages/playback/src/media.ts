@@ -222,7 +222,10 @@ export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMax
   }
   const video = (mode === 'transcode'
     ? (transcodeVideo[enc] ?? transcodeVideo.libx264)
-    : ['-c:v', 'copy', ...(info.video?.codec === 'hevc' ? ['-tag:v', 'hvc1'] : [])]) as string[]
+    // -copytb 1 keeps the container's timebase for copied video. ffmpeg 6 (Ubuntu 24.04) otherwise derives the
+    // fMP4 timescale from the codec (12288 Hz for 24 fps), and rounding an MKV's millisecond timestamps into it
+    // makes movenc judge a segment's opening keyframe "out of range" and drop its presentation time.
+    : ['-c:v', 'copy', '-copytb', '1', ...(info.video?.codec === 'hevc' ? ['-tag:v', 'hvc1'] : [])]) as string[]
   const audioArgs = !a ? [] : a.codec === 'aac' ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']
   const subs = (info.subtitles ?? []).filter(s => s.text).flatMap(s =>
     ['-map', `0:s:${s.index}`, '-c:s', 'webvtt', '-flush_packets', '1', '-f', 'webvtt', `${dir}/sub_${s.index}.vtt`])

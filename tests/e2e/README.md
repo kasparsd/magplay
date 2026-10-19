@@ -27,7 +27,7 @@ npx playwright show-trace test-results/<failed-test>/trace.zip
 
 The worker generates an original 90-second 320×180 H.264/AAC MP4 with ffmpeg, a second MP4 episode, an MKV with AC3/AAC audio tracks and embedded SRT, and an external SRT file. No media binaries are committed or downloaded.
 
-`hls-sync.test.ts` needs no browser: it generates a source with a visual flash and a tone at the same instant, remuxes it with the server's real ffmpeg arguments, and decodes the segments with edit lists ignored (as browsers' MSE parsers do) to check that audio and video stay aligned from a fresh start and after a resume. It also checks that an open GOP's segments are not pulled back across their boundary and that a resume time resolves to the preceding keyframe.
+`hls-sync.test.ts` needs no browser: it generates a source with a visual flash and a tone at the same instant, remuxes it with the server's real ffmpeg arguments, and decodes the segments with edit lists ignored (as browsers' MSE parsers do) to check that audio and video stay aligned from a fresh start and after a resume. It also checks that an open-GOP remux presents exactly the source's frames (same count, one constant shift) across every segment boundary, and that a resume time resolves to the preceding keyframe.
 
 It creates a private, trackerless torrent and places its metadata and complete content in a temporary production-format cache. The actual server runs as a child process on an ephemeral port and uses real WebTorrent hash verification/read streams, `/raw` Range responses, ffprobe, ffmpeg, HLS output, hls.js and browser media decoding. Playback assertions require video dimensions, no media errors, a playing state, and an increasing decoded-frame count—not just successful HTTP responses.
 

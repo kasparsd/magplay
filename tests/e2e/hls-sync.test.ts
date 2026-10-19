@@ -105,13 +105,13 @@ function videoTimescale (init: Buffer): number {
   return init.readUInt32BE(mdhd.off + 8 + (version === 1 ? 20 : 12))
 }
 
-/** Presentation time of the first video sample, in the track's timescale. */
-function firstVideoPts (seg: Buffer): number {
+/** Presentation time of every video sample in the segment, in the track's timescale and decode order. */
+function videoPts (seg: Buffer): number[] {
   const moof = childBox(seg, 0, seg.length, 'moof')
   const traf = moof && childBox(seg, moof.off + 8, moof.off + moof.size, 'traf')
   if (!traf) throw new Error('segment has no video fragment')
   let dts = 0
-  let cts = 0
+  const pts: number[] = []
   for (let off = traf.off + 8; off + 8 <= traf.off + traf.size;) {
     let size = seg.readUInt32BE(off)
     const kind = seg.toString('latin1', off + 4, off + 8)
@@ -124,17 +124,30 @@ function firstVideoPts (seg: Buffer): number {
     if (kind === 'trun') {
       const version = seg[off + 8] ?? 0
       const flags = seg.readUInt32BE(off + 8) & 0xffffff
+      const count = seg.readUInt32BE(off + 12)
       let p = off + 16
       if (flags & 1) p += 4
       if (flags & 4) p += 4
-      if (flags & 0x100) p += 4
-      if (flags & 0x200) p += 4
-      if (flags & 0x400) p += 4
-      if (flags & 0x800) cts = version === 1 ? seg.readInt32BE(p) : seg.readUInt32BE(p)
+      for (let i = 0; i < count; i++) {
+        let duration = 0
+        let cts = 0
+        if (flags & 0x100) { duration = seg.readUInt32BE(p); p += 4 }
+        if (flags & 0x200) p += 4
+        if (flags & 0x400) p += 4
+        if (flags & 0x800) { cts = version === 1 ? seg.readInt32BE(p) : seg.readUInt32BE(p); p += 4 }
+        pts.push(dts + cts)
+        dts += duration
+      }
     }
     off += size
   }
-  return dts + cts
+  return pts
+}
+
+/** Every video packet's presentation time in the source, as ffprobe reports it. */
+async function sourcePts (file: string): Promise<number[]> {
+  const { stdout } = await exec('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time', '-of', 'csv=p=0', file])
+  return stdout.split('\n').filter(line => line.trim()).map(line => Number(line.replace(',', '')))
 }
 
 test('an open GOP keeps each segment\'s opening frame, and a resume begins at the preceding keyframe', async () => {
@@ -155,16 +168,22 @@ test('an open GOP keeps each segment\'s opening frame, and a resume begins at th
     const info = { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 2, language: null, title: null, default: true }], subtitles: [] }
     await exec('ffmpeg', ffmpegArgs({ input: source, info, audio: 0, start: 0, mode: 'remux', dir: out, transcodeMaxHeight: 720 }), { timeout: 60_000 })
     const timescale = videoTimescale(await fs.readFile(path.join(out, 'init.mp4')))
-    const playlist = await fs.readFile(path.join(out, 'index.m3u8'), 'utf8')
-    let boundary = 0
-    let segments = 0
-    for (const match of playlist.matchAll(/#EXTINF:([\d.]+),[^\n]*\r?\n(seg_\d+\.m4s)/g)) {
-      const first = firstVideoPts(await fs.readFile(path.join(out, match[2] ?? ''))) / timescale
-      expect(first, `segment ${segments} opens at ${first.toFixed(3)} s, before its boundary ${boundary}`).toBeGreaterThanOrEqual(boundary - 0.001)
-      boundary += Number(match[1])
-      segments++
-    }
-    expect(segments).toBeGreaterThan(2)
+    const segments = (await fs.readdir(out)).filter(name => name.endsWith('.m4s')).sort()
+    expect(segments.length).toBeGreaterThan(2)
+    // The DASH index used to move a later segment's opening sample onto a time the stream already presents,
+    // so Chrome dropped one of the two frames. The remux must keep every source frame at its own time: the
+    // same frame count, and one constant shift between source and output (ffmpeg versions place the whole
+    // stream a frame or two differently, which is harmless because audio moves with it; the alignment test
+    // above covers that). An open GOP's leading pictures legitimately present before the segment's keyframe.
+    const frames = (await sourcePts(source)).sort((a, b) => a - b)
+    const output: number[] = []
+    for (const name of segments) output.push(...videoPts(await fs.readFile(path.join(out, name))).map(pts => pts / timescale))
+    output.sort((a, b) => a - b)
+    expect(output.length, 'the remux has a different number of frames than the source').toBe(frames.length)
+    const shift = (output[0] ?? 0) - (frames[0] ?? 0)
+    output.forEach((pts, i) => {
+      expect(Math.abs(pts - shift - (frames[i] ?? NaN)), `frame ${i} presents at ${pts.toFixed(3)} s, expected ${((frames[i] ?? NaN) + shift).toFixed(3)} s`).toBeLessThan(0.002)
+    })
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }
