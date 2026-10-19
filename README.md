@@ -93,27 +93,14 @@ pulling the image, replace `image:` with `build: .`; the repository's own
 [Trying it with Jackett and Prowlarr](#trying-it-with-jackett-and-prowlarr)).
 There are two images, built from the same Dockerfile and published to GHCR:
 
-- **`ghcr.io/kasparsd/magplay`**: the one to start with. Alpine with Node 24
-  plus Alpine's `ffmpeg` (libx264, AAC/AC3, VAAPI and Quick Sync hooks), about
-  90 MB to download, for server-side remux, transcode and embedded subtitles.
-- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about
-  40 MB to download. It plays MP4/WebM directly, repackages MKV and converts
-  AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files
-  itself, and hands everything else to an external player. Nothing is
-  transcoded, and subtitles embedded in MKV need the full image. Meant for
-  small hosts such as MikroTik RouterOS containers, where ffmpeg would not fit
-  or run well. `magplay` is `magplay-core` plus the ffmpeg layer, so both
-  behave identically apart from what ffmpeg adds.
+- **`ghcr.io/kasparsd/magplay`**: the one to start with. Alpine with Node 24 plus Alpine's `ffmpeg` (libx264, AAC/AC3, VAAPI and Quick Sync hooks), about 90 MB to download, for server-side remux, transcode and embedded subtitles.
+- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about 40 MB to download. It plays MP4/WebM directly, repackages MKV and converts AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files itself, and hands everything else to an external player. Nothing is transcoded, and subtitles embedded in MKV need the full image. Meant for small hosts such as MikroTik RouterOS containers, where ffmpeg would not fit or run well. `magplay` is `magplay-core` plus the ffmpeg layer, so both behave identically apart from what ffmpeg adds.
 
 Both build for `linux/arm64` and `linux/amd64`, run as `node`, and have a
 healthcheck on `GET /health`. From a checkout, `docker build .` builds the full
 image and `docker build --target core .` the core one.
 
-A small host needs an explicit heap cap. Node 24 keeps a 259 MiB heap ceiling
-in a container of 512 MiB or less, while a Node remux's memory sits outside
-that heap. Give the container 384 MiB, no extra swap, and
-`NODE_OPTIONS=--max-old-space-size=128`. The measurement is in
-[Container memory](docs/resources.md#container-memory).
+A small host needs an explicit heap cap. Node 24 keeps a 259 MiB heap ceiling in a container of 512 MiB or less, while a Node remux's memory sits outside that heap. Give the container 384 MiB, no extra swap, and `NODE_OPTIONS=--max-old-space-size=128`. The measurement is in [Container memory](docs/resources.md#container-memory).
 
 Publishing a GitHub release `vX.Y.Z` tags both images `X.Y.Z`, `X.Y` and `X`;
 a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to
