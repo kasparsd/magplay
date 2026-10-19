@@ -93,11 +93,11 @@ pulling the image, replace `image:` with `build: .`; the repository's own
 [Trying it with Jackett and Prowlarr](#trying-it-with-jackett-and-prowlarr)).
 There are two images, built from the same Dockerfile and published to GHCR:
 
-- **`ghcr.io/kasparsd/magplay`**: the one to start with. `node:24-alpine`
+- **`ghcr.io/kasparsd/magplay`**: the one to start with. Alpine with Node 24
   plus Alpine's `ffmpeg` (libx264, AAC/AC3, VAAPI and Quick Sync hooks), about
-  125 MB to download, for server-side remux, transcode and embedded subtitles.
-- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about a
-  third smaller. It plays MP4/WebM directly, repackages MKV and converts
+  90 MB to download, for server-side remux, transcode and embedded subtitles.
+- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about
+  40 MB to download. It plays MP4/WebM directly, repackages MKV and converts
   AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files
   itself, and hands everything else to an external player. Nothing is
   transcoded, and subtitles embedded in MKV need the full image. Meant for
