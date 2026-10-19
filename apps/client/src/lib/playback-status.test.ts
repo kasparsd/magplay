@@ -68,6 +68,26 @@ test('rounded 100% is incomplete, and zero peers does not mean a dead swarm', ()
   assert.doesNotMatch(model.description, /dead/)
 })
 
+test('incomplete file with connected peers but missing tail and stalled download names the tail', () => {
+  const model = explainPlayback(signals({
+    decision: null,
+    status: status({ peers: [{ address: null, client: null, downloadSpeed: 0, uploadSpeed: 0, downloaded: 0, uploaded: 0, share: 0.5, choking: false }], file: { idx: 0, progress: 0.9, ranges: [[0, 0.9]] }, downloadSpeed: 0 }),
+    buffer: 0,
+  }))!
+  assert.equal(model.key, 'tail')
+  assert.deepEqual(model.actions, ['external', 'release'])
+  assert.match(model.description, /video index is stored at the end/)
+})
+
+test('incomplete file with connected peers and present tail keeps the general download message', () => {
+  const model = explainPlayback(signals({
+    decision: null,
+    status: status({ peers: [{ address: null, client: null, downloadSpeed: 1000, uploadSpeed: 0, downloaded: 0, uploaded: 0, share: 0.5, choking: false }], file: { idx: 0, progress: 0.9, ranges: [[0, 1]] }, downloadSpeed: 1000 }),
+    buffer: 0,
+  }))!
+  assert.equal(model.key, 'download')
+})
+
 test('published segments, not ffmpeg timestamps, distinguish conversion and browser buffering', () => {
   assert.equal(explainPlayback(signals({ slowSamples: 0, status: status({ session: session({ produced: 50, readyUntil: 0 }) }) }))?.key, 'conversion')
   assert.equal(explainPlayback(signals({ status: status({ session: session({ readyUntil: 24 }) }) }))?.key, 'browser')
