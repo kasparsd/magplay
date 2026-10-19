@@ -2,10 +2,11 @@
 // for the release workflow, which refreshes it after this writes the version.
 import fs from 'node:fs'
 import path from 'node:path'
-import { addChangelogSection, changelogEntry, renderSection } from './changelog.ts'
-import { CHANGELOG_FILE, loadNotes, NOTES_DIR, readAppVersion, writeAppVersion } from './notes.ts'
-import type { Bump, Note } from './notes.ts'
+import { addChangelogSection, changelogEntry, notesForPackage, renderSection } from './changelog.ts'
+import { CHANGELOG_FILE, loadNotes, loadWorkspaces, NOTES_DIR, readAppVersion, writeVersion, VERSION_FILE } from './notes.ts'
+import type { Bump } from './notes.ts'
 import { makePlan } from './plan.ts'
+import type { PackageRelease } from './plan.ts'
 
 export interface ApplyResult {
   /** True only when this run wrote files. A dry run and an empty plan are false. */
@@ -26,17 +27,23 @@ export function applyRelease (root: string, options?: { dryRun?: boolean }): App
   const dryRun = options?.dryRun === true
   const loaded = loadNotes(root)
   if (loaded.problems.length) throw new Error(loaded.problems.join('\n'))
-  const plan = makePlan(readAppVersion(root), loaded.notes)
+  const plan = makePlan(readAppVersion(root), loaded.notes, loadWorkspaces(root))
   const next = plan.next
   if (plan.bump === null || next === null) {
     return { applied: false, dryRun, current: plan.current, next: null, bump: null, notes: '' }
   }
-  const notes = sectionBody(root, next, plan.notes)
+  const versions = new Map(plan.packages.map(item => [item.name, item.next]))
+  const notes = sectionBody(root, CHANGELOG_FILE, next, renderSection(next, plan.notes, versions))
+  for (const item of plan.packages) {
+    sectionBody(root, packageChangelog(item), item.next, renderSection(item.next, notesForPackage(plan.notes, item.name)))
+  }
   if (!dryRun) {
-    const changelogPath = path.join(root, CHANGELOG_FILE)
-    const existing = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : null
-    fs.writeFileSync(changelogPath, addChangelogSection(existing, renderSection(next, plan.notes)))
-    writeAppVersion(root, next)
+    writeChangelog(root, CHANGELOG_FILE, next, renderSection(next, plan.notes, versions))
+    writeVersion(root, VERSION_FILE, next)
+    for (const item of plan.packages) {
+      writeChangelog(root, packageChangelog(item), item.next, renderSection(item.next, notesForPackage(plan.notes, item.name)), item.name)
+      writeVersion(root, path.join(item.dir, 'package.json'), item.next)
+    }
     for (const note of plan.notes) fs.unlinkSync(path.join(root, NOTES_DIR, `${note.id}.md`))
   }
   return { applied: !dryRun, dryRun, current: plan.current, next, bump: plan.bump, notes }
@@ -57,12 +64,28 @@ export function formatApply (result: ApplyResult): string {
   return result.dryRun ? `Dry run: ${line}\n` : `${line}\n`
 }
 
-function sectionBody (root: string, version: string, notes: Note[]): string {
-  const changelogPath = path.join(root, CHANGELOG_FILE)
-  const existing = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : null
+function packageChangelog (item: PackageRelease): string {
+  return path.join(item.dir, 'CHANGELOG.md')
+}
+
+function sectionBody (root: string, file: string, version: string, section: string): string {
+  const existing = readChangelog(root, file)
   if (existing !== null && changelogEntry(existing, version) !== null) {
-    throw new Error(`${CHANGELOG_FILE} already has a section for ${version}`)
+    throw new Error(`${file} already has a section for ${version}`)
   }
-  const written = addChangelogSection(existing, renderSection(version, notes))
-  return changelogEntry(written, version) ?? ''
+  return changelogEntry(addChangelogSection(existing, section), version) ?? ''
+}
+
+function writeChangelog (root: string, file: string, version: string, section: string, title?: string): void {
+  const existing = readChangelog(root, file)
+  if (existing !== null && changelogEntry(existing, version) !== null) {
+    throw new Error(`${file} already has a section for ${version}`)
+  }
+  fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+  fs.writeFileSync(path.join(root, file), addChangelogSection(existing, section, title))
+}
+
+function readChangelog (root: string, file: string): string | null {
+  const changelogPath = path.join(root, file)
+  return fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : null
 }

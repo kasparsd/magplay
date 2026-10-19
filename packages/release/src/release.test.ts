@@ -9,7 +9,8 @@ import { applyRelease, releasePullRequest } from './apply.ts'
 import { changelogEntry } from './changelog.ts'
 import { formatGitHubOutput } from './github.ts'
 import { gitOk } from './git.ts'
-import { APP, loadNotes, parseNote, writeNote } from './notes.ts'
+import { APP, loadNotes, loadWorkspaces, parseNote, writeNote } from './notes.ts'
+import type { Note, NoteBump } from './notes.ts'
 import { makePlan } from './plan.ts'
 import { hasAddedNote } from './status.ts'
 import { tagRelease } from './tag.ts'
@@ -20,31 +21,42 @@ const SERVER = {
   private: true,
 }
 
-test('a note names the app with a bump and a summary; an empty note is valid', () => {
-  assert.deepEqual(parseNote(`---\n"${APP}": patch\n---\n\nSeeking restarts conversion.\n`), {
+test('a note names the app or a package with a bump and a summary; an empty note is valid', () => {
+  const known = new Set([APP, '@magplay/playback', '@magplay/http-kit'])
+  assert.deepEqual(parseNote(`---\n"${APP}": patch\n---\n\nSeeking restarts conversion.\n`, known), {
     bump: 'patch',
     summary: 'Seeking restarts conversion.',
+    packages: [{ name: APP, bump: 'patch' }],
   })
-  assert.deepEqual(parseNote(`---\n'${APP}': minor\n---\nSummary\n`), { bump: 'minor', summary: 'Summary' })
-  assert.deepEqual(parseNote('---\n---\n'), { bump: 'empty', summary: '' })
-  assert.match(noteProblems('Just text')[0] ?? '', /front matter/)
-  assert.match(noteProblems('---\n"@magplay/playback": patch\n---\n\nInternal\n')[0] ?? '', /not released on its own/)
-  assert.match(noteProblems(`---\n"${APP}": huge\n---\n\nx\n`)[0] ?? '', /not patch, minor or major/)
-  assert.match(noteProblems(`---\n"${APP}": patch\n---\n`)[0] ?? '', /no summary/)
-  assert.match(noteProblems('---\nnot a pair\n---\n\nx\n')[0] ?? '', /is not "package": bump/)
+  assert.deepEqual(parseNote(`---\n'${APP}': minor\n---\nSummary\n`, known), {
+    bump: 'minor',
+    summary: 'Summary',
+    packages: [{ name: APP, bump: 'minor' }],
+  })
+  assert.deepEqual(parseNote('---\n"@magplay/playback": minor\n"@magplay/http-kit": patch\n---\n\nSeeking restarts conversion.\n', known), {
+    bump: 'minor',
+    summary: 'Seeking restarts conversion.',
+    packages: [
+      { name: '@magplay/playback', bump: 'minor' },
+      { name: '@magplay/http-kit', bump: 'patch' },
+    ],
+  })
+  assert.deepEqual(parseNote('---\n---\n', known), { bump: 'empty', summary: '', packages: [] })
+  assert.match(noteProblems('Just text', known)[0] ?? '', /front matter/)
+  assert.match(noteProblems('---\n"@magplay/nope": patch\n---\n\nInternal\n', known)[0] ?? '', /not a package/)
+  assert.match(noteProblems(`---\n"${APP}": huge\n---\n\nx\n`, known)[0] ?? '', /not patch, minor or major/)
+  assert.match(noteProblems(`---\n"${APP}": patch\n---\n`, known)[0] ?? '', /no summary/)
+  assert.match(noteProblems('---\nnot a pair\n---\n\nx\n', known)[0] ?? '', /is not "package": bump/)
 })
 
 test('the highest bump wins, and empty notes do not raise the version', () => {
-  const notes = [
-    { id: 'b', bump: 'patch' as const, summary: 'Fix' },
-    { id: 'a', bump: 'minor' as const, summary: 'Add' },
-    { id: 'c', bump: 'empty' as const, summary: '' },
-  ]
+  const notes = [appNote('b', 'patch', 'Fix'), appNote('a', 'minor', 'Add'), appNote('c', 'empty', '')]
   assert.deepEqual(makePlan('0.1.0', notes).next, '0.2.0')
-  assert.equal(makePlan('0.9.0', [{ id: 'a', bump: 'patch', summary: 'Fix' }]).next, '0.9.1')
-  assert.equal(makePlan('0.9.0', [{ id: 'a', bump: 'minor', summary: 'Add' }]).next, '0.10.0')
-  assert.equal(makePlan('0.1.0', [{ id: 'a', bump: 'major', summary: 'Break' }]).next, '1.0.0')
-  assert.equal(makePlan('0.1.0', [{ id: 'a', bump: 'empty', summary: '' }]).next, null)
+  assert.equal(makePlan('0.9.0', [appNote('a', 'patch', 'Fix')]).next, '0.9.1')
+  assert.equal(makePlan('0.9.0', [appNote('a', 'minor', 'Add')]).next, '0.10.0')
+  assert.equal(makePlan('0.1.0', [appNote('a', 'major', 'Break')]).next, '1.0.0')
+  assert.equal(makePlan('0.1.0', [appNote('a', 'empty', '')]).next, null)
+  assert.deepEqual(makePlan('0.1.0', notes).packages, [])
 })
 
 test('a release consumes notes, raises the version and writes the changelog section', () => {
@@ -134,11 +146,39 @@ test('tag refuses a version with no changelog section, and does not move an exis
   }
 })
 
-test('the pending notes in this repository parse', () => {
+test('a package note bumps that package and the application, and the root changelog lists it once', () => {
+  const playback = { name: '@magplay/playback', version: '0.0.0', private: true }
+  const httpKit = { name: '@magplay/http-kit', version: '0.0.0', private: true }
+  const root = fixture({
+    'package.json': `${JSON.stringify({ private: true, workspaces: ['packages/*', 'apps/*'] })}\n`,
+    'apps/server/package.json': `${JSON.stringify(SERVER, null, 2)}\n`,
+    'packages/playback/package.json': `${JSON.stringify(playback, null, 2)}\n`,
+    'packages/http-kit/package.json': `${JSON.stringify(httpKit, null, 2)}\n`,
+    'package-lock.json': '{ "lock": true }\n',
+    '.changeset/seeking.md': '---\n"@magplay/playback": minor\n"@magplay/http-kit": patch\n---\n\nSeeking restarts conversion.\n',
+  })
+  try {
+    const applied = applyRelease(root)
+    assert.equal(applied.next, '0.2.0')
+    assert.match(applied.notes, /### Minor\n\n- `@magplay\/http-kit` 0\.0\.1, `@magplay\/playback` 0\.1\.0: Seeking restarts conversion\./)
+    assert.doesNotMatch(applied.notes, /0\.1\.0: Seeking[\s\S]*Seeking/)
+    const playbackLog = fs.readFileSync(path.join(root, 'packages/playback/CHANGELOG.md'), 'utf8')
+    assert.match(playbackLog, /^# @magplay\/playback\n\n## 0\.1\.0\n\n### Minor\n\n- Seeking restarts conversion\.\n/)
+    const httpLog = fs.readFileSync(path.join(root, 'packages/http-kit/CHANGELOG.md'), 'utf8')
+    assert.match(httpLog, /## 0\.0\.1\n\n### Patch\n\n- Seeking restarts conversion\./)
+    assert.equal(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'), '{ "lock": true }\n')
+    assert.equal(fs.existsSync(path.join(root, 'apps/server/CHANGELOG.md')), false)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('the workspaces and pending notes in this repository parse', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-  const loaded = loadNotes(root)
-  assert.deepEqual(loaded.problems, [])
-  assert.ok(loaded.notes.length > 0)
+  const workspaces = loadWorkspaces(root)
+  assert.ok(workspaces.some(item => item.name === APP))
+  assert.ok(workspaces.some(item => item.name === '@magplay/api-contract'))
+  assert.deepEqual(loadNotes(root).problems, [])
 })
 
 test('status exits 2 when the range adds no note, and note writes a changeset', () => {
@@ -151,7 +191,7 @@ test('status exits 2 when the range adds no note, and note writes a changeset', 
     const wrote = run(root, ['note', '--patch', '-m', 'Seeking restarts conversion.'])
     assert.equal(wrote.status, 0)
     assert.match(wrote.stdout, /^\.changeset\/.+\.md\n$/)
-    const written = parseNote(fs.readFileSync(path.join(root, wrote.stdout.trim()), 'utf8'))
+    const written = parseNote(fs.readFileSync(path.join(root, wrote.stdout.trim()), 'utf8'), new Set([APP]))
     assert.equal('bump' in written ? written.bump : '', 'patch')
     gitOk(root, ['add', '-A'])
     gitOk(root, ['commit', '-m', 'note'])
@@ -225,8 +265,12 @@ test('tag --github-output hands the tag and its notes to the release step', () =
   }
 })
 
-function noteProblems (text: string): string[] {
-  const parsed = parseNote(text)
+function appNote (id: string, bump: NoteBump, summary: string): Note {
+  return { id, bump, summary, packages: bump === 'empty' ? [] : [{ name: APP, bump }] }
+}
+
+function noteProblems (text: string, known: ReadonlySet<string>): string[] {
+  const parsed = parseNote(text, known)
   return 'problems' in parsed ? parsed.problems : []
 }
 
