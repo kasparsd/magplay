@@ -134,7 +134,7 @@ test('invalid ids and unknown torrents fail clearly; status never loads a torren
   await assert.rejects(engine.get('bad'), InvalidTorrentError)
   assert.deepEqual(engine.status('a'.repeat(40)), { loaded: false })
   assert.equal(engine.knownWarning('a'.repeat(40)), null)
-  assert.deepEqual(engine.stats(), { loads: { used: 0, limit: DEFAULT_LIVE.maxLoads }, loaded: 0 })
+  assert.deepEqual(engine.stats(), { loads: { used: 0, limit: DEFAULT_LIVE.maxLoads }, loaded: 0, seeded: 0, seededCount: 0, seeding: 0, seededTorrents: 0, uploadSpeed: 0, totalUploadSpeed: 0, seededUploadSpeed: 0 })
 })
 
 test('housekeeping evicts the least recently used folders above the cache limit', async t => {

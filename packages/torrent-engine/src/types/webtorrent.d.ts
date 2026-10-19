@@ -50,7 +50,9 @@ declare module 'webtorrent' {
     infoHash: string
     name?: string
     ready: boolean
+    done?: boolean
     metadata?: unknown
+    numPeers?: number
     files: TorrentFile[]
     torrentFile: Uint8Array
     created?: Date
@@ -70,6 +72,8 @@ declare module 'webtorrent' {
     constructor (opts?: ClientOptions)
     torrents: Torrent[]
     destroyed: boolean
+    throttleUpload: (rate: number) => boolean
+    _uploadLimit?: number
     add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean, fileModtimes?: number[] }) => Torrent
     destroy: (cb?: (err?: Error | null) => void) => void
   }

@@ -20,6 +20,13 @@ import { dirBytes, evict, listCached } from './store.ts'
 import type { RecentTorrent } from './store.ts'
 
 /** Settings read on each use, so a saved change applies without a restart. */
+export interface SeedingLiveOptions {
+  enabled: boolean
+  uploadSpeedLimitBytesPerSec: number
+  maxTorrents: number
+  idleMs: number
+}
+
 export interface LiveOptions {
   /** Torrents loading (waiting for metadata or checking) at once; more fail fast with EngineBusyError. */
   maxLoads: number
@@ -31,6 +38,13 @@ export interface LiveOptions {
   idleMs: number
   /** Least-recently-used torrent folders are deleted above this. */
   cacheMaxBytes: number
+  /** Opt-in seeding of completed torrents. */
+  seedingEnabled: boolean
+  seedingUploadSpeedLimitBytesPerSec: number
+  seedingMaxTorrents: number
+  seedingIdleMs: number
+  /** Nested form, kept in sync for callers that prefer it. */
+  seeding: SeedingLiveOptions
 }
 
 export const DEFAULT_LIVE: LiveOptions = {
@@ -40,6 +54,11 @@ export const DEFAULT_LIVE: LiveOptions = {
   checkingTimeoutMs: 7_200_000,
   idleMs: 30 * 60_000,
   cacheMaxBytes: 50 * 1024 ** 3,
+  seedingEnabled: false,
+  seedingUploadSpeedLimitBytesPerSec: 0,
+  seedingMaxTorrents: 3,
+  seedingIdleMs: 24 * 60 * 60_000,
+  seeding: { enabled: false, uploadSpeedLimitBytesPerSec: 0, maxTorrents: 3, idleMs: 24 * 60 * 60_000 },
 }
 
 export interface TorrentEngineOptions {
@@ -160,6 +179,8 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
 
   const lastUsed = new Map<string, number>() // infoHash -> ms
   const openStreams = new Map<string, number>() // infoHash -> number of open streams
+  const seeded = new Set<string>() // infoHashes of completed torrents being seeded
+  const seededAt = new Map<string, number>() // infoHash -> ms when seeding started
   const jobIds = new Map<string, string>()
   const pending = new Map<string, Promise<Torrent>>() // infoHash -> load waiting for metadata
   // Notes from file lists we've seen, so later searches show them even when the title looks playable
@@ -175,6 +196,18 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
   }
 
   const find = (ih: string): WtTorrent | undefined => client.torrents.find(t => t.infoHash === ih)
+
+  function seedingOpts () {
+    const l = live() as unknown as Record<string, unknown>
+    const nested = (l.seeding ?? {}) as Record<string, unknown>
+    const enabled = !!(l.seedingEnabled ?? nested.enabled)
+    return {
+      enabled,
+      uploadSpeedLimitBytesPerSec: Number(l.seedingUploadSpeedLimitBytesPerSec ?? nested.uploadSpeedLimitBytesPerSec ?? 0),
+      maxTorrents: Number(l.seedingMaxTorrents ?? nested.maxTorrents ?? 3),
+      idleMs: Number(l.seedingIdleMs ?? nested.idleMs ?? 24 * 60 * 60_000),
+    }
+  }
 
   function handle (t: WtTorrent): Torrent {
     let h = handles.get(t)
@@ -238,6 +271,16 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
         .then(() => fs.writeFile(modtimesFile, JSON.stringify(modtimes)))
         .catch((writeErr: unknown) => logger.error('torrent.modtimes.save.failed', { err: writeErr }))
     })
+    const markSeeded = (): void => {
+      const so = seedingOpts()
+      if (!so.enabled) return
+      if (torrent.progress !== 1) return
+      seeded.add(torrent.infoHash)
+      seededAt.set(torrent.infoHash, seededAt.get(torrent.infoHash) ?? Date.now())
+    }
+    torrent.on('done', markSeeded)
+    torrent.on('close', () => { seeded.delete(torrent.infoHash); seededAt.delete(torrent.infoHash) })
+    if (torrent.done || torrent.progress === 1) markSeeded()
     return handle(torrent)
   }
 
@@ -273,14 +316,74 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
 
   async function housekeeping (): Promise<void> {
     const { idleMs, cacheMaxBytes } = live()
+    const so = seedingOpts()
+    // Apply the global upload throttle on every pass so setting changes take effect.
+    client.throttleUpload(so.enabled ? so.uploadSpeedLimitBytesPerSec : 0)
+
+    if (!so.enabled) {
+      // Seeding disabled: unload any seeded torrents and forget them.
+      for (const t of [...client.torrents]) {
+        if (!seeded.has(t.infoHash)) continue
+        if (openStreams.get(t.infoHash)) continue
+        if (pending.has(t.infoHash)) continue
+        logger.info('torrent.unloaded', { torrentId: t.infoHash, reason: 'seeding-disabled' })
+        t.destroy()
+        seeded.delete(t.infoHash)
+        seededAt.delete(t.infoHash)
+      }
+    } else {
+      // Enforce the soft cap on seeded torrents: skip those with open streams.
+      const seededTorrents = client.torrents.filter(t => seeded.has(t.infoHash))
+      if (seededTorrents.length > so.maxTorrents) {
+        const candidates = seededTorrents
+          .filter(t => !openStreams.get(t.infoHash) && !pending.has(t.infoHash))
+          .sort((a, b) => (seededAt.get(a.infoHash) ?? 0) - (seededAt.get(b.infoHash) ?? 0))
+        let count = seededTorrents.length
+        for (const t of candidates) {
+          if (count <= so.maxTorrents) break
+          logger.info('torrent.unloaded', { torrentId: t.infoHash, reason: 'seeding-cap' })
+          t.destroy()
+          seeded.delete(t.infoHash)
+          seededAt.delete(t.infoHash)
+          count--
+        }
+      }
+      // Fallback idle unload for seeded torrents with no peers and no upload.
+      for (const t of [...client.torrents]) {
+        if (!seeded.has(t.infoHash)) continue
+        if (openStreams.get(t.infoHash) || pending.has(t.infoHash)) continue
+        const peers = (t as { numPeers?: number }).numPeers ?? 0
+        const uploading = t.uploadSpeed > 0
+        if (peers === 0 && !uploading) {
+          const idle = Date.now() - (lastUsed.get(t.infoHash) ?? seededAt.get(t.infoHash) ?? 0) > so.idleMs
+          if (idle) {
+            logger.info('torrent.unloaded', { torrentId: t.infoHash, reason: 'seeding-idle' })
+            t.destroy()
+            seeded.delete(t.infoHash)
+            seededAt.delete(t.infoHash)
+          }
+        }
+      }
+    }
+
+    // Normal idle unload for non-seeded torrents.
     for (const t of [...client.torrents]) {
+      if (seeded.has(t.infoHash)) continue
       const idle = Date.now() - (lastUsed.get(t.infoHash) ?? 0) > idleMs
       if (idle && !openStreams.get(t.infoHash) && !pending.has(t.infoHash)) {
         logger.info('torrent.unloaded', { torrentId: t.infoHash, reason: 'idle' })
         t.destroy()
       }
     }
-    await evict(dir, cacheMaxBytes, name => !!find(name), logger)
+    await evict(dir, cacheMaxBytes, name => !!find(name), logger, {
+      isSeeded: (name: string) => seeded.has(name),
+      unload: async (name: string) => {
+        const t = find(name)
+        if (t) t.destroy()
+        seeded.delete(name)
+        seededAt.delete(name)
+      },
+    })
   }
 
   let housekeepingRunning = false
@@ -346,7 +449,21 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
         touch(ih)
       }
     },
-    stats: () => ({ loads: runLoad.stats(), loaded: client.torrents.length }),
+    stats: () => {
+      const seededList = client.torrents.filter(t => seeded.has(t.infoHash))
+      const uploadSpeed = client.torrents.reduce((sum, t) => sum + (t.uploadSpeed ?? 0), 0)
+      return {
+        loads: runLoad.stats(),
+        loaded: client.torrents.length,
+        seeded: seeded.size,
+        seededCount: seeded.size,
+        seeding: seeded.size,
+        seededTorrents: seeded.size,
+        uploadSpeed,
+        totalUploadSpeed: uploadSpeed,
+        seededUploadSpeed: seededList.reduce((sum, t) => sum + (t.uploadSpeed ?? 0), 0),
+      }
+    },
     async cacheBytes () {
       const names = await fs.readdir(dir).catch(() => [])
       let total = 0

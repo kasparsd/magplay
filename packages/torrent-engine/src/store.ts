@@ -45,18 +45,34 @@ export async function listCached (dir: string, limit: number, lastUsed: (infoHas
   }))
 }
 
+export interface EvictOptions {
+  isSeeded?: (name: string) => boolean
+  unload?: (name: string) => Promise<void>
+}
+
 /** Deletes least-recently-used folders until the cache fits in `maxBytes`, skipping those `inUse`. */
-export async function evict (dir: string, maxBytes: number, inUse: (name: string) => boolean, logger: Logger = noopLogger): Promise<void> {
+export async function evict (dir: string, maxBytes: number, inUse: (name: string) => boolean, logger: Logger = noopLogger, options: EvictOptions = {}): Promise<void> {
   const names = await fs.readdir(dir).catch(() => [])
   const dirs = await Promise.all(names.map(async name => {
     const folder = path.join(dir, name)
     const stat = await fs.stat(folder).catch(() => null)
-    return { name, folder, mtime: stat?.mtimeMs ?? 0, bytes: await dirBytes(folder) }
+    return { name, folder, mtime: stat?.mtimeMs ?? 0, bytes: await dirBytes(folder), seeded: options.isSeeded?.(name) ?? false }
   }))
   let total = dirs.reduce((sum, d) => sum + d.bytes, 0)
-  for (const d of dirs.sort((a, b) => a.mtime - b.mtime)) {
+  // Non-seeded LRU first, then oldest seeded.
+  const sorted = [...dirs].sort((a, b) => {
+    if (a.seeded !== b.seeded) return a.seeded ? 1 : -1
+    return a.mtime - b.mtime
+  })
+  for (const d of sorted) {
     if (total <= maxBytes) break
-    if (inUse(d.name)) continue
+    if (inUse(d.name)) {
+      if (d.seeded && options.unload) {
+        await options.unload(d.name)
+      } else {
+        continue
+      }
+    }
     logger.info('cache.evicted', { torrentId: /^[a-f0-9]{40}$/.test(d.name) ? d.name : undefined, bytes: d.bytes })
     await fs.rm(d.folder, { recursive: true, force: true })
     total -= d.bytes
