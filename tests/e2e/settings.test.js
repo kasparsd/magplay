@@ -1,3 +1,4 @@
+import { SETTINGS } from '@magplay/api-contract'
 import { test, expect } from './fixtures.js'
 
 const statusButton = page => page.locator('.status-button')
@@ -150,9 +151,13 @@ test('Settings is one page with every section stacked in order, and #section lin
 test('only the settings people tune are on the page, and Sources has a labelled list', async ({ page, app }) => {
   await page.goto(`${app.origin}/settings`)
   await expect(page.locator('#sources')).toBeVisible()
-  for (const gone of ['Extra trackers', 'Web port', 'Torrent port', 'Find peers with DHT', 'Cache folder', 'Simultaneous conversions', 'Close idle torrents after', 'Wait for torrent metadata', 'Needs a restart', 'Play the next episode automatically', 'Show playback stats on the video', 'Log requests to the browser console', 'Not set; managed here', 'Preferred subtitles', 'Preferred audio', 'Default speed']) {
-    await expect(page.getByText(gone, { exact: false })).toHaveCount(0)
-  }
+  // The page shows exactly the schema's top-level value settings. Source-item fields sit inside the Sources row, not in the top-level set.
+  const rowId = def => `row-setting-${def.key.replace(/\./g, '-')}`
+  const nonValue = SETTINGS.filter(d => d.type === 'action' || d.type === 'readout').map(rowId)
+  const expected = SETTINGS.filter(d => !d.hidden && d.type !== 'action' && d.type !== 'readout').map(d => d.label)
+  const shown = await page.locator('[id^="row-setting-"]:not([hidden]) > .row-text > .row-label').evaluateAll(
+    (labels, skip) => labels.filter(l => !skip.includes(l.closest('.row').id)).map(l => l.firstChild.textContent.trim()), nonValue)
+  expect(shown.sort()).toEqual(expected.sort())
   await expect(page.locator('#row-setting-sources > .row-text > .row-label')).toHaveText('Search sources')
   await expect(page.locator('#row-setting-sources > .row-text > .help')).toBeVisible()
   // One stylesheet serves every page: the Player's wait-overlay id must not appear here, or its padding renders a huge empty box
