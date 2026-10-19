@@ -37,7 +37,7 @@ apps/server ──► indexers ──────► release-info
 | `observability` | Structured logs, bounded Debug capture, metrics and runtime collectors | Logger/metrics options, lifecycle ownership | Domain operations and HTTP responses |
 | `api-contract` | Types for the server JSON API (replaces `api-types.js`), the codec keys, the settings schema with `validate()` and the status level helpers, which run on both sides | — | Node or DOM APIs |
 
-`@magplay/release` collects release notes and writes the application version and the root changelog. The server and the client do not import it.
+`@magplay/release` collects release notes and writes the application version and the root changelog ([package readme](../packages/release/README.md)). The server and the client do not import it.
 
 Each package throws its own typed errors (busy, timeout, not found, cancelled, invalid input). `apps/server` maps them to HTTP statuses in one place.
 

@@ -45,18 +45,20 @@ Run it locally with `npm run release -- status --since origin/main`.
 
 ## What happens on main
 
-A push to `main` that changes `.changeset/`, `packages/release/` or the prepare workflow runs [prepare-release.yml](../.github/workflows/prepare-release.yml). It runs `version --github-output`, which deletes the notes (including empty ones), raises the server version by the highest bump and prepends the changelog section. The step outputs `applied`, `title` and `body`. When `applied` is true, the workflow refreshes `package-lock.json` and opens or updates the pull request on `release/next`. The title is `Release <version>`.
+A push to `main` that changes `.changeset/`, `packages/release/` or the prepare workflow runs [prepare-release.yml](../.github/workflows/prepare-release.yml). It runs `version --github-output`, which deletes the notes (including empty ones), raises the server version by the highest bump and prepends the changelog section. The step outputs `applied`, `title` and `body`. When `applied` is true, the workflow refreshes `package-lock.json`, opens or updates the pull request on `release/next` with `peter-evans/create-pull-request`, and dispatches the test workflow on that branch. The title is `Release <version>`.
 
 Empty notes alone leave the tree unchanged, so no pull request is opened. They stay until a real note is released with them.
 
-Merging `release/next` runs [tag-release.yml](../.github/workflows/tag-release.yml), which runs `publish`. That creates `v<version>` at the merge commit when the tag is absent, does not move a tag that already exists, and publishes the GitHub Release with the changelog section as its body. [publish-image.yml](../.github/workflows/publish-image.yml) builds and pushes the versioned GHCR image from that release. Ordinary pushes to `main` still publish `edge`.
+Merging `release/next` runs [tag-release.yml](../.github/workflows/tag-release.yml). `tag --push --github-output` creates `v<version>` at the merge commit when the tag is absent, does not move a tag that already exists, and outputs `created`, `tag` and `notes`. When the tag was created, the workflow runs `gh release create` with the changelog section as the body, then `gh workflow run publish-image.yml --ref v<version>`. [publish-image.yml](../.github/workflows/publish-image.yml) builds and pushes the versioned GHCR image from that tag. Ordinary pushes to `main` still publish `edge`.
 
-Both workflows use the `RELEASE_TOKEN` secret. Events created with `GITHUB_TOKEN` do not start other workflows, so the release pull request would not be tested and the GitHub Release would not build the image. Until the secret is set, the jobs log that they skipped.
+No secret is involved. Everything runs with the job's `GITHUB_TOKEN`, so the pull request, the tag and the release are attributed to `github-actions[bot]`. Events raised with that token do not start other workflows, which is why each workflow dispatches the next one itself: `workflow_dispatch` always creates a run. The pull request's own `pull_request` test runs appear as waiting for approval; the dispatched run on `release/next` is the one that counts, and approving the waiting ones is harmless.
+
+The CLI only runs git. It never calls `gh` or the GitHub API; the workflows do that with the step outputs. The outputs are listed in [the package readme](../packages/release/README.md).
 
 `version` and `tag` do not commit. `npm run release -- version --dry-run` prints the plan and leaves the tree alone. `npm run release -- status` lists what is pending.
 
 **Undoing a mistaken `version`** before it is committed: `git checkout -- .changeset apps/server/package.json && git clean -f CHANGELOG.md` (the last part only if the changelog did not exist yet). Check with `git status` that the notes are back.
 
-## Owner setup
+## First release
 
-Create a fine-grained personal access token or a GitHub App token with Contents and Pull requests write on this repository, and store it as `RELEASE_TOKEN`. Add it after this is on `main`, unless the notes already in `.changeset/` should become the first release pull request immediately. The first successful prepare run includes every pending note. `workflow_dispatch` on Prepare release runs it without waiting for another note.
+Nothing to set up. The first prepare run after this reaches `main` includes every pending note, so the first release pull request is `0.2.0`. `workflow_dispatch` on Prepare release runs it without waiting for another note. Repository settings must allow Actions to create pull requests (Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests").

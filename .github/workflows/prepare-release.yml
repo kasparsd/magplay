@@ -1,7 +1,8 @@
 name: Prepare release
 
 # Pending release notes open or update the release pull request.
-# RELEASE_TOKEN is required: a pull request opened with GITHUB_TOKEN does not start the test workflows.
+# The pull request is opened with GITHUB_TOKEN, so its test runs wait for approval;
+# dispatching the test workflow starts them (workflow_dispatch always runs).
 on:
   push:
     branches: [main]
@@ -12,6 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -28,17 +30,18 @@ jobs:
         with:
           node-version-file: .nvmrc
       - id: version
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: npm run release -- version --github-output
       - if: steps.version.outputs.applied == 'true'
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - uses: peter-evans/create-pull-request@v7
         if: steps.version.outputs.applied == 'true'
         with:
-          token: ${{ secrets.RELEASE_TOKEN }}
           commit-message: ${{ steps.version.outputs.title }}
           branch: release/next
           delete-branch: true
           title: ${{ steps.version.outputs.title }}
           body: ${{ steps.version.outputs.body }}
+      - if: steps.version.outputs.applied == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run test.yml --ref release/next

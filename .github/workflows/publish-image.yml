@@ -4,11 +4,14 @@ name: Publish container image
 # Publishing a GitHub release tagged vX.Y.Z publishes `X.Y.Z`, `X.Y` and `X` (`X` is skipped for 0.x).
 # A prerelease (marked as such, or tagged like vX.Y.Z-rc.1) publishes only its exact version.
 # No `latest` tag: deployments pin a version or follow `edge` explicitly.
+# tag-release.yml dispatches this workflow on the tag, because a release it publishes
+# with GITHUB_TOKEN raises no `release` event. The tags come from github.ref either way.
 on:
   push:
     branches: [main]
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read

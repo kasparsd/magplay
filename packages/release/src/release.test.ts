@@ -11,7 +11,6 @@ import { formatGitHubOutput } from './github.ts'
 import { gitOk } from './git.ts'
 import { APP, loadNotes, parseNote, writeNote } from './notes.ts'
 import { makePlan } from './plan.ts'
-import { publishRelease } from './publish.ts'
 import { hasAddedNote } from './status.ts'
 import { tagRelease } from './tag.ts'
 
@@ -171,7 +170,7 @@ test('github output keeps a multiline pull request body in one value', () => {
   assert.match(text, /First line\.\n\n- Seeking restarts conversion\./)
 })
 
-test('version --github-output reports the pull request, and skips in Actions without a token', () => {
+test('version --github-output reports the pull request, or applied=false when nothing is pending', () => {
   const root = fixture({
     'apps/server/package.json': `${JSON.stringify(SERVER, null, 2)}\n`,
     '.changeset/seeking.md': `---\n"${APP}": patch\n---\n\nSeeking restarts conversion.\n`,
@@ -179,12 +178,7 @@ test('version --github-output reports the pull request, and skips in Actions wit
   const output = path.join(root, 'github-output.txt')
   try {
     assert.equal(releasePullRequest(applyRelease(root, { dryRun: true })).title, 'Release 0.1.1')
-    const applied = run(root, ['version', '--github-output'], {
-      GITHUB_OUTPUT: output,
-      GITHUB_ACTIONS: '',
-      RELEASE_TOKEN: '',
-      GH_TOKEN: '',
-    })
+    const applied = run(root, ['version', '--github-output'], { GITHUB_OUTPUT: output })
     assert.equal(applied.status, 0, applied.stderr)
     const text = fs.readFileSync(output, 'utf8')
     assert.match(text, /applied=true/)
@@ -192,58 +186,40 @@ test('version --github-output reports the pull request, and skips in Actions wit
     assert.match(text, /tags v0\.1\.1/)
     assert.match(text, /Seeking restarts conversion/)
 
-    const skippedOutput = path.join(root, 'skipped.txt')
-    const skipped = run(root, ['version', '--github-output'], {
-      GITHUB_OUTPUT: skippedOutput,
-      GITHUB_ACTIONS: 'true',
-      RELEASE_TOKEN: '',
-      GH_TOKEN: '',
-    })
-    assert.equal(skipped.status, 0, skipped.stderr)
-    assert.match(skipped.stdout, /release pull request was skipped/)
-    assert.equal(fs.readFileSync(skippedOutput, 'utf8'), 'applied=false\n')
+    const nothing = path.join(root, 'nothing.txt')
+    const again = run(root, ['version', '--github-output'], { GITHUB_OUTPUT: nothing })
+    assert.equal(again.status, 0, again.stderr)
+    assert.equal(fs.readFileSync(nothing, 'utf8'), 'applied=false\n')
+
+    const missing = run(root, ['version', '--github-output'], { GITHUB_OUTPUT: '' })
+    assert.equal(missing.status, 1)
+    assert.match(missing.stderr, /GITHUB_OUTPUT/)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
 
-test('publish creates the GitHub Release from the tag, and skips when the token or changelog is missing', () => {
+test('tag --github-output hands the tag and its notes to the release step', () => {
   const root = gitFixture({
     'apps/server/package.json': `${JSON.stringify({ ...SERVER, version: '0.2.0' }, null, 2)}\n`,
     'CHANGELOG.md': '# magplay\n\n## 0.2.0\n\n### Patch\n\n- Seeking restarts conversion.\n',
   })
   try {
-    assert.equal(publishRelease(root, { token: undefined, actions: true, push: false }).reason, 'no-token')
-    const calls: string[][] = []
-    const published = publishRelease(root, {
-      token: 'token',
-      actions: true,
-      push: false,
-      run (command, args) {
-        calls.push([command, ...args])
-        if (args[1] === 'view') return { status: 1, stdout: '', stderr: 'not found' }
-        return { status: 0, stdout: '', stderr: '' }
-      },
-    })
-    assert.equal(published.reason, 'published')
-    assert.equal(published.tag, 'v0.2.0')
-    assert.deepEqual(calls.map(call => call.slice(0, 3)), [
-      ['gh', 'release', 'view'],
-      ['gh', 'release', 'create'],
-    ])
-    assert.match(calls[1]?.at(-1) ?? '', /Seeking restarts conversion/)
-    calls.length = 0
-    const again = publishRelease(root, {
-      token: 'token',
-      actions: true,
-      push: false,
-      run (command, args) {
-        calls.push([command, ...args])
-        return { status: 0, stdout: '', stderr: '' }
-      },
-    })
-    assert.equal(again.reason, 'exists')
-    assert.deepEqual(calls, [['gh', 'release', 'view', 'v0.2.0']])
+    const output = path.join(root, 'tag.txt')
+    const tagged = run(root, ['tag', '--github-output'], { GITHUB_OUTPUT: output })
+    assert.equal(tagged.status, 0, tagged.stderr)
+    const text = fs.readFileSync(output, 'utf8')
+    assert.match(text, /^created=true\ntag=v0\.2\.0\nnotes<</)
+    assert.match(text, /### Patch\n\n- Seeking restarts conversion\./)
+
+    const again = path.join(root, 'again.txt')
+    assert.equal(run(root, ['tag', '--github-output'], { GITHUB_OUTPUT: again }).status, 0)
+    assert.match(fs.readFileSync(again, 'utf8'), /^created=false\ntag=v0\.2\.0\n/)
+
+    fs.writeFileSync(path.join(root, 'CHANGELOG.md'), '# magplay\n')
+    const none = path.join(root, 'none.txt')
+    assert.equal(run(root, ['tag', '--github-output'], { GITHUB_OUTPUT: none }).status, 0)
+    assert.equal(fs.readFileSync(none, 'utf8'), 'created=false\ntag=\nnotes=\n')
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

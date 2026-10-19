@@ -3,16 +3,16 @@
 //   note --patch|--minor|--major|--empty -m "summary"
 //   status [--since <ref>] [--json]
 //   version [--dry-run] [--json] [--github-output]
-//   tag [--push] [--json]
-//   publish
+//   tag [--push] [--json] [--github-output]
+// The CLI runs git only. GitHub itself (pull requests, releases, dispatch) is
+// the workflow's job, fed by --github-output.
 import { fileURLToPath } from 'node:url'
 import { applyRelease, formatApply, releasePullRequest } from './apply.ts'
 import { writeGitHubOutput } from './github.ts'
 import { findRoot, loadNotes, type NoteBump, readAppVersion, writeNote } from './notes.ts'
 import { formatPlan, makePlan, type Plan } from './plan.ts'
-import { formatPublish, publishRelease } from './publish.ts'
 import { changesSince, hasAddedNote } from './status.ts'
-import { formatTag, tagRelease, type TagResult } from './tag.ts'
+import { formatTag, tagRelease } from './tag.ts'
 
 class ReleaseExit extends Error {
   readonly code: number
@@ -43,10 +43,7 @@ function main (): void {
       writeVersion(root, args.flags.get('dry-run') === true, json, args.flags.get('github-output') === true)
       return
     case 'tag':
-      writeTag(tagRelease(root, { push: args.flags.get('push') === true }), json)
-      return
-    case 'publish':
-      writePublish(root)
+      writeTag(root, args.flags.get('push') === true, json, args.flags.get('github-output') === true)
       return
     default:
       throw new Error(`Unknown command "${args.command}".\n\n${HELP}`)
@@ -71,11 +68,6 @@ function statusJson (plan: Plan, added: boolean | null) {
 }
 
 function writeVersion (root: string, dryRun: boolean, json: boolean, githubOutput: boolean): void {
-  if (githubOutput && process.env.GITHUB_ACTIONS === 'true' && !releaseToken()) {
-    process.stdout.write('RELEASE_TOKEN is not set, so the release pull request was skipped.\n')
-    writeGitHubOutput({ applied: false })
-    return
-  }
   const result = applyRelease(root, { dryRun })
   if (githubOutput) {
     writeGitHubOutput(result.applied ? { applied: true, ...releasePullRequest(result) } : { applied: false })
@@ -83,22 +75,11 @@ function writeVersion (root: string, dryRun: boolean, json: boolean, githubOutpu
   process.stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : formatApply(result))
 }
 
-function writePublish (root: string): void {
-  const token = releaseToken()
-  if (token && !process.env.GH_TOKEN) process.env.GH_TOKEN = token
-  const result = publishRelease(root, {
-    token,
-    actions: process.env.GITHUB_ACTIONS === 'true',
-    push: true,
-  })
-  process.stdout.write(formatPublish(result))
-}
-
-function releaseToken (): string | undefined {
-  return process.env.RELEASE_TOKEN || process.env.GH_TOKEN || undefined
-}
-
-function writeTag (result: TagResult, json: boolean): void {
+function writeTag (root: string, push: boolean, json: boolean, githubOutput: boolean): void {
+  const result = tagRelease(root, { push })
+  if (githubOutput) {
+    writeGitHubOutput({ created: result.created, tag: result.tag ?? '', notes: result.notes ?? '' })
+  }
   process.stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : formatTag(result))
 }
 
@@ -170,11 +151,9 @@ const HELP = `Release notes, the application version and the changelog.
   status [--since <ref>]     pending notes; exit 2 when --since added none
   version [--dry-run]        write the version and CHANGELOG.md, and delete the notes
   tag [--push]               tag v<version> when the changelog has that version
-  publish                    push that tag and publish the GitHub Release
 
---json prints the result as JSON. version --github-output writes applied, title
-and body for the release pull request. In GitHub Actions that command and
-publish skip when RELEASE_TOKEN is unset.
+--json prints the result as JSON. --github-output writes step outputs:
+version sets applied, title and body; tag sets created, tag and notes.
 `
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

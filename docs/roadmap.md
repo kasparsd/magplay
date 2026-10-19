@@ -54,7 +54,7 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 
 27. **Seeding:** two Storage settings, sharing on by default and a share ratio (0.5×, 1×, 2× or 5×, default 1×). A loaded torrent whose data is all on disk keeps sharing past the playback idle timeout until it has uploaded the ratio times its size; the total survives restarts in `seed.json`, and the handle is then unloaded with its data kept. The engine owns the rest: at most three seeded torrents, a 128 KiB/s upload cap while anything is streaming and no cap otherwise, a 24-hour no-peer/no-upload unload, and seeded data evicted after all other cache data but never while streamed. See [the plan](plans/seeding-support.md) and [resources](resources.md).
 
-28. **Application releases:** `@magplay/release` turns `.changeset/` notes into the version in `apps/server/package.json` and root `CHANGELOG.md`. A push to `main` opens or updates the release pull request; merging it tags `v<version>` and publishes the GitHub Release that the image workflow already builds. See [releases](releases.md) and [validation](checkpoints/2026-10-19-application-releases.md). The `RELEASE_TOKEN` secret is still for the owner to add.
+28. **Application releases:** `@magplay/release` turns `.changeset/` notes into the version in `apps/server/package.json` and root `CHANGELOG.md`. A push to `main` opens or updates the release pull request; merging it tags `v<version>` and publishes the GitHub Release that the image workflow already builds. See [releases](releases.md) and [validation](checkpoints/2026-10-19-application-releases.md). The workflows run on `GITHUB_TOKEN` and dispatch each other; no secret is needed.
 
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
@@ -72,7 +72,7 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## What to do next
 
-Updated 2026-10-19 after application releases. Cached torrent reuse, broader discovery filters and Settings refinements are recorded above. The [desktop packaging](plans/desktop-packaging.md) plan remains unimplemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently. Before the first tagged release, add the `RELEASE_TOKEN` secret described in [releases](releases.md). The prepare and tag workflows skip that step until it exists.
+Updated 2026-10-19 after application releases. Cached torrent reuse, broader discovery filters and Settings refinements are recorded above. The [desktop packaging](plans/desktop-packaging.md) plan remains unimplemented. Structured logs and metrics are ready for real-server measurement; device acceptance can proceed independently. The first prepare run on `main` opens the `0.2.0` release pull request from the pending notes; the repository must allow Actions to create pull requests ([releases](releases.md#first-release)).
 
 Items 1–2 need the owner's devices and server. The TypeScript Phase 7 review and generic torrent UX are complete. Remaining client/test/tooling conversions happen on touch. Conditional items still require a demonstrated need.
 
