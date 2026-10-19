@@ -108,7 +108,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   const play = createPlay({ engine, media, tabs, input, logger: log.child({ component: 'playback' }), metrics, policy: () => ({ allowTranscode: current().allowTranscode, transcodeMaxHeight: current().transcodeMaxHeight }) })
   const subtitles = createSubtitles({ engine, media, input })
   const search = createSearchService({ sources: () => current().sources, timeoutMs: () => current().searchTimeoutMs, engine, logger: log.child({ component: 'search' }), metrics })
-  const explore = createExplore({ url: () => current().bitmagnetUrl, timeoutMs: () => current().searchTimeoutMs, logger: log.child({ component: 'explore' }), metrics })
+  const explore = createExplore({ url: () => current().bitmagnetUrl, timeoutMs: () => current().searchTimeoutMs, showAdult: () => current().showAdult, logger: log.child({ component: 'explore' }), metrics })
   const status = createStatus({ logger: log.child({ component: 'status' }) })
   const caches = (): DebugResource[] => {
     const subs = subtitles.stats()

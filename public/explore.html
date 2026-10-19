@@ -14,10 +14,28 @@
   </header>
   <main>
     <form id="filters" class="toolbar">
-      <div class="seg" role="radiogroup" aria-label="Type">
-        <label><input type="radio" aria-label="Movies" name="type" value="movie" checked><span>Movies</span></label>
-        <label><input type="radio" aria-label="TV" name="type" value="tv_show"><span>TV</span></label>
-      </div>
+      <select name="type" aria-label="Type">
+        <optgroup label="Video">
+          <option value="movie" selected>Movies</option>
+          <option value="tv_show">TV shows</option>
+        </optgroup>
+        <optgroup label="Audio">
+          <option value="music">Music</option>
+          <option value="audiobook">Audiobooks</option>
+        </optgroup>
+        <optgroup label="Reading">
+          <option value="ebook">Books</option>
+          <option value="comic">Comics</option>
+        </optgroup>
+        <optgroup label="Software">
+          <option value="game">Games</option>
+          <option value="software">Software</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option value="xxx">Adult</option>
+          <option value="unknown">Uncategorized</option>
+        </optgroup>
+      </select>
       <div class="seg" role="radiogroup" aria-label="Sort">
         <label><input type="radio" aria-label="Most seeded" name="sort" value="seeders" checked><span>Most seeded</span></label>
         <label><input type="radio" aria-label="Newest" name="sort" value="added"><span>Newest</span></label>

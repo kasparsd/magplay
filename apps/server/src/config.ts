@@ -21,6 +21,7 @@ export interface Config {
   /** BitMagnet's origin for Explore, or null when there's none. */
   bitmagnetUrl: string | null
   searchTimeoutMs: number
+  showAdult: boolean
   cacheDir: string
   ffmpegPath: string
   ffprobePath: string
@@ -206,6 +207,7 @@ export function deriveSettings (v: Values): Omit<Config, keyof EnvOnlyConfig> {
     sources,
     bitmagnetUrl: bitmagnetUrl(str(v, 'explore.bitmagnetUrl'), sources),
     searchTimeoutMs: num(v, 'search.timeoutS') * 1000,
+    showAdult: bool(v, 'content.showAdult'),
     cacheMaxBytes: num(v, 'cache.maxGb') * GB,
     hlsMaxBytes: num(v, 'cache.hlsMaxGb') * GB,
     minFreeBytes: num(v, 'cache.minFreeGb') * GB,

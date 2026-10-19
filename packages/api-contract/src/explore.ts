@@ -1,6 +1,6 @@
 // Explore: GET /api/explore, /api/explore/facets, /api/explore/latest and /api/title/:type/:source/:id (BitMagnet).
 
-export type ExploreType = 'movie' | 'tv_show'
+export type ExploreType = 'movie' | 'tv_show' | 'music' | 'audiobook' | 'ebook' | 'comic' | 'game' | 'software' | 'xxx' | 'unknown'
 
 export interface ExploreRelease {
   infoHash: string
