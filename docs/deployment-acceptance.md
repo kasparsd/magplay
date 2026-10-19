@@ -15,7 +15,7 @@ The script also verifies structured correlated playback logs, sanitized Debug, t
 
 ## Recorded local results
 
-The latest local validation is recorded in [the dated checkpoint](checkpoints/2026-10-17-local-validation.md). Results from the tiny warm synthetic fixture do not establish real-world playback latency, sustained throughput, browser rendering, large-file hashing behavior, or server capacity. The container check also verifies that frontend modules are served and colocated test files are excluded from the image.
+The latest local validation is recorded in [the dated checkpoint](checkpoints/2026-10-17-local-validation.md). Results from the tiny warm synthetic fixture do not establish real-world playback latency, sustained throughput, browser rendering, large-file hashing behavior, or server capacity. The container check also verifies that frontend modules are served and colocated test files are excluded from the image. A separate local measurement of Node's heap ceiling and one Node remux's resident memory is in [the container-memory checkpoint](checkpoints/2026-10-19-node-container-memory.md); it does not replace peak and sustained memory on the real server.
 
 ## Still required on the server
 
