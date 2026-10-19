@@ -200,8 +200,8 @@ export function releaseRow (r: ReleaseRowItem, href: string, { extra = [], meta 
         r.episode && el('span', { className: 'badge note', textContent: r.episode }),
         ...(r.badges ?? []).map(b => el('span', { className: 'badge', textContent: b })),
         r.playbackEffort === 'direct' && el('span', { className: 'badge good', textContent: 'plays in browser', title: 'H.264 with AAC or no audio: plays natively in any browser' }),
-        r.playbackEffort === 'remux' && el('span', { className: 'badge good', textContent: 'plays in browser (quick remux)', title: 'H.264 video with non-AAC audio: a cheap ffmpeg pass converts the audio' }),
-        r.playbackEffort === 'transcode' && el('span', { className: 'badge', textContent: 'converts on server', title: 'The video must be re-encoded; expensive unless a GPU encoder is available' }),
+        r.playbackEffort === 'remux' && el('span', { className: 'badge good', textContent: 'remux only', title: 'H.264 video: a cheap ffmpeg pass repackages or converts the audio' }),
+        r.playbackEffort === 'transcode' && el('span', { className: 'badge', textContent: 'transcode', title: 'The video must be re-encoded; expensive unless a GPU encoder is available' }),
         ...extra),
       note && el('div', { className: 'meta', textContent: note })),
     el('span', { className: 'size' }, [...meta, formatBytes(r.size), r.seeders != null && count(r.seeders, 'seeder')].filter(Boolean).join(' · ')))
