@@ -42,6 +42,15 @@ export function applyRelease (root: string, options?: { dryRun?: boolean }): App
   return { applied: !dryRun, dryRun, current: plan.current, next, bump: plan.bump, notes }
 }
 
+/** Title and body for the release pull request of an applied version. */
+export function releasePullRequest (result: ApplyResult): { title: string, body: string } {
+  if (result.next === null) throw new Error('no version bump is pending')
+  return {
+    title: `Release ${result.next}`,
+    body: `Merging this pull request tags v${result.next} and publishes the container image.\n\n${result.notes.trim()}\n`,
+  }
+}
+
 export function formatApply (result: ApplyResult): string {
   if (result.next === null || result.bump === null) return `${result.current}, no version bump pending\n`
   const line = `${result.current} → ${result.next} (${result.bump})`

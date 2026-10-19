@@ -5,11 +5,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyRelease } from './apply.ts'
+import { applyRelease, releasePullRequest } from './apply.ts'
 import { changelogEntry } from './changelog.ts'
+import { formatGitHubOutput } from './github.ts'
 import { gitOk } from './git.ts'
 import { APP, loadNotes, parseNote, writeNote } from './notes.ts'
 import { makePlan } from './plan.ts'
+import { publishRelease } from './publish.ts'
 import { hasAddedNote } from './status.ts'
 import { tagRelease } from './tag.ts'
 
@@ -161,6 +163,92 @@ test('status exits 2 when the range adds no note, and note writes a changeset', 
   }
 })
 
+test('github output keeps a multiline pull request body in one value', () => {
+  const text = formatGitHubOutput({ applied: true, body: 'First line.\n\n- Seeking restarts conversion.' })
+  const delimiter = /^applied=true\nbody<<(\S+)\n/.exec(text)?.[1]
+  assert.ok(delimiter)
+  assert.ok(text.endsWith(`${delimiter}\n`))
+  assert.match(text, /First line\.\n\n- Seeking restarts conversion\./)
+})
+
+test('version --github-output reports the pull request, and skips in Actions without a token', () => {
+  const root = fixture({
+    'apps/server/package.json': `${JSON.stringify(SERVER, null, 2)}\n`,
+    '.changeset/seeking.md': `---\n"${APP}": patch\n---\n\nSeeking restarts conversion.\n`,
+  })
+  const output = path.join(root, 'github-output.txt')
+  try {
+    assert.equal(releasePullRequest(applyRelease(root, { dryRun: true })).title, 'Release 0.1.1')
+    const applied = run(root, ['version', '--github-output'], {
+      GITHUB_OUTPUT: output,
+      GITHUB_ACTIONS: '',
+      RELEASE_TOKEN: '',
+      GH_TOKEN: '',
+    })
+    assert.equal(applied.status, 0, applied.stderr)
+    const text = fs.readFileSync(output, 'utf8')
+    assert.match(text, /applied=true/)
+    assert.match(text, /title=Release 0\.1\.1/)
+    assert.match(text, /tags v0\.1\.1/)
+    assert.match(text, /Seeking restarts conversion/)
+
+    const skippedOutput = path.join(root, 'skipped.txt')
+    const skipped = run(root, ['version', '--github-output'], {
+      GITHUB_OUTPUT: skippedOutput,
+      GITHUB_ACTIONS: 'true',
+      RELEASE_TOKEN: '',
+      GH_TOKEN: '',
+    })
+    assert.equal(skipped.status, 0, skipped.stderr)
+    assert.match(skipped.stdout, /release pull request was skipped/)
+    assert.equal(fs.readFileSync(skippedOutput, 'utf8'), 'applied=false\n')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('publish creates the GitHub Release from the tag, and skips when the token or changelog is missing', () => {
+  const root = gitFixture({
+    'apps/server/package.json': `${JSON.stringify({ ...SERVER, version: '0.2.0' }, null, 2)}\n`,
+    'CHANGELOG.md': '# magplay\n\n## 0.2.0\n\n### Patch\n\n- Seeking restarts conversion.\n',
+  })
+  try {
+    assert.equal(publishRelease(root, { token: undefined, actions: true, push: false }).reason, 'no-token')
+    const calls: string[][] = []
+    const published = publishRelease(root, {
+      token: 'token',
+      actions: true,
+      push: false,
+      run (command, args) {
+        calls.push([command, ...args])
+        if (args[1] === 'view') return { status: 1, stdout: '', stderr: 'not found' }
+        return { status: 0, stdout: '', stderr: '' }
+      },
+    })
+    assert.equal(published.reason, 'published')
+    assert.equal(published.tag, 'v0.2.0')
+    assert.deepEqual(calls.map(call => call.slice(0, 3)), [
+      ['gh', 'release', 'view'],
+      ['gh', 'release', 'create'],
+    ])
+    assert.match(calls[1]?.at(-1) ?? '', /Seeking restarts conversion/)
+    calls.length = 0
+    const again = publishRelease(root, {
+      token: 'token',
+      actions: true,
+      push: false,
+      run (command, args) {
+        calls.push([command, ...args])
+        return { status: 0, stdout: '', stderr: '' }
+      },
+    })
+    assert.equal(again.reason, 'exists')
+    assert.deepEqual(calls, [['gh', 'release', 'view', 'v0.2.0']])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 function noteProblems (text: string): string[] {
   const parsed = parseNote(text)
   return 'problems' in parsed ? parsed.problems : []
@@ -186,7 +274,7 @@ function gitFixture (files: Record<string, string>): string {
   return root
 }
 
-function run (root: string, args: string[]) {
+function run (root: string, args: string[], env: NodeJS.ProcessEnv = {}) {
   const cli = fileURLToPath(new URL('./cli.ts', import.meta.url))
-  return spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8' })
+  return spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, ...env } })
 }

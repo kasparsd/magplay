@@ -45,11 +45,11 @@ Run it locally with `npm run release -- status --since origin/main`.
 
 ## What happens on main
 
-A push to `main` that changes `.changeset/`, `packages/release/` or the prepare workflow runs [prepare-release.yml](../.github/workflows/prepare-release.yml). When a note requests a bump, `version` deletes the notes (including empty ones), raises the server version by the highest bump and prepends the changelog section. The workflow then refreshes `package-lock.json` and opens or updates the pull request on `release/next`. The title is `Release <version>`.
+A push to `main` that changes `.changeset/`, `packages/release/` or the prepare workflow runs [prepare-release.yml](../.github/workflows/prepare-release.yml). It runs `version --github-output`, which deletes the notes (including empty ones), raises the server version by the highest bump and prepends the changelog section. The step outputs `applied`, `title` and `body`. When `applied` is true, the workflow refreshes `package-lock.json` and opens or updates the pull request on `release/next`. The title is `Release <version>`.
 
 Empty notes alone leave the tree unchanged, so no pull request is opened. They stay until a real note is released with them.
 
-Merging `release/next` runs [tag-release.yml](../.github/workflows/tag-release.yml). `tag` creates `v<version>` at the merge commit when that tag is absent, and does not move a tag that already exists. The workflow publishes the GitHub Release with the changelog section as its body. [publish-image.yml](../.github/workflows/publish-image.yml) builds and pushes the versioned GHCR image from that release. Ordinary pushes to `main` still publish `edge`.
+Merging `release/next` runs [tag-release.yml](../.github/workflows/tag-release.yml), which runs `publish`. That creates `v<version>` at the merge commit when the tag is absent, does not move a tag that already exists, and publishes the GitHub Release with the changelog section as its body. [publish-image.yml](../.github/workflows/publish-image.yml) builds and pushes the versioned GHCR image from that release. Ordinary pushes to `main` still publish `edge`.
 
 Both workflows use the `RELEASE_TOKEN` secret. Events created with `GITHUB_TOKEN` do not start other workflows, so the release pull request would not be tested and the GitHub Release would not build the image. Until the secret is set, the jobs log that they skipped.
 

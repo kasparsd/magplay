@@ -60,7 +60,7 @@ The earlier extraction and test-layout commits are prerequisites already deliver
 
 ## Verification and confidence
 
-- Fast colocated suite: **266 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, not helper modules or browser tests.
+- Fast colocated suite: **269 tests**. `npm test` builds the client and selects colocated `*.test.js`/`*.test.ts` under `apps/` and `packages/`, not helper modules or browser tests.
 - Loopback integration: **4 runner entries** (one parent and three scenarios), selected by `npm run test:peers`.
 - Chromium: **73 tests**, selected by `npm run test:e2e`; playback assertions require advancing decoded frames, not merely HTTP success.
 - `npm run test:all` runs all three suites. CI also runs `npm run typecheck` and `npm run lint` (no warnings allowed). The Node 22 validation and first Docker smoke are recorded in [the final checkpoint](checkpoints/2026-10-17-local-validation.md); the isolated Docker check was rerun on Node 24 Alpine after each reorganization step, most recently after Phases 3–4 on 2026-10-18 (arm64; remux first segment 217 ms, seek-to-30 s 221 ms).

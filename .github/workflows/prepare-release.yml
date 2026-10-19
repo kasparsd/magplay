@@ -24,54 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - id: token
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "RELEASE_TOKEN is not set, so the release pull request was skipped."
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-node@v4
-        if: steps.token.outputs.present == 'true'
         with:
           node-version-file: .nvmrc
-
       - id: version
-        if: steps.token.outputs.present == 'true'
-        run: |
-          set -eu
-          npm run release -- version --json > "$RUNNER_TEMP/version.json"
-          applied=$(jq -r .applied "$RUNNER_TEMP/version.json")
-          echo "applied=$applied" >> "$GITHUB_OUTPUT"
-          if [ "$applied" != "true" ]; then
-            echo "No version bump is pending."
-            exit 0
-          fi
-          version=$(jq -r .next "$RUNNER_TEMP/version.json")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          delimiter="RELEASE_BODY_$(openssl rand -hex 8)"
-          {
-            echo "body<<${delimiter}"
-            echo "Merging this pull request tags v${version} and publishes the container image."
-            echo
-            jq -r .notes "$RUNNER_TEMP/version.json"
-            echo "${delimiter}"
-          } >> "$GITHUB_OUTPUT"
-
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: npm run release -- version --github-output
       - if: steps.version.outputs.applied == 'true'
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-
       - uses: peter-evans/create-pull-request@v7
         if: steps.version.outputs.applied == 'true'
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
-          commit-message: Release ${{ steps.version.outputs.version }}
+          commit-message: ${{ steps.version.outputs.title }}
           branch: release/next
           delete-branch: true
-          title: Release ${{ steps.version.outputs.version }}
+          title: ${{ steps.version.outputs.title }}
           body: ${{ steps.version.outputs.body }}
