@@ -124,6 +124,38 @@ test('non-faststart MP4 is remuxed instead of played directly', async () => {
   assert.equal(result.mode, 'remux')
 })
 
+test('a remux reports the keyframe it starts on, not the later requested time', async () => {
+  const mkv: MediaInfo = { ...info, container: 'matroska,webm', audio: [{ index: 0, codec: 'aac', channels: 2, language: null, title: null, default: true }] }
+  let started = -1
+  const options = {
+    engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(mkv), keyframeBefore: (_input: string, at: number) => { assert.equal(at, 35.2); return Promise.resolve(34) } },
+    tabs: { stop: () => {}, start: (_tab: string, opts: { start: number }) => { started = opts.start; return { id: 's' } } },
+    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 35.2, caps: { h264: true, aac: true } }, () => false)
+  assert.equal(result.mode, 'remux')
+  assert.equal(result.offset, 34)
+  assert.equal(started, 34)
+})
+
+test('a transcode keeps the requested time instead of snapping to a keyframe', async () => {
+  const mpeg4: MediaInfo = { ...info, video: { ...info.video!, codec: 'mpeg4' } }
+  let started = -1
+  const options = {
+    engine: { get: () => Promise.resolve({ files: [{ name: 'a.mkv' }] }), file: () => Promise.resolve({ name: 'a.mkv' }), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(mpeg4), keyframeBefore: () => Promise.reject(new Error('must not look up a keyframe')) },
+    tabs: { stop: () => {}, start: (_tab: string, opts: { start: number }) => { started = opts.start; return { id: 's' } } },
+    policy: () => ({ allowTranscode: true, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const result = await createPlay(options).play({ ih: 'ih', idx: 0, start: 35.2, caps: { aac: true } }, () => false)
+  assert.equal(result.mode, 'transcode')
+  assert.equal(result.offset, 35.2)
+  assert.equal(started, 35.2)
+})
+
 test('faststart MP4 is still played directly', async () => {
   const files = [faststartFile()]
   const options = {

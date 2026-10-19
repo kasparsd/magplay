@@ -32,12 +32,17 @@ test('MKV/AC3 remux: seek, switch audio, restart before session offset', async (
   expect((await openPlayer(page, app, remux)).mode).toBe('remux')
   await seek(page, 35)
   await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(35)
+  const requested = await page.locator('#seek').inputValue().then(Number)
   const switching = playResponse(page)
   await chooseAudio(page, 1)
   const switched = await (await switching).json()
   expect(switched.mode).toBe('remux')
-  expect(switched.offset).toBeGreaterThanOrEqual(35)
+  // Copied video starts at the keyframe before the request; playback seeks the remainder inside the session
+  const lead = requested - switched.offset
+  expect(lead).toBeGreaterThan(0.2)
+  expect(lead).toBeLessThan(2.5)
   await expectPlaying(page)
+  expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThan(lead - 0.75)
   const restarting = playResponse(page)
   await seek(page, 10)
   const restarted = await (await restarting).json()
@@ -104,12 +109,12 @@ test('embedded and external subtitles follow a restarted HLS offset', async ({ p
   await expectCues(page, 'Middle subtitle')
   await expectCues(page, 'Last subtitle')
   const embeddedStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
-  expect(Math.abs(embeddedStart - (70 - decision.offset))).toBeLessThan(2)
+  expect(Math.abs(embeddedStart - (70 - decision.offset))).toBeLessThan(0.2)
   const external = `file:${app.files['Playback.S01E02.srt']}`
   await chooseSubtitles(page, external)
   await expectCues(page, 'Last subtitle')
   const lastStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
-  expect(lastStart).toBeCloseTo(70 - decision.offset, 0)
+  expect(Math.abs(lastStart - (70 - decision.offset))).toBeLessThan(0.2)
   // A → Off → A must not create duplicate polling loops/cues.
   await chooseSubtitles(page, '')
   await chooseSubtitles(page, external)

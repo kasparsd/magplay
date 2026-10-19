@@ -33,6 +33,6 @@ A source with the picture turning white and a tone starting at the same instant 
 - `npm test` (260), `npm run typecheck`, `npm run lint`, `npm run test:e2e` (74; one direct-playback resume test flaked under full-suite load and passed 3/3 alone — it uses no HLS).
 - hls.js 1.7.3 in Chromium plays the new segments across the existing seek-restart, audio-switch and resume tests.
 
-## Open
+## Follow-up
 
-The session timeline now begins at the keyframe before `start` for both tracks, while `offset` reports `start`: the position readout and subtitles lead the picture by the keyframe distance after a resume, seek restart or audio switch (previously only the video did). Roadmap item 3 holds the follow-up.
+The session origin and open-GOP segment boundaries were fixed the same day. See [the segment-timing checkpoint](2026-10-19-hls-segment-timing.md).

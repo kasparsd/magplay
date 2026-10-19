@@ -68,14 +68,22 @@ test('HLS sessions keep track start offsets in fragment timestamps, never in edi
   const options = { input: '/raw/x/2', audio: 0, mode: 'remux' as const, dir: '/tmp/hls', transcodeMaxHeight: 720, info: { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }], subtitles: [] } }
   const resumed = ffmpegArgs({ ...options, start: 36.5 })
   const value = (args: string[], key: string) => args[args.indexOf(key) + 1]
-  // Converted audio must start where copied video does: the keyframe the seek lands on, not `start` itself
+  // Converted audio must start where copied video does: the keyframe the seek lands on, not a later trim
   assert.deepEqual(resumed.slice(resumed.indexOf('-noaccurate_seek'), resumed.indexOf('-i') + 1), ['-noaccurate_seek', '-ss', '36.5', '-i'])
-  // Browsers' MSE parsers ignore edit lists, so the fragment muxer must write real start times into tfdt
-  assert.equal(value(resumed, '-hls_segment_options'), 'use_editlist=0:movflags=+frag_discont:avoid_negative_ts=disabled')
+  // Edit lists are ignored by MSE; skip_sidx keeps an open GOP's first sample from being moved onto the previous segment
+  assert.equal(value(resumed, '-hls_segment_options'), 'use_editlist=0:movflags=+frag_discont+skip_sidx:avoid_negative_ts=disabled')
   assert.equal(value(resumed, '-hls_segment_type'), 'fmp4')
+  // Copied video keeps the container's timebase, so millisecond MKV timestamps are not rounded into a codec-derived one
+  assert.deepEqual(resumed.slice(resumed.indexOf('-c:v'), resumed.indexOf('-c:v') + 4), ['-c:v', 'copy', '-copytb', '1'])
   const fresh = ffmpegArgs({ ...options, start: 0 })
   assert.ok(!fresh.includes('-ss') && !fresh.includes('-noaccurate_seek'))
   assert.equal(value(fresh, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
+  // Re-encoded video can begin on the requested frame, so it does not disable accurate seeking
+  const transcode = ffmpegArgs({ ...options, mode: 'transcode', start: 36.5 })
+  assert.equal(transcode.includes('-noaccurate_seek'), false)
+  assert.equal(transcode.includes('-copytb'), false)
+  assert.equal(value(transcode, '-ss'), '36.5')
+  assert.equal(value(transcode, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
 })
 
 test('sample aspect ratios: anamorphic, square and unknown', () => {
