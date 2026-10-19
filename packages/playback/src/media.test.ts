@@ -64,6 +64,20 @@ test('remux copies HEVC as hvc1, converts audio and maps only text subtitles', (
   assert.ok(!args.includes('0:s:1'))
 })
 
+test('HLS sessions keep track start offsets in fragment timestamps, never in edit lists', () => {
+  const options = { input: '/raw/x/2', audio: 0, mode: 'remux' as const, dir: '/tmp/hls', transcodeMaxHeight: 720, info: { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }], subtitles: [] } }
+  const resumed = ffmpegArgs({ ...options, start: 36.5 })
+  const value = (args: string[], key: string) => args[args.indexOf(key) + 1]
+  // Converted audio must start where copied video does: the keyframe the seek lands on, not `start` itself
+  assert.deepEqual(resumed.slice(resumed.indexOf('-noaccurate_seek'), resumed.indexOf('-i') + 1), ['-noaccurate_seek', '-ss', '36.5', '-i'])
+  // Browsers' MSE parsers ignore edit lists, so the fragment muxer must write real start times into tfdt
+  assert.equal(value(resumed, '-hls_segment_options'), 'use_editlist=0:movflags=+frag_discont:avoid_negative_ts=disabled')
+  assert.equal(value(resumed, '-hls_segment_type'), 'fmp4')
+  const fresh = ffmpegArgs({ ...options, start: 0 })
+  assert.ok(!fresh.includes('-ss') && !fresh.includes('-noaccurate_seek'))
+  assert.equal(value(fresh, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
+})
+
 test('sample aspect ratios: anamorphic, square and unknown', () => {
   assert.equal(sampleAspect('4:3'), 4 / 3)
   assert.equal(sampleAspect('1:1'), 1)
