@@ -6,9 +6,17 @@ export type Child = Node | string | null | undefined | false
 
 /**
  * querySelector that assumes the element exists: pages query their own static markup.
- * Phase 5 replaces this with a checked requireElement(selector, ctor).
+ * Pages adopt the checked requireElement(selector, ctor) below as they convert.
  */
 export const $ = <E extends Element = HTMLElement>(selector: string, root: ParentNode = document): E => root.querySelector(selector) as E
+
+/** Query owned static markup and check its runtime element type before using it. */
+export function requireElement<E extends Element> (selector: string, ctor: new () => E, root: ParentNode = document): E {
+  const node = root.querySelector(selector)
+  if (!(node instanceof ctor)) throw new Error(`Expected ${selector} to be a ${ctor.name}`)
+  return node
+}
+
 export const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 const present = (c: Child): c is Node | string => c != null && c !== false

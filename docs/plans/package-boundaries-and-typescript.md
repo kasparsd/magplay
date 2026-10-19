@@ -129,8 +129,8 @@ Each phase leaves `main` passing typecheck, unit, peer and e2e tests and the Doc
 
 Not a dedicated sweep. Each page entry is converted the next time it changes substantively; `player.js` is replaced by the TypeScript rewrite in [Player step 1](../user-interface.md#1-one-player-chrome-for-every-mode). `capabilities` converts with Phase 4, when it starts importing codec keys from `playback`.
 
-- [ ] Convert `capabilities`, then the `search`, `explore`, `title`, `torrent` and `player` entries as they are touched. *`capabilities` and `player` converted 2026-10-18, with the player's pure parts split into `lib/player-*.ts` and `lib/format.ts`; `settings` is also TypeScript; `search`, `explore`, `title` and `torrent` remain `.js`.* The player keeps its imperative lifecycle ([lifetime rules](../lifecycle.md)); per-activation state objects are fine where they fall out naturally.
-- [ ] Add a typed `requireElement(selector, ctor)` helper instead of non-null assertions, with the first page conversion.
+- [ ] Convert `capabilities`, then the `search`, `explore`, `title`, `torrent` and `player` entries as they are touched. *`capabilities` and `player` converted 2026-10-18, with the player's pure parts split into `lib/player-*.ts` and `lib/format.ts`; `settings` is also TypeScript; `torrent` converted with generic torrent download UX on 2026-10-19; `search`, `explore` and `title` remain `.js`.* The player keeps its imperative lifecycle ([lifetime rules](../lifecycle.md)); per-activation state objects are fine where they fall out naturally.
+- [x] Add a typed `requireElement(selector, ctor)` helper instead of non-null assertions. Added and used by the torrent page on 2026-10-19; remaining pages adopt it when touched.
 - [ ] Remove `allowJs` from `apps/client` once the last page is converted.
 
 ### Phase 6: Tests, scripts and config files (on touch)
@@ -161,8 +161,8 @@ Runs once Phase 4 is done, since Phase 4 adds most vendor-boundary types (`webto
 | 2 | Contract and pure packages | ✅ Done | `ee3ae1d`, `8c1b76c`…`00ef1de` | `api-contract`, `release-info`, `seekable-tar`, `http-kit`, boundary lint rules, `toHttpError` and the pure client helpers |
 | 3 | Indexers | ✅ Done | `cd6c1bc` | `@magplay/indexers`; typed parse functions with fixtures; indexer errors; env parsing in `apps/server/src/config.ts` |
 | 4 | Torrent engine, playback, server split | ✅ Done | `f171049`, `87b8beb`, `66a60fb` | `torrent-engine` and `playback` with factories and `close()`; `apps/server` fully `.ts` with `app.ts`/`main.ts`, `services/`, `http/`; graceful shutdown tested |
-| 5 | Client pages | ⬜ On touch | | Player rewritten in TS by Player step 1 |
-| 6 | Tests, scripts, config files | ⬜ On touch | | |
+| 5 | Client pages | ⬜ On touch | | Player, settings and torrent are TS; search, explore and title remain JS |
+| 6 | Tests, scripts, config files | ⬜ On touch | | New torrent-download browser tests use a referenced TS project and a minimal declaration for the existing JS fixture harness |
 | 7 | Tighten and document | ✅ Done | Working tree, 2026-10-19 | Assertion/suppression audit; unused-code compiler checks; three selected strict lint rules; canonical docs and checkpoint |
 
 Legend: ⬜ Not started · 🟨 In progress · ✅ Done · ⛔ Blocked
@@ -187,7 +187,7 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 
 - **Server, from `src/`:** [x] `config` · [x] `limits` · [x] `range` · [x] `http-cache` · [x] `router` · [x] `tar` · [x] `episodes` · [x] `torrent-ready` · [x] `search` · [x] `torrents` · [x] `media` · [x] `sessions` · [x] `server` (now `app`, `main`, `services/*`, `http/*`)
 - **Sources:** [x] `release` · [x] `links` · [x] `torznab` · [x] `prowlarr` · [x] `bitmagnet` · [x] `index` (now `sources.ts`) · [x] `test-helpers`
-- **Client:** [x] `lib/api-types` · [x] `lib/urls` · [x] `lib/requests` · [x] `lib/subtitles` · [x] `lib/capabilities` · [x] `lib/progress` · [x] `lib/api` · [x] `lib/ui` · [ ] `search` · [ ] `explore` · [ ] `title` · [ ] `torrent` · [x] `player` · [x] `settings`
+- **Client:** [x] `lib/api-types` · [x] `lib/urls` · [x] `lib/requests` · [x] `lib/subtitles` · [x] `lib/capabilities` · [x] `lib/progress` · [x] `lib/api` · [x] `lib/ui` · [ ] `search` · [ ] `explore` · [ ] `title` · [x] `torrent` · [x] `player` · [x] `settings`
 - **Tests, scripts, config:** [ ] `tests/e2e/fixtures` · [ ] `tests/e2e/playback.test` · [ ] `tests/fixtures/media` · [ ] `tests/integration/peers.test` · [ ] `tools/scripts/setup-indexers` · [ ] `tools/scripts/check-docker` · [ ] `playwright.config`
 
 ## Risks and open questions
@@ -225,3 +225,5 @@ Tick when the file is `.ts` in its target location, type-checks, passes the type
 - 2026-10-19: Reviewed recent commits against the roadmap. Continuing with Phase 7 under the owner’s request: audit assertions and suppressions, evaluate stricter compiler/lint checks, fix useful findings, run regression suites, and record decisions and evidence in canonical docs/checkpoints. Client pages and external test/tooling conversions remain on touch.
 
 - 2026-10-19: Phase 7 delivered. Lasting compiler/lint and assertion policy is in architecture.md; audit details and regression evidence are in the Phase 7 checkpoint. DEPENDENCIES.md does not exist: dependency documentation was updated in its canonical location, README.md, instead of creating a duplicate. Phases 5–6 remain incomplete on purpose; this plan stays until those on-touch conversions finish.
+
+- 2026-10-19: Converted torrent.js to torrent.ts with generic download UX, checked markup queries and narrowed history records. Added a TypeScript e2e project, typed download regressions and minimal fixture/create-torrent declarations; existing JS browser tests/harness remain on touch.

@@ -55,6 +55,8 @@ Torrent detail requests use `torrent-engine.info()` to describe a ready torrent 
 
 The player's pure `lib/playback-status.ts` diagnoses the current wait; `lib/playback-flow.ts` presents it as four independently observed stages and an attributed wait location. It uses existing status and browser signals, exact selected-file completion, and published HLS readiness. `lib/playback-status-view.ts` retains nodes and controls across updates, including inspection, Diagnostics, focus, and common recovery menus. `player.ts` owns the page-local pin and retains a source-only snapshot for at most six seconds through session restarts; session and browser readiness do not survive those restarts. No new server endpoints or delivery-rate estimates support the flow. See [UI behavior](user-interface.md#playback-wait-explanations).
 
+The torrent page is `apps/client/src/torrent.ts`, typed against the shared torrent/status contracts. It checks owned markup through `requireElement(selector, ctor)` and narrows browser history records before using them. Download-only primary actions use the existing `/raw?...download=1` or `/tar` routes; no eager torrent activation, new download job or second byte source is introduced.
+
 ### Upstream requests and secrets
 
 - Indexer adapters fetch through `request()` in `packages/indexers/src/release.ts`. It follows redirects itself, only on the same server (an http → https upgrade included) and at most three times, so an `X-Api-Key` header or `apikey=` query never reaches another host. A redirect elsewhere is a `SourceError` asking for the new address. Bodies go through `readBytes`/`readText`/`readJson`, capped at 16 MiB by `Content-Length` and while streaming.

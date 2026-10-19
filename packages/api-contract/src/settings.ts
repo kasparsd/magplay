@@ -194,7 +194,7 @@ export const SETTINGS: readonly SettingDef[] = [
     optional: true,
     placeholder: 'http://bitmagnet:3333',
   },
-  { key: 'content.showAdult', section: 'sources', scope: 'server', type: 'toggle', label: 'Show adult content', help: 'Show adult titles in search results and Explore.', env: ['SHOW_ADULT_CONTENT', 'ALLOW_ADULT'], default: false },
+  { key: 'content.showAdult', section: 'sources', scope: 'server', type: 'toggle', label: 'Show adult content in Explore', help: 'Show classified adult releases in Explore and its title pages. This does not filter search results from your sources.', env: ['SHOW_ADULT_CONTENT', 'ALLOW_ADULT'], default: false },
   { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Stop waiting for a source after this many seconds.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
 
   // Playback, server

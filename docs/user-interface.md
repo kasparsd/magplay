@@ -24,7 +24,15 @@ One person (or a household) on a trusted local network, on a laptop, phone or TV
 
 ### Discovery types
 
-Explore offers Movies and TV, Music and Audiobooks, Books and Comics, Games and Software, Adult and Uncategorized. BitMagnet supplies the classification. `content.showAdult` defaults to false and excludes classified adult Explore/title releases; requesting the Adult type while disabled returns a readable refusal. It does not filter generic Torznab/Prowlarr search results. Clarifying the setting's broader help text and finishing non-media download messaging remain in the [taxonomy plan](plans/generic-torrent-taxonomy.md).
+Explore offers Movies and TV, Music and Audiobooks, Books and Comics, Games and Software, Adult and Uncategorized. BitMagnet supplies the classification. `content.showAdult` defaults to false and excludes classified adult Explore/title releases; requesting the Adult type while disabled returns a readable refusal. It does not filter generic Torznab/Prowlarr search results. The setting is labeled “Show adult content in Explore” and its help explicitly states that source search results are unaffected.
+
+Explore maps BitMagnet types as follows: Movies (`movie`), TV (`tv_show`), Music (`music`), Audiobooks (`audiobook`), Books (`ebook`), Comics (`comic`), Games (`game`), Software (`software`), Adult (`xxx`) and Uncategorized (`unknown`). Search uses Torznab categories All, Movies (`2000`), TV (`5000`), Audio (`3000`), Software (`4000`), Books (`7000`) and Other (`8000`).
+
+### Download-only torrents
+
+A torrent with no video files has a primary **Download file** action for one file or **Download all (.tar, size)** for multiple files. Its file names and per-row Download links download the corresponding file. Small file sizes use bytes or KB rather than rounding nonempty files down to 0 MB. The page explains “No videos in this torrent. Download the files or open it in your torrent client.” The More menu keeps the magnet/torrent-client handoff and copy action. It does not advertise Play or a playback playlist for audio, books, software or other files without video.
+
+Mixed torrents retain Play/Resume as the primary action, the video/external-player menus and the whole-torrent download in More. Other files remain in their disclosure with direct downloads. Release lists use neutral notes: “Download (.exe)”, “Download archive (.iso)” or, once a cached file list establishes that it has no video, “Download only · no video files”. These notes describe the available action; browser audio-only playback is not implemented by this change.
 
 ### Honest states
 

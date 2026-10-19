@@ -169,7 +169,6 @@ ul.files { list-style: none; margin: 0; padding: 0; }
 li.file { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 li.file .main { flex: 1; min-width: 0; }
 li.file .label { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-li.file.plain .main span { overflow-wrap: anywhere; }
 li.file .filename { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 li.file .badge { margin-left: 8px; }
 @media (max-width: 560px) { li.file .badge { display: table; margin: 2px 0 0; } }

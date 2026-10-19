@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "types": ["node"],
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["*.ts", "types/*.d.ts", "../../packages/torrent-engine/src/types/parse-torrent.d.ts"],
+  "references": [{ "path": "../../packages/api-contract" }]
+}

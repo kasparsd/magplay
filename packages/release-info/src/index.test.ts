@@ -77,19 +77,31 @@ test('small videos count when nothing big exists; extras count when nothing else
 test('titles of programs and archives get a note instead of the Firefox hint', () => {
   const exe = badges('You Can See Everything 2026.1080p. HD h264- OpenContent.exe')
   assert.equal(exe.likelyDirect, false)
-  assert.equal(exe.warning, 'Not a media file (.exe)')
-  assert.equal(badges('Movie.2020.1080p.x264.rar').warning, "Archive (.rar), can't stream")
+  assert.equal(exe.warning, 'Download (.exe)')
+  assert.equal(badges('Movie.2020.1080p.x264.rar').warning, 'Download archive (.rar)')
   assert.equal(badges('Big Buck Bunny.S01.720p.BluRay.x264-OpenContent').warning, null)
 })
 
 test('content note from the file list', () => {
   const v = { name: 'Movie.mkv', isVideo: true, isProgram: false }
   const exe = { name: 'dir/Movie.1080p.exe', isVideo: false, isProgram: true }
-  assert.equal(contentWarning([exe]), 'No media file found')
+  assert.equal(contentWarning([exe]), 'Download only · no video files')
   assert.equal(contentWarning([v, exe]), null)
 })
 
 test('OpenContent releases count as H.264 with AAC', () => {
   assert.deepEqual(badges('It Was Just An Accident (2025) [1080p] [WEBRip] [5.1] [OpenContent]'), { badges: ['1080p', 'H.264', 'AAC', 'WEBRip'], likelyDirect: true, warning: null })
   assert.equal(badges('Movie.2020.1080p.BluRay.x265-OpenContent').badges.includes('HEVC'), true) // an explicit codec wins
+})
+
+test('audio, books and disk images remain downloadable without claiming browser video playback', () => {
+  const files = listFiles({
+    name: 'Downloads',
+    files: ['song.flac', 'guide.pdf', 'linux.iso'].map(name => ({ name, path: `Downloads/${name}`, length: 1000 })),
+  })
+  assert.equal(files.length, 3)
+  assert.equal(files.some(f => f.isVideo), false)
+  assert.equal(contentWarning(files), 'Download only · no video files')
+  assert.equal(badges('linux.iso').warning, 'Download archive (.iso)')
+  assert.equal(badges('linux.iso').likelyDirect, false)
 })
