@@ -474,7 +474,7 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
 }
 
 /* Playback explanations own their channel; transient notices cannot replace them. */
-#playback-status { position: relative; z-index: 3; min-width: 0; min-height: 0; padding: 22px 28px 86px; display: grid; align-content: center; pointer-events: none; }
+#playback-status { position: relative; z-index: 3; min-width: 0; min-height: 0; padding: 22px 28px 120px; display: grid; align-content: center; pointer-events: none; }
 #playback-status .playback-reason { pointer-events: auto; width: min(100%, 540px); justify-self: center; max-height: max(140px, calc(100dvh - var(--topbar-h, 0px) - var(--title-row-h, 0px) - 120px)); overflow: auto; scrollbar-width: thin; padding: 4px; }
 #stage.has-playback-wait { min-height: min(440px, calc(100dvh - var(--topbar-h, 0px) - var(--title-row-h, 0px))); }
 #stage.has-playback-wait > video { height: 100%; min-height: 0; }
@@ -508,7 +508,7 @@ fieldset.list-item { margin: 0; padding: 0; border: 1px solid var(--line); borde
 #stage:fullscreen #playback-status .playback-reason { max-height: calc(100dvh - 155px); }
 #stage:fullscreen #playback-status.warning { padding-top: 72px; }
 @container (max-width: 520px) {
-  #playback-status { padding: 18px 14px 76px; }
+  #playback-status { padding: 18px 14px 100px; }
   #playback-status h2 { font-size: 20px; }
   #playback-status .playback-description { font-size: 13px; margin-bottom: 12px; }
   #playback-status .playback-evidence { gap: 4px 12px; margin-bottom: 12px; }
