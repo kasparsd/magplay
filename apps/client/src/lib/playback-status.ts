@@ -71,6 +71,14 @@ export function explainPlayback (input: PlaybackSignals): PlaybackExplanation | 
   }
   if (file && !complete && buffer < 1) {
     if (!st?.peers.length) return result('peers', 'Waiting for peers', 'The file is incomplete and no peers are connected. Still looking for a source.', ['release'])
+    const ranges = file.ranges ?? []
+    const tailPresent = ranges.some(([, end]) => end >= 0.999)
+    const stalled = (st?.downloadSpeed ?? 0) === 0
+    if (!tailPresent && stalled) {
+      return result('tail', 'Waiting for the end of the file',
+        'This file is still downloading and its video index is stored at the end, so playback cannot start until peers send the tail. Try an external player or a release with faststart (web-optimized) metadata.',
+        ['external', 'release'])
+    }
     return result('download', 'Waiting for torrent data', 'This file is still downloading. More source data may be needed before playback can continue.', ['release'])
   }
   if (!decision) {

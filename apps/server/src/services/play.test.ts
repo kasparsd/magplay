@@ -79,3 +79,61 @@ test('cancelled preparation has one metric outcome and no false error or session
   assert.ok(logging.tail().some(l => l.requestId === 'request' && typeof l.operationId === 'string'))
   telemetry.close()
 })
+
+function faststartFile () {
+  return {
+    name: 'sample.mp4',
+    read: async function * () {
+      await Promise.resolve()
+      // moov box before mdat box: faststart.
+      const bytes = new Uint8Array(124)
+      const view = new DataView(bytes.buffer)
+      view.setUint32(0, 24); bytes.set([0x6d, 0x6f, 0x6f, 0x76], 4)
+      view.setUint32(24, 100); bytes.set([0x6d, 0x64, 0x61, 0x74], 28)
+      yield bytes
+    },
+  }
+}
+
+function nonFaststartFile () {
+  return {
+    name: 'sample.mp4',
+    read: async function * () {
+      await Promise.resolve()
+      // ftyp box (24 bytes) followed by mdat box (100 bytes): moov is not before mdat.
+      const bytes = new Uint8Array(124)
+      const view = new DataView(bytes.buffer)
+      view.setUint32(0, 24); bytes.set([0x66, 0x74, 0x79, 0x70], 4)
+      view.setUint32(24, 100); bytes.set([0x6d, 0x64, 0x61, 0x74], 28)
+      yield bytes
+    },
+  }
+}
+
+test('non-faststart MP4 is remuxed instead of played directly', async () => {
+  const files = [nonFaststartFile()]
+  const options = {
+    engine: { get: () => Promise.resolve({ files }), file: () => Promise.resolve(files[0]), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(info) },
+    tabs: { stop: () => {}, start: () => ({ id: 's' }) },
+    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const play = createPlay(options)
+  const result = await play.play({ ih: 'ih', idx: 0, caps: { h264: true } }, () => false)
+  assert.equal(result.mode, 'remux')
+})
+
+test('faststart MP4 is still played directly', async () => {
+  const files = [faststartFile()]
+  const options = {
+    engine: { get: () => Promise.resolve({ files }), file: () => Promise.resolve(files[0]), describe: () => ({ files: [] }) },
+    media: { probe: () => Promise.resolve(info) },
+    tabs: { stop: () => {}, start: () => ({ id: 's' }) },
+    policy: () => ({ allowTranscode: false, transcodeMaxHeight: 720 }),
+    input: () => 'http://raw',
+  } as unknown as PlayOptions
+  const play = createPlay(options)
+  const result = await play.play({ ih: 'ih', idx: 0, caps: { h264: true } }, () => false)
+  assert.equal(result.mode, 'direct')
+})
