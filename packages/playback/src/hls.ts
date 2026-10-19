@@ -186,6 +186,7 @@ export function createHlsSessions ({
 
   const sessions = new Map<string, Session>()
   const removals = new Set<Promise<void>>()
+  const warnedEncoderFallbacks = new Set<string>()
 
   function removeDir (folder: string): void {
     const removal: Promise<void> = fs.promises.rm(folder, { recursive: true, force: true })
@@ -247,6 +248,11 @@ export function createHlsSessions ({
   function start ({ input, info, audio, start: at, mode, replaces, context, onReady }: StartOptions): Session {
     const { maxSessions, minFreeBytes, hlsMaxBytes, ffmpegPath, transcodeMaxHeight, transcodeEncoder, vaapiDevice, detectedEncoders } = live()
     const resolvedEncoder = resolveTranscodeEncoder(transcodeEncoder, detectedEncoders ?? [])
+    const requestedEncoder = (transcodeEncoder ?? 'auto').trim()
+    if (mode === 'transcode' && requestedEncoder !== 'auto' && requestedEncoder !== 'libx264' && resolvedEncoder === 'libx264' && !warnedEncoderFallbacks.has(requestedEncoder)) {
+      warnedEncoderFallbacks.add(requestedEncoder)
+      logger.warn('hls.encoder.fallback', { requestedEncoder, encoder: resolvedEncoder })
+    }
     const admitted = [...sessions.values()].filter(s => !s.failure && s.id !== replaces)
     if (admitted.length >= maxSessions) {
       metrics.reject('hls', 'capacity')

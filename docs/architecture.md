@@ -140,6 +140,12 @@ An HLS session is one ffmpeg writing fMP4 segments from a point in the file (`ff
 
 The segment options are `use_editlist=0:movflags=+frag_discont+skip_sidx:avoid_negative_ts=disabled`. `tests/e2e/hls-sync.test.ts` measures a flash and a tone through the real argument list with edit lists ignored, and checks that an open-GOP remux presents exactly the source's frames, each at its own time. [The sync checkpoint](checkpoints/2026-10-19-hls-av-sync.md) and [the segment-timing checkpoint](checkpoints/2026-10-19-hls-segment-timing.md) record the measurements.
 
+## Transcode encoder selection
+
+Encoder detection first reads `ffmpeg -encoders`, then runs one bounded, one-frame lavfi encode for each listed hardware candidate. A hardware encoder is available only when that encode succeeds with the same VAAPI device path used by an HLS session; detection failures never prevent startup. libx264 needs no runtime probe and remains the floor for `auto` and unavailable explicit choices. Detection runs at startup and existing refresh points, not when each HLS session starts.
+
+The published Alpine image's ffmpeg includes VAAPI and, on x86_64, Quick Sync support, but the image deliberately includes neither VAAPI driver libraries nor the Intel oneVPL GPU runtime. Its ffmpeg does not compile NVENC, and VideoToolbox does not exist on Linux. Consequently, the stock image selects libx264 unless a hardware probe succeeds. Passing `/dev/dri` into the container is necessary for VAAPI or Quick Sync but is not sufficient without the matching userspace driver; the image does not add GPU drivers, Mesa, Intel compute runtime, NVENC support or another ffmpeg build.
+
 ## Framework and browser-media triggers
 
 Preact is a conditional option, not a chosen destination. Consider it only if shared reactive state or component composition becomes the dominant maintenance problem. Keep the media controller imperative even if a framework eventually owns its surrounding shell. The player's lifecycle and abort ownership is described in [lifetime rules](lifecycle.md).
