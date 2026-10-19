@@ -9,7 +9,7 @@
 import { fileURLToPath } from 'node:url'
 import { applyRelease, formatApply, releasePullRequest } from './apply.ts'
 import { writeGitHubOutput } from './github.ts'
-import { findRoot, loadNotes, type NoteBump, readAppVersion, writeNote } from './notes.ts'
+import { findRoot, loadNotes, loadWorkspaces, type NoteBump, readAppVersion, writeNote } from './notes.ts'
 import { formatPlan, makePlan, type Plan } from './plan.ts'
 import { changesSince, hasAddedNote } from './status.ts'
 import { formatTag, tagRelease } from './tag.ts'
@@ -34,7 +34,7 @@ function main (): void {
       process.stdout.write(HELP)
       return
     case 'note':
-      process.stdout.write(`${writeNote(root, noteBump(args.flags), noteSummary(args.flags))}\n`)
+      process.stdout.write(`${writeNote(root, noteBump(args.flags), noteSummary(args.flags), notePackages(args))}\n`)
       return
     case 'status':
       writeStatus(root, flagString(args.flags, 'since'), json)
@@ -55,7 +55,7 @@ function writeStatus (root: string, since: string | undefined, json: boolean): v
   if (loaded.problems.length) {
     throw new Error(`Release notes (docs/releases.md):\n${loaded.problems.map(problem => `- ${problem}`).join('\n')}`)
   }
-  const plan = makePlan(readAppVersion(root), loaded.notes)
+  const plan = makePlan(readAppVersion(root), loaded.notes, loadWorkspaces(root))
   const added = since === undefined ? null : hasAddedNote(changesSince(root, since))
   process.stdout.write(json ? `${JSON.stringify(statusJson(plan, added), null, 2)}\n` : formatPlan(plan))
   if (added === false) {
@@ -81,6 +81,14 @@ function writeTag (root: string, push: boolean, json: boolean, githubOutput: boo
     writeGitHubOutput({ created: result.created, tag: result.tag ?? '', notes: result.notes ?? '' })
   }
   process.stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : formatTag(result))
+}
+
+function notePackages (args: Args): string[] {
+  if (args.flags.get('empty') === true) {
+    if (args.packages.length) throw new Error('An empty note names no package.')
+    return []
+  }
+  return args.packages
 }
 
 function noteBump (flags: Map<string, string | true>): NoteBump {
@@ -111,12 +119,14 @@ function flagString (flags: Map<string, string | true>, name: string): string | 
 interface Args {
   command: string
   flags: Map<string, string | true>
+  packages: string[]
   positionals: string[]
 }
 
 function parseArgs (argv: string[]): Args {
   const [command = 'help', ...rest] = argv
   const flags = new Map<string, string | true>()
+  const packages: string[] = []
   const positionals: string[] = []
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i] ?? ''
@@ -130,26 +140,35 @@ function parseArgs (argv: string[]): Args {
     }
     const raw = arg === '-m' ? 'message' : arg.replace(/^--/, '')
     const eq = raw.indexOf('=')
-    if (eq >= 0) {
-      flags.set(raw.slice(0, eq), raw.slice(eq + 1))
+    const name = eq >= 0 ? raw.slice(0, eq) : raw
+    const inline = eq >= 0 ? raw.slice(eq + 1) : undefined
+    if (name === 'package') {
+      const value = inline ?? rest[i + 1]
+      if (value === undefined || value.startsWith('-')) throw new Error('--package needs a value.')
+      packages.push(value)
+      if (inline === undefined) i++
+      continue
+    }
+    if (inline !== undefined) {
+      flags.set(name, inline)
       continue
     }
     const next = rest[i + 1]
     if (next !== undefined && !next.startsWith('-')) {
-      flags.set(raw, next)
+      flags.set(name, next)
       i++
       continue
     }
-    flags.set(raw, true)
+    flags.set(name, true)
   }
-  return { command, flags, positionals }
+  return { command, flags, packages, positionals }
 }
 
 const HELP = `Release notes, the application version and the changelog.
 
-  note --patch|--minor|--major|--empty -m "what changed"
+  note --patch|--minor|--major|--empty [--package <name>]... -m "what changed"
   status [--since <ref>]     pending notes; exit 2 when --since added none
-  version [--dry-run]        write the version and CHANGELOG.md, and delete the notes
+  version [--dry-run]        write versions and changelogs, and delete the notes
   tag [--push]               tag v<version> when the changelog has that version
 
 --json prints the result as JSON. --github-output writes step outputs:

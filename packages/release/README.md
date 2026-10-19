@@ -1,11 +1,12 @@
 # @magplay/release
 
-Collects the notes in `.changeset/` and writes the application version and the root changelog. Nothing in this package is published to npm. How to write a note, and how a release moves from `main` to a container image, is in [docs/releases.md](../../docs/releases.md).
+Collects the notes in `.changeset/` and writes the application version, the versions of the packages a note names, the root changelog and those packages' changelogs. Nothing in this package is published to npm. How to write a note, and how a release moves from `main` to a container image, is in [docs/releases.md](../../docs/releases.md).
 
 Run it from the repository root with `npm run release -- <command>`.
 
 ```bash
 npm run release -- note --patch -m "Seeking past the converted part restarts conversion instead of stalling."
+npm run release -- note --package @magplay/playback --minor -m "Seeking restarts conversion."
 npm run release -- note --empty
 npm run release -- status --since origin/main
 npm run release -- version --dry-run
@@ -14,11 +15,11 @@ npm run release -- tag
 
 ## Commands
 
-`note` writes one file under `.changeset/`. The bump is `--patch`, `--minor`, `--major` or `--empty`. A real note needs `-m`. An empty note is the file with no summary, for a change an operator does not see.
+`note` writes one file under `.changeset/`. The bump is `--patch`, `--minor`, `--major` or `--empty`. A real note needs `-m`. With no `--package`, the note names `@magplay/server`. Repeat `--package` to name workspaces, all at that bump. An empty note is the file with no summary and no package, for a change an operator does not see.
 
-`status` checks the pending notes. With `--since <ref>` it exits 2 when that range adds no note. Notes already on the base do not count, and neither does editing one.
+`status` checks the pending notes and prints the application bump and any package bump. With `--since <ref>` it exits 2 when that range adds no note. Notes already on the base do not count, and neither does editing one.
 
-`version` raises `apps/server/package.json` by the highest bump, prepends a section to `CHANGELOG.md` and deletes the notes, including empty ones. It does not commit, tag or touch `package-lock.json`. `--dry-run` prints the result and writes nothing. Empty notes alone change nothing and are left in place.
+`version` raises `apps/server/package.json` by the highest bump, raises each named package, prepends the combined section to `CHANGELOG.md` and prepends each package's own section to `CHANGELOG.md` beside its manifest. It deletes the notes, including empty ones. It does not commit, tag or touch `package-lock.json`. `--dry-run` prints the result and writes nothing. Empty notes alone change nothing and are left in place. The root entry names each package and its new version once; a note that names only the application is the summary alone.
 
 `tag` creates the lightweight tag `v<version>` at `HEAD` when the changelog has that version. It does not move a tag that already exists. A version with no changelog section, including the `0.1.0` baseline, is left untagged. `--push` sends the tag to `origin` with whatever credentials git already has; in Actions that is the checkout's `GITHUB_TOKEN`.
 
