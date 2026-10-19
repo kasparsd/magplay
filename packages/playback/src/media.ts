@@ -88,6 +88,21 @@ export interface ToolOptions {
 
 const lastLine = (text: string): string => text.trim().split('\n').pop() ?? ''
 
+/**
+ * The video keyframe at or just before `start` seconds: input seeking can only begin copied video there.
+ * One indexed read (`-skip_frame nokey` emits that keyframe first). Falls back to `start` when the file has no index.
+ */
+export function keyframeBefore (input: string, start: number, { ffprobePath = 'ffprobe' }: ToolOptions = {}): Promise<number> {
+  if (!(start > 0)) return Promise.resolve(0)
+  const args = ['-v', 'error', '-select_streams', 'v:0', '-skip_frame', 'nokey', '-show_entries', 'frame=pts_time', '-read_intervals', `${start}%+#1`, '-of', 'csv=p=0', input]
+  return new Promise(resolve => {
+    execFile(ffprobePath, args, { timeout: 20_000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+      const pts = Number((stdout ?? '').split(/[,\s]/, 1)[0])
+      resolve(!err && pts >= 0 && pts <= start + 0.001 ? pts : start)
+    })
+  })
+}
+
 /** ffprobe summary of a file or URL (an HTTP input is read with Range requests). */
 export function probe (input: string, fileName: string, { ffprobePath = 'ffprobe' }: ToolOptions = {}): Promise<MediaInfo> {
   const args = ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', input]
@@ -213,10 +228,10 @@ export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMax
     ['-map', `0:s:${s.index}`, '-c:s', 'webvtt', '-flush_packets', '1', '-f', 'webvtt', `${dir}/sub_${s.index}.vtt`])
   return [
     '-hide_banner', '-nostdin', '-loglevel', 'warning', '-progress', 'pipe:1',
-    // Input seeking lands on the keyframe before `start`, where copied video has to begin. Without -noaccurate_seek
-    // ffmpeg would trim converted audio to `start` itself, so the tracks would begin up to a GOP apart.
-    // FLV can't seek even to 0 and would skip to the next keyframe
-    ...(start ? ['-noaccurate_seek', '-ss', String(start)] : []), '-i', input,
+    // Input seeking lands on the keyframe before `start`, where copied video has to begin. The caller passes that
+    // keyframe (keyframeBefore), and -noaccurate_seek keeps converted audio from being trimmed to a later time.
+    // A transcode can start on the requested frame, so it keeps ffmpeg's accurate seek. FLV can't seek even to 0.
+    ...(start ? [...(mode === 'remux' ? ['-noaccurate_seek'] : []), '-ss', String(start)] : []), '-i', input,
     '-map', '0:v:0', ...(a ? ['-map', `0:a:${audio}`] : []),
     ...video, ...audioArgs,
     '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'event',
@@ -226,7 +241,9 @@ export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMax
     // B-frame delay, encoder priming) into an edit list. hls.js never reads edit lists and Chrome's MSE ignores
     // empty edits, so audio ran ahead of video. frag_discont without edit lists keeps the offsets in tfdt;
     // the outer hls muxer has already made the timestamps non-negative, so the fragment muxer must not shift again.
-    '-hls_segment_options', 'use_editlist=0:movflags=+frag_discont:avoid_negative_ts=disabled',
+    // skip_sidx stops the DASH index, which HLS does not read, from pulling an open-GOP segment's first sample
+    // back onto the previous segment's last timestamp. That rewrite drops the frame in Chrome.
+    '-hls_segment_options', 'use_editlist=0:movflags=+frag_discont+skip_sidx:avoid_negative_ts=disabled',
     '-hls_segment_filename', `${dir}/seg_%05d.m4s`, `${dir}/index.m3u8`,
     ...subs,
   ]
@@ -257,6 +274,8 @@ export interface MediaTools {
   subtitleToVtt: (input: string, track: number | null) => Promise<string>
   /** Detected hardware encoders for the current ffmpeg path (cached). */
   detectedEncoders: () => string[]
+  /** The video keyframe at or just before `start`; `start` itself when the file can't be indexed. */
+  keyframeBefore: (input: string, start: number) => Promise<number>
   /** Re-run encoder detection. */
   refreshEncoders: () => Promise<string[]>
   /** Busy slots and cached probe results, for the Debug page. */
@@ -307,6 +326,7 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
     subtitleToVtt: (input, track) => observeJob(logger, metrics, 'subtitle', async () => await runSubtitle(() => subtitleToVtt(input, track, live()))),
     detectedEncoders,
     refreshEncoders,
+    keyframeBefore: (input, start) => keyframeBefore(input, start, { ffprobePath: live().ffprobePath }),
     stats: () => ({ probes: runProbe.stats(), subtitles: runSubtitle.stats(), probeCache: { used: probes.size, limit: probeCacheLimit } }),
   }
 }

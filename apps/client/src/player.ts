@@ -311,6 +311,9 @@ async function start (at = 0, message = ''): Promise<void> {
   if (gen !== generation) return
   updateTimeline()
 
+  // A remux starts at the keyframe before the request. Play the remainder inside the session so the
+  // picture, the clock and the subtitles all meet at the requested time.
+  const intoSession = Math.max(0, at - decision.offset)
   let startPlayback = true
   if (decision.mode === 'direct') {
     video.src = decision.url
@@ -327,11 +330,12 @@ async function start (at = 0, message = ''): Promise<void> {
     // Safari plays HLS (and HEVC) natively; other browsers use hls.js
     if (!Hls.isSupported() || (navigator.vendor.includes('Apple') && video.canPlayType('application/vnd.apple.mpegurl'))) {
       video.src = decision.url
+      if (intoSession > 0.05) video.currentTime = intoSession
     } else {
       // hls.js only attaches a media source after it has parsed the manifest, so
       // calling play() synchronously here can be lost on slower or incomplete streams.
       startPlayback = false
-      const player = hls = new Hls({ startPosition: 0, maxBufferLength: 60 })
+      const player = hls = new Hls({ startPosition: intoSession > 0.05 ? intoSession : 0, maxBufferLength: 60 })
       player.on(Hls.Events.ERROR, (_, data) => { if (current() && data.fatal) failPlayback('Playback stopped', `Playback error: ${data.details}`) })
       player.on(Hls.Events.MANIFEST_PARSED, () => {
         if (!current()) return

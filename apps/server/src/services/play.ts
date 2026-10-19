@@ -132,11 +132,15 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
           tabs.stop(tab)
           return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, offset: 0 }
         }
+        // Copied video begins at the keyframe before the request. Report that time as the session origin so the
+        // clock and subtitles match the picture; the player seeks the remainder inside the session.
+        const origin = decision.mode === 'remux' && start > 0 ? await media.keyframeBefore(input(ih, idx), start) : start
+        check()
         const s = tabs.start(tab, {
           input: input(ih, idx),
           info,
           audio,
-          start,
+          start: origin,
           mode: decision.mode,
           context: { logger: log },
           onReady: () => {
@@ -152,7 +156,7 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
           duration: info.duration,
           url: `/hls/${s.id}/index.m3u8`,
           session: s.id,
-          offset: start,
+          offset: origin,
           // Text subtitles are written by the same ffmpeg, timed relative to the session start
           subtitles: info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
         }

@@ -7,7 +7,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { ffmpegArgs } from '@magplay/playback'
+import { ffmpegArgs, keyframeBefore } from '@magplay/playback'
 import { test, expect } from './fixtures.js'
 
 const exec = promisify(execFile)
@@ -76,6 +76,95 @@ test('HLS remux keeps audio and video aligned without edit lists, from the start
       if (start) expect(flash).toBeLessThan(2)
       else expect(flash).toBeGreaterThan(FLASH_AT - 0.1)
     }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+/** Direct child box of this range, not nested ones. */
+function childBox (buf: Buffer, start: number, end: number, type: string): { off: number, size: number } | null {
+  for (let off = start; off + 8 <= end;) {
+    let size = buf.readUInt32BE(off)
+    const kind = buf.toString('latin1', off + 4, off + 8)
+    if (size === 1) size = Number(buf.readBigUInt64BE(off + 8))
+    if (size < 8 || off + size > end) return null
+    if (kind === type) return { off, size }
+    off += size
+  }
+  return null
+}
+
+/** Timescale of the first track, which is the video. */
+function videoTimescale (init: Buffer): number {
+  const moov = childBox(init, 0, init.length, 'moov')
+  const trak = moov && childBox(init, moov.off + 8, moov.off + moov.size, 'trak')
+  const mdia = trak && childBox(init, trak.off + 8, trak.off + trak.size, 'mdia')
+  const mdhd = mdia && childBox(init, mdia.off + 8, mdia.off + mdia.size, 'mdhd')
+  if (!mdhd) throw new Error('init segment has no video timescale')
+  const version = init[mdhd.off + 8] ?? 0
+  return init.readUInt32BE(mdhd.off + 8 + (version === 1 ? 20 : 12))
+}
+
+/** Presentation time of the first video sample, in the track's timescale. */
+function firstVideoPts (seg: Buffer): number {
+  const moof = childBox(seg, 0, seg.length, 'moof')
+  const traf = moof && childBox(seg, moof.off + 8, moof.off + moof.size, 'traf')
+  if (!traf) throw new Error('segment has no video fragment')
+  let dts = 0
+  let cts = 0
+  for (let off = traf.off + 8; off + 8 <= traf.off + traf.size;) {
+    let size = seg.readUInt32BE(off)
+    const kind = seg.toString('latin1', off + 4, off + 8)
+    if (size === 1) size = Number(seg.readBigUInt64BE(off + 8))
+    if (size < 8) break
+    if (kind === 'tfdt') {
+      const version = seg[off + 8] ?? 0
+      dts = version === 1 ? Number(seg.readBigUInt64BE(off + 12)) : seg.readUInt32BE(off + 12)
+    }
+    if (kind === 'trun') {
+      const version = seg[off + 8] ?? 0
+      const flags = seg.readUInt32BE(off + 8) & 0xffffff
+      let p = off + 16
+      if (flags & 1) p += 4
+      if (flags & 4) p += 4
+      if (flags & 0x100) p += 4
+      if (flags & 0x200) p += 4
+      if (flags & 0x400) p += 4
+      if (flags & 0x800) cts = version === 1 ? seg.readInt32BE(p) : seg.readUInt32BE(p)
+    }
+    off += size
+  }
+  return dts + cts
+}
+
+test('an open GOP keeps each segment\'s opening frame, and a resume begins at the preceding keyframe', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-opengop-'))
+  try {
+    const source = path.join(dir, 'open.mkv')
+    await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+      '-t', '20', '-c:v', 'libx264', '-preset', 'medium', '-bf', '3', '-x264-params', 'open-gop=1',
+      '-g', '48', '-crf', '30', '-pix_fmt', 'yuv420p', '-c:a', 'ac3', '-b:a', '192k', source], { timeout: 60_000 })
+    // Keyframes are every 2 s. 11.4 s can only start at 10; 12 s is itself a keyframe.
+    expect(await keyframeBefore(source, 11.4)).toBe(10)
+    expect(await keyframeBefore(source, 12)).toBe(12)
+    expect(await keyframeBefore(source, 0)).toBe(0)
+    const out = path.join(dir, 'hls')
+    await fs.mkdir(out)
+    const info = { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 2, language: null, title: null, default: true }], subtitles: [] }
+    await exec('ffmpeg', ffmpegArgs({ input: source, info, audio: 0, start: 0, mode: 'remux', dir: out, transcodeMaxHeight: 720 }), { timeout: 60_000 })
+    const timescale = videoTimescale(await fs.readFile(path.join(out, 'init.mp4')))
+    const playlist = await fs.readFile(path.join(out, 'index.m3u8'), 'utf8')
+    let boundary = 0
+    let segments = 0
+    for (const match of playlist.matchAll(/#EXTINF:([\d.]+),[^\n]*\r?\n(seg_\d+\.m4s)/g)) {
+      const first = firstVideoPts(await fs.readFile(path.join(out, match[2] ?? ''))) / timescale
+      expect(first, `segment ${segments} opens at ${first.toFixed(3)} s, before its boundary ${boundary}`).toBeGreaterThanOrEqual(boundary - 0.001)
+      boundary += Number(match[1])
+      segments++
+    }
+    expect(segments).toBeGreaterThan(2)
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }
