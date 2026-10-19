@@ -3,13 +3,13 @@
 Run from a development checkout with Docker, ffmpeg (for the fixtures) and npm dependencies installed:
 
 ```sh
-docker build -t magplay:local-acceptance .
+docker build -t magplay:local-acceptance .                       # the magplay image, the default target
 node tools/scripts/check-docker.mjs
-docker build --target lite -t magplay:local-acceptance-lite .
-node tools/scripts/check-docker.mjs magplay:local-acceptance-lite
+docker build --target core -t magplay:local-acceptance-core .
+node tools/scripts/check-docker.mjs magplay:local-acceptance-core
 ```
 
-The script reads `serverConversion` from `/api/debug` and checks the variant it finds: the full image's AC3/MKV HLS remux, or the lite image's `browser-remux` decision for the same file and the ffmpeg status warning.
+The script reads `serverConversion` from `/api/debug` and checks the variant it finds: the full image's AC3/MKV HLS remux, or the core image's `browser-remux` decision for the same file and the ffmpeg status warning.
 
 The script also verifies structured correlated playback logs, sanitized Debug, the private metrics listener, the bounded local Docker logging driver and final JSON records after graceful SIGTERM. It generates original small media, starts an isolated non-root container on an ephemeral loopback port, installs only its fixture cache, and checks health, torrent verification, the probe, a 1 KB byte range, direct MP4 selection, AC3/MKV HLS remux (full image), a restart at 30 seconds and session deletion. It removes its container and temporary files even on failure. It does not alter the Compose stack or existing media cache.
 

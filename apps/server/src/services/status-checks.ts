@@ -85,7 +85,7 @@ export function createStatusChecks ({ status, config, engine, media, hls, logs, 
     },
   })
 
-  // Without ffmpeg (the lite image) the server still streams files as they are and the browser repackages what it
+  // Without ffmpeg (the core image) the server still streams files as they are and the browser repackages what it
   // can; nothing is re-encoded. That is a mode, not a fault, so it warns rather than fails.
   status.registerCheck({
     id: 'ffmpeg',

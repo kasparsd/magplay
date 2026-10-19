@@ -25,8 +25,9 @@ For sample media to try it with, Blender’s [Open Movies](https://studio.blende
   streamed.
 - Plays in the browser (direct / browser remux / remux / transcode) or hands
   a `/raw` link to an external player that decodes everything on the client.
-- Runs without ffmpeg (the `-lite` image) on small hosts such as a router's
-  container host: the browser repackages MKV and converts AC3/DTS audio itself.
+- Runs without ffmpeg (the `magplay-core` image) on small hosts such as a
+  router's container host: the browser repackages MKV and converts AC3/DTS
+  audio itself.
 - Downloads individual files or whole torrents as a tar archive, with resume.
 - Keeps a cache with LRU eviction; torrents in use are never evicted.
 - No login by design; only expose on a private network (WireGuard).
@@ -90,24 +91,28 @@ Then open `http://example-host:3382/`. To build from a checkout instead of
 pulling the image, replace `image:` with `build: .`; the repository's own
 [compose.yml](compose.yml) does this and adds Jackett and Prowlarr (see
 [Trying it with Jackett and Prowlarr](#trying-it-with-jackett-and-prowlarr)).
-The image is `node:24-alpine` plus Alpine's `ffmpeg` (about 125 MB to
-download), builds for `linux/arm64` (and amd64), runs as `node`, and has a
-healthcheck on `GET /health`.
+There are two images, built from the same Dockerfile and published to GHCR:
 
-Prebuilt images are published to `ghcr.io/kasparsd/magplay`. Publishing a
-GitHub release `vX.Y.Z` tags the image `X.Y.Z`, `X.Y` and `X`; a prerelease
-(such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to `main`
-moves the `edge` tag, and older edge builds are deleted. There is no `latest`
-tag, so pin a release or follow `edge` on purpose.
+- **`ghcr.io/kasparsd/magplay`**: the one to start with. `node:24-alpine`
+  plus Alpine's `ffmpeg` (libx264, AAC/AC3, VAAPI and Quick Sync hooks), about
+  125 MB to download, for server-side remux, transcode and embedded subtitles.
+- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about a
+  third smaller. It plays MP4/WebM directly, repackages MKV and converts
+  AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files
+  itself, and hands everything else to an external player. Nothing is
+  transcoded, and subtitles embedded in MKV need the full image. Meant for
+  small hosts such as MikroTik RouterOS containers, where ffmpeg would not fit
+  or run well. `magplay` is `magplay-core` plus the ffmpeg layer, so both
+  behave identically apart from what ffmpeg adds.
 
-Every tag also exists with a `-lite` suffix (`edge-lite`, `X.Y.Z-lite`): the
-same server without ffmpeg, about a third smaller. It plays MP4/WebM directly, repackages MKV and converts
-AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files itself,
-and hands everything else to an external player. Nothing is transcoded, and
-subtitles embedded in MKV need the full image. Meant for small hosts such as
-MikroTik RouterOS containers, where ffmpeg would not fit or run well. Build it
-from a checkout with `docker build --target lite .`; the full image is the
-default target.
+Both build for `linux/arm64` and `linux/amd64`, run as `node`, and have a
+healthcheck on `GET /health`. From a checkout, `docker build .` builds the full
+image and `docker build --target core .` the core one.
+
+Publishing a GitHub release `vX.Y.Z` tags both images `X.Y.Z`, `X.Y` and `X`;
+a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to
+`main` moves the `edge` tag, and older edge builds are deleted. There is no
+`latest` tag, so pin a release or follow `edge` on purpose.
 
 ## First search and playback
 
@@ -218,7 +223,7 @@ env vars are listed first and locked; sources added in Settings follow them.
 | `TRANSCODE_MAX_HEIGHT` | `720` | Downscale target when transcoding |
 | `TRANSCODE_ENCODER` | `auto` | Encoder: `auto`, `libx264`, or `h264_nvenc`/`h264_vaapi`/`h264_videotoolbox`/`h264_qsv`. Hardware choices fall back to libx264 unless a startup probe succeeds. |
 | `VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI render device |
-| `FFMPEG_PATH` | `ffmpeg` | Path to the binary when it isn't on `PATH`. When ffmpeg doesn't run, the server starts anyway in lite mode (a status warning), without remux, transcode or embedded subtitles. |
+| `FFMPEG_PATH` | `ffmpeg` | Path to the binary when it isn't on `PATH`. When ffmpeg doesn't run, the server starts anyway as the core image does (a status warning), without remux, transcode or embedded subtitles. |
 
 Local safeguards reject excess jobs with a retryable 503 rather than an unbounded
 queue. See [resource limits](docs/resources.md), [player lifetime handling](docs/lifecycle.md), and [per-file Resume/Start over behavior](docs/progress.md). HLS disk limits are soft; use a filesystem/container quota for a hard bound.
@@ -255,7 +260,7 @@ Each video can be played these ways:
   2. **remux**: the video codec is supported but the container (MKV…) or the
      audio (AC3, E-AC3, DTS, TrueHD…) isn't. ffmpeg copies the video into HLS
      (fMP4) and converts the audio to AAC stereo, which takes very little CPU.
-  3. **browser remux**: the same, on a server without ffmpeg. The browser
+  3. **browser remux**: the same, on a server without ffmpeg (`magplay-core`). The browser
      reads `/raw`, copies the video and converts the audio to AAC itself
      ([Mediabunny](https://mediabunny.dev/) with WebCodecs and small WASM
      decoders for AC3/DTS), a minute ahead of playback. The timeline is the
@@ -461,7 +466,7 @@ npm run test:all             # Fast + peer + browser suites
 
 Playback tests need `ffmpeg` on `PATH`, with libx264, AAC and AC3 encoders
 (the fixtures are generated with it; one e2e file then runs the server with
-`FFMPEG_PATH` pointing nowhere to cover the lite image). See [tests/e2e/README.md](tests/e2e/README.md) for coverage,
+`FFMPEG_PATH` pointing nowhere to cover the core image). See [tests/e2e/README.md](tests/e2e/README.md) for coverage,
 debugging and limitations.
 
 Node 24+, ES modules, npm workspaces. The server and packages use strict

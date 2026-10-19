@@ -13,7 +13,7 @@ const info = (overrides: Partial<DecideInput> = {}): DecideInput => ({
 })
 const caps = { h264: true, aac: true, hevc: true, vp9: true, opus: true }
 const policy = { serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }
-const lite = { ...policy, serverConversion: false }
+const core = { ...policy, serverConversion: false }
 
 test('supported MP4 plays directly; MKV and alternate audio use remux', () => {
   assert.equal(decide(info(), caps, policy).mode, 'direct')
@@ -23,13 +23,13 @@ test('supported MP4 plays directly; MKV and alternate audio use remux', () => {
 })
 
 test('without ffmpeg the browser remuxes what it can demux and decode; nothing is transcoded', () => {
-  assert.equal(decide(info(), caps, lite).mode, 'direct')
-  const mkv = decide(info({ container: 'matroska', audio: [{ codec: 'ac3' }] }), caps, lite)
+  assert.equal(decide(info(), caps, core).mode, 'direct')
+  const mkv = decide(info({ container: 'matroska', audio: [{ codec: 'ac3' }] }), caps, core)
   assert.equal(mkv.mode, 'browser-remux')
   assert.match(mkv.reason, /converting ac3 audio to AAC, in the browser/)
-  assert.throws(() => decide(info({ container: 'avi' }), caps, lite), UnplayableError)
-  assert.throws(() => decide(info({ container: 'matroska', audio: [{ codec: 'truehd' }] }), caps, lite), UnplayableError)
-  assert.throws(() => decide(info({ video: { codec: 'av1', bitDepth: 8, tag: '' } }), caps, { ...lite, allowTranscode: true }), /no ffmpeg/)
+  assert.throws(() => decide(info({ container: 'avi' }), caps, core), UnplayableError)
+  assert.throws(() => decide(info({ container: 'matroska', audio: [{ codec: 'truehd' }] }), caps, core), UnplayableError)
+  assert.throws(() => decide(info({ video: { codec: 'av1', bitDepth: 8, tag: '' } }), caps, { ...core, allowTranscode: true }), /no ffmpeg/)
 })
 
 test('WebM, silent video, and HEVC container tags', () => {

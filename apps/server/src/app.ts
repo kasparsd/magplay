@@ -111,7 +111,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
   const search = createSearchService({ sources: () => current().sources, timeoutMs: () => current().searchTimeoutMs, engine, logger: log.child({ component: 'search' }), metrics })
   const explore = createExplore({ url: () => current().bitmagnetUrl, timeoutMs: () => current().searchTimeoutMs, showAdult: () => current().showAdult, logger: log.child({ component: 'explore' }), metrics })
   const status = createStatus({ logger: log.child({ component: 'status' }) })
-  // Whether ffmpeg runs decides server-side conversion; the full image has it, the lite image doesn't
+  // Whether ffmpeg runs decides server-side conversion; the full image has it, the core image doesn't
   const checkFfmpeg = (): Promise<void> => media.refreshFfmpeg().then(f => { detectedEncoders = f.encoders; status.invalidate('ffmpeg') })
   const ffmpegChecked = checkFfmpeg()
   const caches = (): DebugResource[] => {

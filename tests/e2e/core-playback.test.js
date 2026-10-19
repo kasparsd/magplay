@@ -1,4 +1,4 @@
-// The server without ffmpeg (the lite image): files stream directly or are repackaged in the browser.
+// The server without ffmpeg (the magplay-core image): files stream directly or are repackaged in the browser.
 // The fixtures are still generated with ffmpeg on the test machine; only the server under test lacks it.
 import { test, expect } from './fixtures.js'
 import { chooseAudio, chooseSubtitles, direct, expectCues, expectPlaying, openPlayer, playResponse, remux, seek } from './helpers.js'

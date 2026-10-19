@@ -229,7 +229,7 @@ export interface MediaLive {
   maxSubtitleJobs: number
 }
 
-/** What the configured ffmpeg can do; `version` is null when it doesn't run (the lite image). */
+/** What the configured ffmpeg can do; `version` is null when it doesn't run (the core image). */
 export interface FfmpegStatus {
   path: string
   version: string | null

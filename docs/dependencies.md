@@ -14,7 +14,7 @@ to exact versions.
 | [`mediabunny`](https://github.com/Vanilagy/mediabunny) | 1.61.6 | Demuxers for the Node probe (`playback`) and, in the client, reading `/raw`, copying video and muxing fragmented MP4 for browser remux | Vanilagy (Vanessa Lagy) |
 | `@mediabunny/aac-encoder`, `@mediabunny/ac3`, `@mediabunny/dts` | 1.61.6 | WASM AAC encoder and AC-3/E-AC-3 and DTS decoders for browser remux, each a separate bundle chunk loaded only when needed | Vanilagy |
 
-Plus `ffmpeg` from Alpine Linux in the full image only; the `lite` image has no
+Plus `ffmpeg` from Alpine Linux in the `magplay` image only; `magplay-core` has no
 ffmpeg and no other media binary. ffprobe is not used.
 
 WebTorrent pulls in about 180 transitive packages, mostly from the WebTorrent

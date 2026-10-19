@@ -65,7 +65,7 @@ try {
   assert.equal((await play(directIdx)).mode, 'direct')
   report.checks.push('direct MP4 decision')
   const { serverConversion } = await get('/api/debug').then(r => r.json())
-  report.variant = serverConversion ? 'full (ffmpeg)' : 'lite (no ffmpeg)'
+  report.variant = serverConversion ? 'full (ffmpeg)' : 'core (no ffmpeg)'
   if (!serverConversion) {
     const decision = await play(remuxIdx, 30)
     assert.equal(decision.mode, 'browser-remux')
@@ -74,7 +74,7 @@ try {
     assert.equal(decision.session, undefined)
     const status = await get('/api/status').then(r => r.json())
     assert.equal(status.checks.find(c => c.id === 'ffmpeg')?.level, 'warn', JSON.stringify(status.checks))
-    report.checks.push('lite image: AC3 MKV repackages in the browser from /raw; missing ffmpeg is a warning')
+    report.checks.push('core image: AC3 MKV repackages in the browser from /raw; missing ffmpeg is a warning')
   }
   for (const start of serverConversion ? [0, 30] : []) {
     const at = performance.now()

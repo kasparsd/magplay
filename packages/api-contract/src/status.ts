@@ -59,7 +59,7 @@ export interface DebugInfo {
   version: string
   node: string
   uptimeS: number
-  /** ffmpeg's version, or null when it doesn't run (the lite image). */
+  /** ffmpeg's version, or null when it doesn't run (the core image). */
   ffmpeg: string | null
   /** Whether the server converts (remux, transcode, subtitles); otherwise the browser repackages and nothing is re-encoded. */
   serverConversion: boolean

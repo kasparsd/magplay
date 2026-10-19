@@ -27,9 +27,9 @@ COPY packages ./packages
 COPY public ./public
 RUN npm run build
 
-# The server without ffmpeg (`--target lite`): files stream as they are, the browser repackages what it can, and
-# nothing is re-encoded. For small hosts such as RouterOS containers and single-board computers.
-FROM node:24-alpine AS lite
+# magplay-core (`--target core`): the server without ffmpeg. Files stream as they are, the browser repackages what
+# it can, and nothing is re-encoded. For small hosts such as RouterOS containers and single-board computers.
+FROM node:24-alpine AS core
 WORKDIR /app
 # node_modules/@magplay/* are relative symlinks into packages/ and apps/server.
 COPY --from=deps /app/node_modules ./node_modules
@@ -46,8 +46,9 @@ EXPOSE 8080 6881/tcp 6881/udp
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 CMD ["node", "apps/server/src/main.ts"]
 
-# The default image: the same server with ffmpeg for server-side remux, transcode and subtitle extraction.
-FROM lite AS full
+# magplay (the default target): core plus Alpine's ffmpeg, which brings libx264, the AAC/AC3 codecs and the
+# VAAPI/Quick Sync hooks used for server-side remux, transcode and subtitle extraction.
+FROM core AS full
 USER root
 RUN apk add --no-cache ffmpeg
 USER node
