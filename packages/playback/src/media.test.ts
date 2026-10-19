@@ -84,6 +84,10 @@ test('HLS sessions keep track start offsets in fragment timestamps, never in edi
   assert.equal(transcode.includes('-copytb'), false)
   assert.equal(value(transcode, '-ss'), '36.5')
   assert.equal(value(transcode, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
+  // A resolved hardware encoder is written through; argument building does not run detection again
+  const vaapi = ffmpegArgs({ ...options, mode: 'transcode', start: 0, transcodeEncoder: 'h264_vaapi', vaapiDevice: '/dev/dri/renderD129' })
+  assert.equal(value(vaapi, '-c:v'), 'h264_vaapi')
+  assert.equal(value(vaapi, '-vaapi_device'), '/dev/dri/renderD129')
 })
 
 test('sample aspect ratios: anamorphic, square and unknown', () => {

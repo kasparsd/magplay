@@ -238,7 +238,8 @@ export function encoderProbeArgs (encoder: Exclude<TranscodeEncoder, 'libx264'>,
 export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMaxHeight, transcodeEncoder, vaapiDevice }: FfmpegArgsOptions): string[] {
   const a = info.audio[audio]
   const H = transcodeMaxHeight
-  const enc = resolveTranscodeEncoder(transcodeEncoder ?? 'libx264', [])
+  // The caller has already resolved availability. An empty list here would discard a hardware encoder the probe accepted.
+  const enc = isTranscodeEncoder(transcodeEncoder) ? transcodeEncoder : 'libx264'
   const device = vaapiDevice || '/dev/dri/renderD128'
   const baseGop = ['-g', '48', '-keyint_min', '48', '-sc_threshold', '0']
   const scaleVf = `scale=-2:'min(${H},ih)'`
