@@ -468,7 +468,7 @@ Node 24+, ES modules, npm workspaces. The server and packages use strict
 TypeScript. Architecture: [docs/architecture.md](docs/architecture.md).
 
 - `apps/server/src/`: the Node service.
-- `apps/client/`: the HTML pages; `src/` has one script per page, the stylesheet and `lib/`.
+- `apps/client/`: the HTML shell; `src/` has the React entry and router, `components/`, one script per page not yet a component, the stylesheet and `lib/`.
 - `packages/`: api-contract, release-info, indexers, torrent-engine, playback,
   seekable-tar, http-kit, observability.
 

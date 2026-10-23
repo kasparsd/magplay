@@ -94,7 +94,19 @@ export function menu (label: string | Node, items: Child[], { title = '', classN
   summary.setAttribute('aria-expanded', 'false')
   const list = el('div', { className: `menu-items${up ? ' up' : ''}` }, ...items)
   const box = el('details', { className: `menu ${className}`.trim() }, summary, list)
-  box.addEventListener('toggle', () => {
+  attachMenu(box, { up, within })
+  return box
+}
+
+/**
+ * The behaviour of a <details class="menu"> holding a summary and a .menu-items list, for menu() and the React Menu:
+ * keeps aria-expanded current, closes other menus, places the list inside its bounds and closes after a choice.
+ * Returns a function that removes the listeners.
+ */
+export function attachMenu (box: HTMLDetailsElement, { up = false, within }: Pick<MenuOptions, 'up' | 'within'> = {}): () => void {
+  const summary = $('summary', box)
+  const list = $('.menu-items', box)
+  const toggle = (): void => {
     summary.setAttribute('aria-expanded', String(box.open))
     if (!box.open) return
     for (const other of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) if (other !== box) other.open = false
@@ -110,13 +122,18 @@ export function menu (label: string | Node, items: Child[], { title = '', classN
     left = Math.max(bounds.left + gap - button.left, Math.min(left, bounds.right - gap - button.left - width))
     list.style.left = `${left}px`
     if (up) list.style.maxHeight = `${Math.max(96, button.top - bounds.top - 2 * gap)}px`
-  })
-  list.addEventListener('click', e => {
+  }
+  const choose = (e: Event): void => {
     const item = (e.target as Element).closest('a, button')
     // Copy buttons say "Copied" first, so close a moment later
     if (item) setTimeout(() => { box.open = false }, item.matches('button.copy') ? 700 : 0)
-  }, true) // capture: copy buttons stop the click from bubbling
-  return box
+  }
+  box.addEventListener('toggle', toggle)
+  list.addEventListener('click', choose, true) // capture: copy buttons stop the click from bubbling
+  return () => {
+    box.removeEventListener('toggle', toggle)
+    list.removeEventListener('click', choose, true)
+  }
 }
 
 /** A choice in a menu that works like a radio group (Subtitles, Audio, Speed). */
@@ -216,4 +233,3 @@ export function lastSearch (): string {
 export function rememberSearch (q: string): void {
   try { sessionStorage.setItem('magplay:q', q) } catch {}
 }
-for (const input of document.querySelectorAll<HTMLInputElement>('.topsearch input[name="q"]')) if (!input.value) input.value = lastSearch()

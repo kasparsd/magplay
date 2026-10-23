@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import neostandard, { resolveIgnoresFromGitignore } from 'neostandard'
 import tseslint from 'typescript-eslint'
 import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
 import { builtinModules } from 'node:module'
 
 // Package boundaries are documented in docs/architecture.md. A later block replaces
@@ -26,12 +27,13 @@ export default defineConfig(
   // Client pages, and e2e callbacks that run inside page.evaluate()
   { files: ['apps/client/**', 'tests/e2e/**'], languageOptions: { globals: globals.browser } },
   { rules: restrictImports(deepImports) },
+  { files: ['apps/client/**/*.tsx'], extends: [reactHooks.configs.flat.recommended] },
   // Tests run under node:test, so they may import Node built-ins
   { files: ['packages/api-contract/**', 'packages/release-info/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins, serverOnly) },
   { files: ['apps/client/**'], ignores: ['**/*.test.*'], rules: restrictImports(deepImports, nodeBuiltins, serverOnly) },
   { files: ['apps/client/**/*.test.{js,ts}'], rules: restrictImports(deepImports, serverOnly) },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: { parserOptions: { projectService: true } },
     rules: {

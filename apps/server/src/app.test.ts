@@ -43,8 +43,8 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     const html = await (await fetch(origin + url)).text()
     for (const [, asset] of html.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)) assets.add(asset!)
   }
-  // Every script and stylesheet a page links is content-hashed, so a release changes its URL
-  assert.ok(assets.size >= 7)
+  // Every page is the one shell; every script and stylesheet it links is content-hashed, so a release changes its URL
+  assert.equal(assets.size, 2)
   for (const asset of assets) assert.match(asset, /^\/assets\/[\w-]+-[\w-]{8}\.(?:js|css)$/)
   for (const url of [...pages, ...assets, `${[...assets].find(asset => asset.endsWith('.js'))}.map`]) {
     const res = await fetch(origin + url)

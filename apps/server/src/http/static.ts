@@ -1,5 +1,5 @@
-// The client's pages and assets as Vite builds them into dist/client (see `npm run build`): pages link content-hashed
-// bundles and the stylesheet under /assets/.
+// The client as Vite builds it into dist/client (see `npm run build`): one shell page, which links content-hashed
+// bundles and the stylesheet under /assets/ and routes in the browser. Only the app's own page URLs get the shell.
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { FileNotFoundError, route, sendCached, serveFile } from '@magplay/http-kit'
@@ -17,17 +17,17 @@ export function staticRoutes ({ distDir }: { distDir: string }): Route[] {
    * so a cache revalidating through a reverse proxy gets the new page and with it the new asset URLs. Read on every
    * request, so a rebuild needs no restart.
    */
-  const page = (name: string): Handler<unknown> => async ({ req, res }) => {
-    const html = await fs.readFile(path.join(distDir, name), 'utf8')
+  const shell: Handler<unknown> = async ({ req, res }) => {
+    const html = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
     sendCached(req, res, html, { 'Content-Type': 'text/html; charset=utf-8' }, 'no-cache')
   }
   return [
-    route('GET', '/', page('index.html')),
-    route('GET', '/t/:ih?', page('torrent.html')),
-    route('GET', '/play/:ih/:idx', page('player.html')),
-    route('GET', '/explore', page('explore.html')),
-    route('GET', '/title/:type/:source/:id', page('title.html')),
-    route('GET', '/settings', page('settings.html')),
+    route('GET', '/', shell),
+    route('GET', '/t/:ih?', shell),
+    route('GET', '/play/:ih/:idx', shell),
+    route('GET', '/explore', shell),
+    route('GET', '/title/:type/:source/:id', shell),
+    route('GET', '/settings', shell),
     route('GET', '/player.html', ({ res, query }) => { // links from before /play existed
       res.writeHead(301, { Location: `/play/${query.get('ih')}/${query.get('idx')}` })
       res.end()

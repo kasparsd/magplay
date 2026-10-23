@@ -1,7 +1,6 @@
 // The torrent page, /t/<infohash>: file list, downloads, external players and live activity.
 // /t?link=<id> opens a search result that only had a download link, then switches to /t/<infohash>.
 // A magnet parameter adds the full URI, retaining trackers and web seeds.
-import './lib/topbar.ts'
 import type { PeerStats, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@magplay/api-contract'
 import type { Child } from './lib/ui.ts'
 import { api } from './lib/api.ts'

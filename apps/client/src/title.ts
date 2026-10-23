@@ -1,5 +1,4 @@
 // A film or show from Explore, /title/<type>/<source>/<id>?title=&year=: what it is, and its releases in BitMagnet.
-import './lib/topbar.ts'
 import type { ExploreRelease, TitleResponse } from '@magplay/api-contract'
 import { api } from './lib/api.ts'
 import { requireElement, count, el, fill, posterTile, releaseRow, setError, setStatus } from './lib/ui.ts'

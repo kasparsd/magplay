@@ -18,7 +18,6 @@ import { layerBackground, seekHint, seekOutcome } from './lib/seek.ts'
 import { $, copyButton, el, episodeLabel, fill, formatClock as clock, menu, menuChoice, menuHeading, menuSeparator } from './lib/ui.ts'
 import type { Child } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
-import './lib/topbar.ts'
 
 const video = $<HTMLVideoElement>('#video')
 const stage = $('#stage')

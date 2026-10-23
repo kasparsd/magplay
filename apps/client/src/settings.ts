@@ -11,7 +11,6 @@ import type { PreferenceKey, Preferences } from './lib/preferences.ts'
 import { connectionLevel, connectionWarning, measureConnection, readConnection, saveConnection, SLOW_BYTES_PER_SEC, SLOW_LATENCY_MS } from './lib/speedtest.ts'
 import { onStatus, refreshStatus, updateBrowserChecks } from './lib/status-menu.ts'
 import type { MergedStatus } from './lib/status-menu.ts'
-import './lib/topbar.ts'
 import { $, copy, el, fill, formatSpeed, setStatus, timeAgo } from './lib/ui.ts'
 import type { Child } from './lib/ui.ts'
 

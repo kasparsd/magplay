@@ -11,6 +11,9 @@ to exact versions.
 | [`hls.js`](https://github.com/video-dev/hls.js) | 1.7.3 | HLS playback in Firefox/Chrome, bundled into the client | video-dev: Rob Walch, Tom Jenkinson, Guillaume du Pontavice |
 | `pino` | 10.4.0 | Structured server logging | Pino project |
 | `@prometheus-io/client` | 0.16.1 | Metrics registry and collectors | prometheus-io |
+| [`react`](https://github.com/facebook/react), `react-dom` | 19.3.0 | The client's components, bundled | Meta and the React team |
+| [`@tanstack/react-router`](https://github.com/TanStack/router) | 1.170.41 | Client routes for every page URL, bundled | TanStack: Tanner Linsley, Manuel Schiller and others |
+| [`@tanstack/react-query`](https://github.com/TanStack/query) | 5.104.1 | Server data in the client: caching, polling, invalidation; bundled | TanStack: Tanner Linsley, Dominik Dorfmeister and others |
 | [`mediabunny`](https://github.com/Vanilagy/mediabunny) | 1.61.6 | Demuxers for the Node probe, and the copy-and-mux path for browser remux and Node remux | Vanilagy (Vanessa Lagy) |
 | `@mediabunny/aac-encoder`, `@mediabunny/ac3`, `@mediabunny/dts` | 1.61.6 | WASM AAC encoder and AC-3/E-AC-3 and DTS decoders. The browser loads a chunk only for the codec it is converting; a Node remux registers all three for the session | Vanilagy |
 

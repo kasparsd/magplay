@@ -1,5 +1,4 @@
 // The explore page, /explore?type=&genre=&year=&res=&sort=: films and shows from BitMagnet, one tile per title.
-import './lib/topbar.ts'
 import { api } from './lib/api.ts'
 import { $, count, el, fill, posterTile, releaseRow, setError, setStatus, timeAgo } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'

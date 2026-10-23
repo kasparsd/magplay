@@ -27,6 +27,8 @@
 /* Base */
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+/* A page not yet rewritten as components (components/VanillaPage.tsx) lays out as if its markup were the body's */
+.vanilla-page { display: contents; }
 main { max-width: 960px; margin: 0 auto; padding: 16px 16px 48px; }
 main.wide { max-width: 1200px; }
 a { color: var(--accent); text-decoration: none; }

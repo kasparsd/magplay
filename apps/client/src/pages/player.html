@@ -1,0 +1,69 @@
+<!-- Theater layout: the stage is sized by the viewport and the video's aspect ratio, in a black band -->
+<div class="band">
+  <div id="stage">
+    <video id="video" playsinline></video>
+    <div id="screen-title" class="screen-title"><b id="screen-name"></b><span id="screen-sub"></span></div>
+    <div id="overlay" aria-live="polite"></div>
+    <div id="playback-status" class="playback-status" hidden></div>
+    <div id="playback-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="chrome" class="chrome">
+      <div id="seekbar" class="seekbar">
+        <div class="track" aria-hidden="true">
+          <i id="layer-server" class="layer server"></i>
+          <i id="layer-conv" class="layer conv"></i>
+          <i id="layer-buf" class="layer buf"></i>
+          <i id="layer-played" class="layer played"></i>
+        </div>
+        <input id="seek" type="range" min="0" max="0" step="1" value="0" aria-label="Position" aria-valuetext="0:00 of 0:00">
+        <div id="seektip" class="seektip" hidden><b></b><span></span></div>
+      </div>
+      <div class="controls">
+        <button id="playpause" class="ic" type="button" aria-label="Play" title="Play (K)"></button>
+        <button id="back10" class="ic wide-only" type="button" aria-label="Back 10 seconds" title="Back 10 seconds (J)"></button>
+        <button id="fwd10" class="ic wide-only" type="button" aria-label="Forward 10 seconds" title="Forward 10 seconds (L)"></button>
+        <button id="mute" class="ic" type="button" aria-label="Mute" title="Mute (M)"></button>
+        <input id="volume" class="wide-only" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+        <span id="time" class="time">0:00 / 0:00</span>
+        <span class="gap"></span>
+        <a id="next" class="pill-link" hidden></a>
+        <span id="subs-slot"></span>
+        <span id="audio-slot"></span>
+        <span id="speed-slot" class="wide-only"></span>
+        <span id="more-slot"></span>
+        <button id="fullscreen" class="ic" type="button" aria-label="Fullscreen" title="Fullscreen (F)"></button>
+      </div>
+    </div>
+    <div id="keys" class="keysheet" role="dialog" aria-labelledby="keys-title" hidden>
+      <div class="keysheet-head">
+        <h2 id="keys-title">Keyboard shortcuts</h2>
+        <button id="keys-close" class="ic" type="button" aria-label="Close" title="Close (Esc)"></button>
+      </div>
+      <dl>
+        <dt><kbd>Space</kbd> <kbd>K</kbd></dt><dd>Play or pause</dd>
+        <dt><kbd>←</kbd> <kbd>→</kbd> <kbd>J</kbd> <kbd>L</kbd></dt><dd>Back or forward 10 seconds</dd>
+        <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Volume up or down</dd>
+        <dt><kbd>M</kbd></dt><dd>Mute</dd>
+        <dt><kbd>F</kbd></dt><dd>Fullscreen</dd>
+        <dt><kbd>C</kbd></dt><dd>Subtitles on or off</dd>
+        <dt><kbd>N</kbd></dt><dd>Next file</dd>
+        <dt><kbd>&lt;</kbd> <kbd>&gt;</kbd></dt><dd>Slower or faster</dd>
+        <dt><kbd>?</kbd></dt><dd>This list</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+<main class="wide player-main">
+  <div id="titlerow" class="titlerow">
+    <div class="titles">
+      <p class="back"><a id="back" href="/">← Files</a></p>
+      <h1 id="title"></h1>
+    </div>
+    <div id="title-actions" class="title-actions">
+      <span id="openin"></span>
+      <button id="details-toggle" class="disclosure" type="button" aria-expanded="false" aria-controls="details">ⓘ Details</button>
+      <button id="perf-toggle" class="disclosure" type="button" aria-expanded="false" aria-controls="performance">Performance</button>
+    </div>
+  </div>
+  <section id="details" class="panel" aria-label="Details" hidden><dl id="facts"></dl></section>
+  <section id="performance" class="panel performance" aria-label="Playback performance" hidden></section>
+</main>

@@ -1,5 +1,4 @@
 // The search page, /?q=…&cat=…: results from every source, each linking to its torrent page.
-import './lib/topbar.ts'
 import { api } from './lib/api.ts'
 import { $, el, fill, formatBytes, recall, releaseRow, remember, rememberSearch, setError, setStatus, timeAgo } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
@@ -107,11 +106,14 @@ async function showRecent () {
   $('#recent').hidden = false
 }
 
-/** Shows what the URL says: a search, or the home page. */
-function fromUrl ({ restore = false } = {}) {
+/**
+ * Shows what the URL says: a search, or the home page. The first time, a box without a query in the URL keeps what
+ * was typed while this script loaded.
+ */
+function fromUrl ({ restore = false, first = false } = {}) {
   const query = new URLSearchParams(location.search)
   const q = query.get('q')
-  form.q.value = q ?? ''
+  if (q || !first) form.q.value = q ?? ''
   form.elements.cat.value = query.get('cat') || ''
   if (!q) return showRecent()
   rememberSearch(q)
@@ -127,5 +129,5 @@ function fromUrl ({ restore = false } = {}) {
 }
 
 // The search lives in the URL, so reload, Back and links from other pages all work
-fromUrl({ restore: performance.getEntriesByType('navigation')[0]?.type === 'back_forward' })
+fromUrl({ first: true, restore: performance.getEntriesByType('navigation')[0]?.type === 'back_forward' })
 addEventListener('popstate', () => fromUrl({ restore: true }))
