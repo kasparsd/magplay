@@ -52,7 +52,8 @@ The rest is memory Node does not count as heap: byte buffers, the codec workers,
 | --- | --- | --- |
 | Idle, no peers | 46 MiB | 1 MiB |
 | Streaming the file over `/raw`, peak | 141–160 MiB | up to 92 MiB |
-| Settled after streaming | 134–140 MiB | 89 MiB |
+| Settled after streaming | 134–140 MiB | 89 MiB, nearly all garbage |
+| After a collection | 56 MiB | 5 MiB |
 | A Node remux of 60 s, peak | 175–186 MiB | 70 MiB at the end |
 
 The V8 heap stayed below 30 MiB used throughout. Resident adds about 60 MiB of mapped files, mostly the Node binary, which the kernel can drop. Virtual size is about 9 GB and is not RAM.
@@ -60,7 +61,8 @@ The V8 heap stayed below 30 MiB used throughout. Resident adds about 60 MiB of m
 What holds the bytes:
 
 - **Node remux:** its `/raw` read cache is 16 MiB, and the output keeps only the unsent part of the box being written. Before those limits (48 MiB, and a buffer that kept every size it had grown to) the same remux peaked at 271–299 MiB.
-- **Torrent pieces:** each torrent keeps 2 whole pieces in memory after a read (WebTorrent's default is 20). In the measurement this made no measurable difference. About 89 MiB of buffers, roughly the whole file, stays held after streaming either way, for a reason not yet found.
+- **Torrent pieces:** each torrent keeps 2 whole pieces in memory after a read. WebTorrent's default of 20 kept 77 MiB of 4 MiB pieces after streaming (126 MiB anonymous after a collection), and would keep 320 MiB with 16 MiB pieces.
+- **Garbage:** pieces that were read and sent stay allocated until V8 collects them, and an idle V8 does not, so resident memory after streaming reads about 85 MiB higher than what the server holds. V8 collects once external memory passes its threshold, so a container limit reclaims it.
 
 For one Node remux, give the container 384 MiB and no extra swap (`mem_limit` and `memswap_limit`, or `docker run --memory=384m --memory-swap=384m`). That leaves about 200 MiB above the remux peak for real swarms, seeking and several torrents, none of which were measured. It is not a budget for an ffmpeg transcode, which runs in another process. `tools/scripts/measure-memory.mjs --image=<image>` repeats the measurement.
 

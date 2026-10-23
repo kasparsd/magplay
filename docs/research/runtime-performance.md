@@ -2,7 +2,7 @@
 
 A planning input, not a decision. It asks what it would take to make the server use less memory and CPU, and whether moving it to Bun or rewriting it in Rust is worth it. The browser client is out of scope: it stays React whatever the server runs on, and the server never executes it.
 
-**Update 2026-10-24:** option A is done and measured ([checkpoint](../checkpoints/2026-10-24-memory-caps.md)). The remux limits took about 100 MiB off a Node remux's peak, and the images now cap the heap. The piece-cache prediction below did not hold: with `storeCacheSlots: 2`, memory after streaming was unchanged, because about 89 MiB of buffers, roughly the whole file, stays held for another reason not yet found. That retained memory, not the runtime, is now the largest known cost, and it would follow the code into Bun. Option A's lazy imports and `maxConns` knob were not done.
+**Update 2026-10-24:** option A is done and measured ([checkpoint](../checkpoints/2026-10-24-memory-caps.md)). The remux limits took about 100 MiB off a Node remux's peak, and the images now cap the heap. The piece-cache prediction held once garbage is collected: `main` kept 77 MiB of pieces after one stream, `storeCacheSlots: 2` keeps 5 MiB of buffers and 56 MiB anonymous, 10 MiB above idle. Without a collection both read about 89 MiB, because an idle V8 leaves the dropped pieces allocated. Option A's lazy imports and `maxConns` knob were not done.
 
 ## Where memory goes today
 
@@ -22,7 +22,7 @@ Measured numbers come from [container memory](../resources.md#container-memory) 
 | WebTorrent's piece cache | up to 20 whole pieces per loaded torrent; **not measured** | code reading, below |
 | ffmpeg remux/transcode | a separate process; not part of the Node numbers | — |
 
-### Unmeasured and likely the largest: WebTorrent's piece cache (not confirmed; see the update above)
+### Unmeasured and likely the largest: WebTorrent's piece cache (confirmed; see the update above)
 
 `createTorrentEngine()` (`packages/torrent-engine/src/engine.ts`) passes no `storeCacheSlots` to `client.add()`, so every torrent gets WebTorrent's default: a `cache-chunk-store` LRU of **20 whole pieces** in memory, filled by reads (playback, the probe, ffmpeg, seeding uploads). Piece size grows with the torrent: 2–8 MiB for typical films, 16 MiB for large 4K releases. That is 40–160 MiB per loaded torrent, and up to 320 MiB for a large one, with up to four loading and three seeded torrents loaded at once. On a 384 MiB container this alone can exceed the limit, and none of it shows in the V8 heap, so `--max-old-space-size` does not bound it. The disk store already holds every piece, so the cache only saves re-reading from the page cache, which the kernel keeps anyway.
 

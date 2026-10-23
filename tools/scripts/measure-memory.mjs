@@ -1,5 +1,6 @@
 // Memory of the server in a container through one torrent's life: idle, streaming /raw from a peer on the host,
-// reading it again from the finished cache, then a Node remux HLS session (the core image has no ffmpeg).
+// reading it again from the finished cache, what stays after a forced collection, then a Node remux HLS session
+// (the core image has no ffmpeg).
 // Usage: node tools/scripts/measure-memory.mjs --image=magplay:core [--memory=384m] [--seconds=120] [--piece-mib=4]
 //   [--remux-seconds=60]
 // Needs Docker and ffmpeg on the host; ffmpeg only generates the test file.
@@ -34,17 +35,23 @@ const seeded = await new Promise(resolve => seeder.seed(media, { private: true, 
 await new Promise(resolve => { if (seeder.torrentPort) resolve(); else seeder.once('listening', resolve) })
 const magnet = `${seeded.magnetURI}&x.pe=host.docker.internal:${seeder.torrentPort}`
 
-// The server writes its own heap and buffer numbers for the sampler; the healthcheck's node process doesn't
+// The server writes its own heap and buffer numbers for the sampler, and collects garbage when /tmp/gc appears;
+// the healthcheck's node process doesn't
 const preload = path.join(dir, 'preload.mjs')
 await fs.writeFile(preload, `import fs from 'node:fs'
-if (process.argv[1]?.endsWith('main.ts')) setInterval(() => fs.writeFileSync('/tmp/memory.json', JSON.stringify(process.memoryUsage())), 200).unref()
+if (process.argv[1]?.endsWith('main.ts')) {
+  setInterval(() => {
+    if (fs.existsSync('/tmp/gc')) { fs.rmSync('/tmp/gc'); globalThis.gc?.() }
+    fs.writeFileSync('/tmp/memory.json', JSON.stringify(process.memoryUsage()))
+  }, 200).unref()
+}
 `)
 const imageOptions = await exec('docker', ['image', 'inspect', '-f', '{{range .Config.Env}}{{println .}}{{end}}', args.image])
   .then(r => /^NODE_OPTIONS=(.*)$/m.exec(r.stdout)?.[1] ?? '')
 const container = `magplay-memory-${process.pid}`
 const docker = (...rest) => exec('docker', rest, { maxBuffer: 1024 ** 2 }).then(r => r.stdout.trim())
 await docker('run', '-d', '--name', container, `--memory=${memory}`, `--memory-swap=${memory}`, '-v', `${preload}:/measure/preload.mjs:ro`,
-  '-e', `NODE_OPTIONS=${imageOptions} --import=/measure/preload.mjs`.trim(),
+  '-e', `NODE_OPTIONS=${imageOptions} --expose-gc --import=/measure/preload.mjs`.trim(),
   '-e', 'TORRENT_PORT=0', '-e', 'DHT_ENABLED=false', '-e', 'LSD_ENABLED=false', '-p', '127.0.0.1::8080', args.image)
 const origin = `http://${(await docker('port', container, '8080')).split('\n')[0]}`
 
@@ -89,6 +96,11 @@ try {
   phase = 'settled'
   log(phase)
   await sleep(30_000)
+  // What the server still holds: garbage buffers wait for a collection that an idle V8 does not run
+  phase = 'after a collection'
+  log(phase)
+  await docker('exec', container, 'touch', '/tmp/gc')
+  await sleep(3000)
 
   phase = 'node remux'
   log(phase)
