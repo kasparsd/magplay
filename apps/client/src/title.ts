@@ -4,14 +4,15 @@ import type { ExploreRelease, TitleResponse } from '@magplay/api-contract'
 import { api } from './lib/api.ts'
 import { requireElement, count, el, fill, posterTile, releaseRow, setError, setStatus } from './lib/ui.ts'
 import { urls } from './lib/urls.ts'
-import { backTarget } from './lib/back.ts'
+import { returnTarget, sessionReturns } from './lib/back.ts'
 
 const [, , type = '', source = '', id = ''] = location.pathname.split('/')
 const params = new URLSearchParams(location.search)
 const status = requireElement('#status', HTMLParagraphElement)
 
-// Back to Explore with its filters (or the search) when we came from it, otherwise to Explore for this type
-const back = backTarget(document.referrer, location.origin, { label: '← Explore', href: urls.explore({ type: type === 'tv_show' ? type : '' }) })
+// Back to Explore with its filters (or the search) when we came from it, also after opening a release and playing it;
+// otherwise to Explore for this type
+const back = returnTarget(location.pathname, document.referrer, location.origin, sessionReturns(), { label: '← Explore', href: urls.explore({ type: type === 'tv_show' ? type : '' }) })
 if (!back) throw new Error('Expected an Explore fallback')
 Object.assign(requireElement('#back', HTMLAnchorElement), { href: back.href, textContent: back.label })
 if (back.history) requireElement('#back', HTMLAnchorElement).addEventListener('click', e => { e.preventDefault(); history.back() })

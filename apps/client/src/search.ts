@@ -119,6 +119,8 @@ function fromUrl ({ restore = false } = {}): void {
   query.value = q
   categories.value = cat
   if (!q) {
+    // Only the empty home page puts the cursor in the search box; results and Back leave focus alone
+    if (!restore) query.focus()
     showRecent().catch(console.error)
     return
   }

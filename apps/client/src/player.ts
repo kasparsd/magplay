@@ -67,7 +67,7 @@ function render (): void {
   when('audio', [s.info, s.audio], renderAudioMenu)
   when('subtitles', [s.subtitleOptions, s.subtitles], renderSubtitlesMenu)
   when('speed', [s.media.rate], renderSpeedMenu)
-  when('more', [s.file, s.media.pip, s.media.rate, flowPinned], renderMore)
+  when('more', [s.file, s.media.pip, s.media.pipAllowed, s.media.rate, flowPinned], renderMore)
   if (ui.details) when('facts', [s.decision, s.file, s.info, s.audio, s.status], renderFacts)
   if (ui.performance) when('performance', [s.history, s.decision], renderPerformance)
   updateTimeline()
@@ -186,7 +186,7 @@ function renderSpeedMenu (): void {
 /** More: the same file actions as the torrent page's ⋯ menu, Picture in picture, the key list, and Speed on narrow screens. */
 function renderMore (): void {
   const { file } = snap
-  const pip = document.pictureInPictureEnabled && !video.disablePictureInPicture
+  const pip = snap.media.pipAllowed
   const narrow = <E extends HTMLElement>(item: E): E => { item.classList.add('narrow-only'); return item }
   const items: Child[] = [
     ...(file

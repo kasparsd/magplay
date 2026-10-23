@@ -6,7 +6,7 @@ import type { PeerStats, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@ma
 import type { Child } from './lib/ui.ts'
 import { api } from './lib/api.ts'
 import { requireElement, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setError, setStatus, shortHash, timeAgo } from './lib/ui.ts'
-import { backTarget } from './lib/back.ts'
+import { returnTarget, sessionReturns } from './lib/back.ts'
 import { poll } from './lib/resource.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 import { progressKey, resumePosition } from './lib/progress.ts'
@@ -15,11 +15,12 @@ const params = new URLSearchParams(location.search)
 const status = requireElement('#status', HTMLParagraphElement)
 let infoHash = location.pathname.split('/')[2] || null
 
-// Back to the results, Explore or title the user came from, without loading them again; no link after a direct visit
-const back = backTarget(document.referrer, location.origin)
+// Back to the results, Explore or title the user came from, without loading them again, also after playing a file;
+// no link after a direct visit
+const back = returnTarget(location.pathname, document.referrer, location.origin, sessionReturns())
 if (back) {
   Object.assign(requireElement('#back', HTMLAnchorElement), { href: back.href, textContent: back.label })
-  requireElement('#back', HTMLAnchorElement).addEventListener('click', e => { e.preventDefault(); history.back() })
+  if (back.history) requireElement('#back', HTMLAnchorElement).addEventListener('click', e => { e.preventDefault(); history.back() })
   requireElement('.back', HTMLParagraphElement).hidden = false
 }
 
@@ -48,6 +49,8 @@ async function load (): Promise<void> {
     clearInterval(timer)
   }
   infoHash = t.infoHash
+  // A result opened by its download link becomes /t/<infohash>, which the Player's back link returns to
+  if (back && location.pathname !== `/t/${t.infoHash}`) sessionReturns().set(`/t/${t.infoHash}`, back)
   history.replaceState(null, '', urls.torrent(t.infoHash))
   setStatus(status, '')
   showName(t.name)
