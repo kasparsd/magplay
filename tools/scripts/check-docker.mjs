@@ -68,24 +68,24 @@ try {
     const at = performance.now()
     const decision = await play(remuxIdx, start)
     assert.equal(decision.mode, 'remux')
-    assert.equal(decision.offset, start)
+    // The VOD playlist covers the whole file; fetch the segment that holds `start`, which ffmpeg converts on demand
+    const playlist = await (await get(decision.url)).text()
+    assert.match(playlist, /#EXT-X-PLAYLIST-TYPE:VOD/)
     let segment
-    for (let i = 0; ; i++) {
-      const response = await get(decision.url)
-      const text = await response.text()
-      if (response.ok) segment = text.split('\n').find(line => line.endsWith('.m4s'))
-      if (segment) break
-      if (i === 100 || response.status === 500) throw new Error(`HLS failed: ${text}`)
-      await sleep(100)
+    let t = 0
+    for (const [, duration, name] of playlist.matchAll(/#EXTINF:([\d.]+),\n(seg_\d+\.m4s)/g)) {
+      if (start < t + Number(duration)) { segment = name; break }
+      t += Number(duration)
     }
+    assert.ok(segment, `no segment holds ${start} s`)
     const media = await get(`/hls/${decision.session}/${segment}`)
     assert.equal(media.status, 200)
     assert.ok((await media.arrayBuffer()).byteLength > 0)
-    report.timingsMs[start ? 'seekTo30FirstSegment' : 'remuxFirstSegment'] = Math.round(performance.now() - at)
+    report.timingsMs[start ? 'startAt30FirstSegment' : 'remuxFirstSegment'] = Math.round(performance.now() - at)
     await get(`/api/play/${decision.session}`, { method: 'DELETE' })
     assert.equal((await get(decision.url)).status, 404)
   }
-  report.checks.push('AC3 remux, HLS bytes, restart at 30 seconds and session cleanup')
+  report.checks.push('AC3 remux, VOD playlist, HLS bytes from 0 and from 30 seconds, and session cleanup')
   const metrics = await fetch(`http://127.0.0.1:${metricsPort}/metrics`).then(r => r.text())
   assert.match(metrics, /magplay_playback_attempts_total/)
   assert.match(metrics, /magplay_playback_ready_seconds/)

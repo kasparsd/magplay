@@ -501,7 +501,7 @@ export function createHlsSessions ({
         closeCurrent(s, run, true)
         if (s.plan) assign(s, run, Infinity)
         else finishGrowing(s, run)
-        s.run = null
+        // The finished run stays as the session's last one, so status keeps its speed and fps
         // A request may still wait for a segment this run didn't publish (it started past it)
         for (const w of [...s.waiters]) if (typeof w.key === 'number' && !s.segments.has(w.key)) ensureProducing(s, w.key)
       } else {
@@ -770,7 +770,7 @@ export function createHlsSessions ({
       const s = sessionOr404(id)
       if (!s.initFile) {
         if (s.failure) throw new HlsFailedError(s.failure)
-        if (!s.run) ensureProducing(s, s.startSegment)
+        if (!s.run || s.run.exitCode !== null) ensureProducing(s, s.startSegment)
         await wait(s, 'init', signal)
       }
       return s.initFile!

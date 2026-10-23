@@ -54,7 +54,7 @@ let audio = 0
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
 let deferredSeek = 0 // a growing playlist starts at the beginning: where to jump once it has been converted that far
-let starting = '' // what the busy spinner says until playback resumes ("Starting at 14:20…")
+let starting = '' // what the busy spinner says until playback resumes ("Switching audio…")
 let searchTitle = ''
 let file: TorrentFileInfo | undefined // this file's entry from the torrent's file list
 let next: TorrentFileInfo | null = null // the next video in the torrent, if any
@@ -262,7 +262,7 @@ function teardown (): void {
 
 /**
  * Asks the server how to play from `at` seconds and loads the result.
- * `message` is what the spinner says until the video plays again, such as "Starting at 14:20…".
+ * `message` is what the spinner says until the video plays again, such as "Switching audio…".
  */
 async function start (at = 0, message = ''): Promise<void> {
   if (pageLife.signal.aborted) return

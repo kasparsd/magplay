@@ -30,6 +30,17 @@ export async function generateMedia (dir) {
     '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
     '-t', '30', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35',
     '-pix_fmt', 'yuv420p', '-g', '48', '-c:a', 'aac', '-movflags', '+faststart', path.join(dir, 'Playback.S01E04.mp4')], { timeout: 60_000 })
+  // Ten minutes with B-frames and AC-3: long enough that conversion pauses well before the end, so a seek there
+  // restarts ffmpeg
+  await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=24',
+    '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=48000',
+    '-t', '600', '-c:v', 'libx264', '-preset', 'ultrafast', '-bf', '2', '-g', '96', '-crf', '40',
+    '-pix_fmt', 'yuv420p', '-c:a', 'ac3', '-b:a', '64k', path.join(dir, 'Playback.S02E01.mkv')], { timeout: 120_000 })
+  // MPEG-TS has no keyframe index: it plays from a playlist that grows from the start
+  await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+    '-i', path.join(dir, 'Playback.S01E02.mkv'), '-t', '30', '-map', '0:v', '-map', '0:a:0', '-c', 'copy', '-f', 'mpegts',
+    path.join(dir, 'Playback.S02E02.ts')], { timeout: 60_000 })
 }
 
 export async function prepareCachedMedia (dir) {
