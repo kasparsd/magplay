@@ -40,6 +40,7 @@ export function setStatus (node: HTMLElement, text: string, kind: StatusKind = '
 }
 
 export { episodeLabel, formatBytes, formatClock, formatSpeed } from './format.ts'
+export { recall, remember } from './storage.ts'
 
 export async function copy (text: string): Promise<void> {
   try {
@@ -138,14 +139,6 @@ document.addEventListener('keydown', e => {
     $('summary', open).focus()
   }
 })
-
-/** Per-browser memory (last episode played…). Storage can be blocked, so failures are ignored. */
-export function recall (key: string): unknown {
-  try { return JSON.parse(localStorage.getItem(`magplay:${key}`) ?? 'null') } catch { return null }
-}
-export function remember (key: string, value: unknown): void {
-  try { localStorage.setItem(`magplay:${key}`, JSON.stringify(value)) } catch {}
-}
 
 /** "3 min ago", "2 h ago", "4 days ago". */
 export function timeAgo (ms: number): string {
