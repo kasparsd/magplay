@@ -433,9 +433,12 @@ export class PlaybackController {
     return this.decision && this.video.readyState > 0 ? this.video.currentTime : this.pendingPosition
   }
 
-  /** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
+  /**
+   * The whole file's duration, else the media's own: every mode plays on the file's timeline, and a growing playlist
+   * of a file with no known duration is as long as it has been converted.
+   */
   private duration (): number {
-    return this.decision?.duration || this.info?.duration || (isLocal(this.decision) && Number.isFinite(this.video.duration) ? this.video.duration : 0)
+    return this.decision?.duration || this.info?.duration || (this.decision && Number.isFinite(this.video.duration) ? this.video.duration : 0)
   }
 
   /**

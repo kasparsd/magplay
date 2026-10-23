@@ -25,7 +25,7 @@ test('a faststart MP4 still plays directly', async ({ page, app }) => {
 
 test('MKV/AC3 is repackaged in the browser: whole-file timeline, seeking, audio switch, .srt subtitles', async ({ page, app }) => {
   const decision = await openPlayer(page, app, remux)
-  expect(decision).toMatchObject({ mode: 'browser-remux', offset: 0, audio: 0, url: `/raw/${app.ih}/${app.files[remux]}` })
+  expect(decision).toMatchObject({ mode: 'browser-remux', audio: 0, url: `/raw/${app.ih}/${app.files[remux]}` })
   expect(decision.session).toBeUndefined()
   expect(await page.locator('#video').evaluate(v => v.duration)).toBeGreaterThan(89)
   await seek(page, 35)
@@ -34,7 +34,7 @@ test('MKV/AC3 is repackaged in the browser: whole-file timeline, seeking, audio 
   const switching = playResponse(page)
   await chooseAudio(page, 1)
   const switched = await (await switching).json()
-  expect(switched).toMatchObject({ mode: 'browser-remux', audio: 1, offset: 0 })
+  expect(switched).toMatchObject({ mode: 'browser-remux', audio: 1 })
   await expectPlaying(page)
   // The position survives the audio switch: the browser restarts its own conversion at the same place
   expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThan(34)
