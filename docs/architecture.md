@@ -127,7 +127,7 @@ Assertions require a nearby invariant or a documented boundary: bounded indices 
 
 Requirements for the client build, kept from the earlier Vite criteria:
 
-- Preserve `/`, `/explore`, `/title/…`, `/t/…` and `/play/…`, ordinary links and reload/Back behavior. No SPA router or SSR.
+- Preserve `/`, `/explore`, `/title/…`, `/t/…` and `/play/…`, ordinary links and reload/Back behavior. The client router must keep every one of them working on reload and Back, and the server answers only the listed page routes. No SSR.
 - Keep sources and generated output separate; never write into `public/`.
 - Update Node serving, Docker packaging and smoke tests together, and test the production artifact (deep links, `hls.js` loading, playback), not only a dev setup.
 - Revalidate HTML (`no-cache` with a content ETag). Only content-hashed `/assets/…` files are `immutable`, so reverse proxies and browsers pick up a release on the next page revalidation. Preserve media Range/cancellation policies and non-cacheable live responses/errors.
@@ -166,7 +166,7 @@ The published Alpine image's ffmpeg includes VAAPI and, on x86_64, Quick Sync su
 
 ## Framework and browser-media triggers
 
-Preact is a conditional option, not a chosen destination. Consider it only if shared reactive state or component composition becomes the dominant maintenance problem. Keep the media controller imperative even if a framework eventually owns its surrounding shell. The player's lifecycle and abort ownership is described in [lifetime rules](lifecycle.md).
+The trigger for a framework, shared reactive state and component composition becoming the dominant maintenance problem, was reached in the Player and Settings. The client is moving to React with TanStack Router and Query, built by Vite; see [the React client plan](plans/react-client.md). The media controller stays imperative, a plain TypeScript class that React only renders. The player's lifecycle and abort ownership is described in [lifetime rules](lifecycle.md).
 
 Browser remuxing exists for servers without ffmpeg (see [Probe and playback modes](#probe-and-playback-modes)); when ffmpeg is present the server still remuxes, because it works in every browser and costs the client nothing. Browsers can't reach ordinary TCP/UDP swarms, so browser torrenting still needs compatible peers or a bridge. Cross-origin hosting and general browser video transcoding are not current requirements.
 

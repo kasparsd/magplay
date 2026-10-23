@@ -86,7 +86,7 @@ Items 1–2 need the owner's devices and server. The TypeScript Phase 7 review a
 | 4 | **P2** | Run `magplay-core` on the MikroTik container host | Pull `ghcr.io/kasparsd/magplay-core:edge` on the device and record RAM at idle and during one playback with the server's real peer counts, plus `/raw` throughput over the LAN. Image trimming is already done and does not reduce resident memory ([container memory](resources.md#container-memory), [checkpoint](checkpoints/2026-10-19-node-container-memory.md)); size the container from that guidance. A fit check on the device is still required. |
 | 5 | **P3 / conditional** | Cross-origin hosting | Only for a demonstrated deployment need. |
 
-**Do not automatically schedule a playback-controller extraction, accounts or a framework migration.** These are conditional scope changes, not missing product features. Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
+**Do not automatically schedule accounts.** It is a conditional scope change, not a missing product feature. The playback-controller extraction and the React client are approved and in progress ([plan](plans/react-client.md)). Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
 
 Before public/untrusted exposure, authentication, media/API access protection and Origin/CSRF handling become mandatory deployment gates. They are intentionally not account features on the local-only roadmap.
 
