@@ -143,7 +143,7 @@ export function Player (): ReactNode {
       idx,
       video: video.current,
       navigate: (url) => {
-        router.navigate({ to: url }).catch(console.error)
+        router.navigate({ to: url, state: previous => ({ catalogReturn: previous.catalogReturn, catalogReturnState: previous.catalogReturnState, catalogQuery: previous.catalogQuery, catalogBack: previous.catalogBack }) }).catch(console.error)
       },
     })
     document.body.classList.add('player-page')

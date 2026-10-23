@@ -81,6 +81,11 @@ function SourceExtras ({
 }
 function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): ReactNode {
   const [saved, setSaved] = useState(initialSaved)
+  const [observedSaved, setObservedSaved] = useState(initialSaved)
+  if (observedSaved !== initialSaved) {
+    setObservedSaved(initialSaved)
+    setSaved(initialSaved)
+  }
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [prefs, setPrefs] = useState(readPreferences)
@@ -139,6 +144,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
   })
   const read = (key: string): unknown => (key in draft ? draft[key] : saved.values[key])
   const save = useMutation({
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['settings'], exact: true }),
     mutationFn: async (changes: Record<string, unknown>) => {
       const response = await fetch('/api/settings', {
         method: 'PATCH',
@@ -155,6 +161,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
       return out as SettingsResponse
     },
     onSuccess: (out, changes) => {
+      queryClient.cancelQueries({ queryKey: ['settings'], exact: true }).catch(console.error)
       // These writes rebuild server discovery state, including private download-link ids.
       const keys = Object.keys(changes)
       if (keys.some(key => key === 'sources' || key === 'search.timeoutS')) {
@@ -310,6 +317,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
                       id={id}
                       value={value}
                       locked={meta?.locked ?? []}
+                      disabled={disabled}
                       onChange={(next, committed) => edit(def, next, committed)}
                       extras={(item) => (
                         <SourceExtras
@@ -411,6 +419,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
         </span>
         <button
           id='savebar-discard'
+          disabled={save.isPending}
           type='button'
           className='button'
           onClick={() => {
@@ -443,7 +452,7 @@ export function Settings (): ReactNode {
   const settings = useQuery({
     queryKey: ['settings'],
     queryFn: ({ signal }) => api<SettingsResponse>('/api/settings', { signal, cache: 'no-store' }),
-    staleTime: Infinity,
+    staleTime: 0,
   })
   return (
     <main className='settings'>

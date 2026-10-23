@@ -170,6 +170,7 @@ export function ListControl ({
   id,
   value,
   locked = [],
+  disabled = false,
   onChange,
   extras,
 }: {
@@ -177,6 +178,7 @@ export function ListControl ({
   id: string
   value: unknown
   locked?: readonly ListItem[]
+  disabled?: boolean
   onChange: (next: unknown, committed: boolean) => void
   extras: (item: ListItem) => ReactNode
 }): ReactNode {
@@ -187,6 +189,11 @@ export function ListControl ({
   const [own, setOwn] = useState<ListItem[]>(() =>
     Array.isArray(value) && value.length ? (value as ListItem[]) : locked.length ? [] : [blank()]
   )
+  const [previousValue, setPreviousValue] = useState(value)
+  if (previousValue !== value) {
+    setPreviousValue(value)
+    setOwn(Array.isArray(value) && value.length ? value as ListItem[] : locked.length ? [] : [blank()])
+  }
   const change = (next: ListItem[], committed: boolean): void => {
     setOwn(next)
     onChange(next, committed)
@@ -194,7 +201,7 @@ export function ListControl ({
   const card = (item: ListItem, i: number, isLocked: boolean): ReactNode => {
     const name = `${def.itemLabel} ${i + 1}`
     return (
-      <fieldset className={`list-item${isLocked ? ' locked' : ''}`} key={item.id}>
+      <fieldset disabled={disabled} className={`list-item${isLocked ? ' locked' : ''}`} key={item.id}>
         <div className='list-head'>
           <span className='list-title'>
             <strong>
@@ -239,7 +246,7 @@ export function ListControl ({
                     id={`${id}-${i}-${f.key}`}
                     label={`${f.label}, ${name}`}
                     value={item[f.key]}
-                    disabled={isLocked || !!f.disabled}
+                    disabled={disabled || isLocked || !!f.disabled}
                     onChange={(v, committed) =>
                       change(
                         own.map((o) => (o.id === item.id ? { ...o, [f.key]: v } : o)),
@@ -261,7 +268,7 @@ export function ListControl ({
         {!locked.length && !own.length && <p className='muted list-empty'>No {def.itemLabel}s yet.</p>}
       </div>
       <p>
-        <button type='button' className='button add' onClick={() => change([...own, blank()], false)}>
+        <button type='button' disabled={disabled} className='button add' onClick={() => change([...own, blank()], false)}>
           + Add {def.itemLabel}
         </button>
       </p>

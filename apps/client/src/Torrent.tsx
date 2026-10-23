@@ -292,7 +292,7 @@ export function Torrent (): ReactNode {
     <main>
       <p className='back' hidden={!back}>
         {back && (
-          <CatalogLink id='back' href={back.href} back={!!state.catalogReturn}>
+          <CatalogLink id='back' href={back.href} back={!!state.catalogReturn && state.catalogBack !== false}>
             {back.label}
           </CatalogLink>
         )}

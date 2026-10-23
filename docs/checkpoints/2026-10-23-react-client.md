@@ -50,3 +50,15 @@ The pass exposed an additional bug: changing Explore filters dropped the remembe
 - [Phone playback](2026-10-23-react-client/manual-browser-phone.png)
 - [Desktop playback](2026-10-23-react-client/manual-browser-desktop.png)
 - [Explore query retention](2026-10-23-react-client/manual-browser-explore.png)
+
+## Save concurrency, return context and Settings freshness
+
+Confirmed all three P2 findings from the `c2526be` review still applied after the earlier UI follow-ups. Source editing and Discard now lock for the whole save request. Settings revalidates on entry/focus, reconciles its saved baseline and external list values, and preserves draft fields until Save or Discard. Cancelling in-flight reads around a save prevents an older read from replacing its saved response. Catalog history carries nested return context across playback and episode navigation; non-adjacent return links use their retained URL rather than history Back into the Player.
+
+Four focused regressions pass: delayed-save locking and persisted source value; Search → Torrent → Player with link/keyboard Next → files → Results; Settings reentry plus refocus after an external client write while scalar/source drafts survive, then Discard adopts the latest baseline; and playback → files → Title → filtered Explore. Final validation passed: typecheck, lint, 321 Node tests, 4 peer entries and the complete 103-test Chromium suite (3.9 minutes). The new tests read their starting settings and restore changed keys after each case to avoid shared-fixture ordering effects. The existing 18-test Settings/state sequence also passes together.
+
+Interactive in-app browser checks used a separate generated-media fixture with a four-second Settings PATCH delay. Observed disabled source fields/Add/Remove/Test and Discard while saving, an enabled saved source afterwards, Results retained after returning from playback, and search timeout 37 on reentry after saving it in a second browser tab. This is local browser evidence, not owner-device/server acceptance.
+
+- [Results retained after playback](2026-10-23-react-client/manual-state-return.png)
+- [Pending save](2026-10-23-react-client/manual-state-saving.png)
+- [Refreshed value from another tab](2026-10-23-react-client/manual-state-refresh.png)

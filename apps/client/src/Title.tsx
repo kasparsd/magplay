@@ -14,7 +14,8 @@ const rank = (r: ExploreRelease): number =>
   r.playbackEffort === 'direct' ? 0 : r.playbackEffort === 'remux' ? 1 : 2
 const linkNames: Record<string, string> = { imdb: 'IMDb', tmdb: 'TMDB', tvdb: 'TheTVDB' }
 export function Title (): ReactNode {
-  const returnTo = useRouterState({ select: (state) => state.location.state.catalogReturn })
+  const context = useRouterState({ select: (state) => state.location.state })
+  const returnTo = context.catalogReturn
   const params = titleRoute.useParams()
   const search = titleRoute.useSearch()
   const back = backTarget(returnTo ? location.origin + returnTo : '', location.origin, {
@@ -41,7 +42,7 @@ export function Title (): ReactNode {
   return (
     <main>
       <p className='back'>
-        <CatalogLink id='back' back={!!returnTo && back.history} href={back.href}>{back.label}</CatalogLink>
+        <CatalogLink id='back' back={!!returnTo && back.history && context.catalogBack !== false} href={back.href}>{back.label}</CatalogLink>
       </p>
       <div id='header' className='title-header'>
         <Poster title={name} large />

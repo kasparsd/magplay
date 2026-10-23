@@ -3,6 +3,13 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { count, formatBytes, tint } from '../lib/ui.ts'
 import type { ReleaseRowItem } from '../lib/ui.ts'
 
+interface CatalogContext {
+  catalogQuery?: string | undefined
+  catalogReturn?: string | undefined
+  catalogBack?: boolean | undefined
+  catalogReturnState?: CatalogContext | undefined
+}
+
 export function CatalogLink ({
   href,
   children,
@@ -18,6 +25,20 @@ export function CatalogLink ({
   'data-action'?: string
 }): ReactNode {
   const router = useRouter()
+  const current = router.state.location
+  const fromCatalog = current.pathname === '/' || current.pathname === '/explore' || current.pathname.startsWith('/title/')
+  const returningToFiles = current.pathname.startsWith('/play/') && href.startsWith('/t/')
+  const context: CatalogContext = {
+    catalogReturn: current.state.catalogReturn,
+    catalogReturnState: current.state.catalogReturnState,
+    catalogBack: current.state.catalogBack,
+    catalogQuery: (current.search as { q?: string }).q ?? current.state.catalogQuery,
+  }
+  const next: CatalogContext = href === context.catalogReturn
+    ? { ...context.catalogReturnState, catalogBack: false }
+    : fromCatalog
+      ? { catalogReturn: current.pathname + current.searchStr, catalogReturnState: context, catalogBack: true, catalogQuery: context.catalogQuery }
+      : { ...context, catalogBack: returningToFiles ? false : context.catalogBack }
   return (
     <Link
       to={href}
@@ -27,7 +48,7 @@ export function CatalogLink ({
           router.history.back()
         }
       }}
-      state={{ catalogReturn: location.pathname + location.search, catalogQuery: (router.state.location.search as { q?: string }).q ?? router.state.location.state.catalogQuery }}
+      state={next}
       {...props}
     >
       {children}
@@ -125,6 +146,8 @@ export function ReleaseRow ({
 declare module '@tanstack/react-router' {
   interface HistoryState {
     catalogQuery?: string | undefined
-    catalogReturn?: string
+    catalogReturnState?: CatalogContext | undefined
+    catalogBack?: boolean | undefined
+    catalogReturn?: string | undefined
   }
 }
