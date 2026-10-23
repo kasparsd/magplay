@@ -1,6 +1,7 @@
 // Every page the app has, by URL. The server answers exactly these paths with the shell (apps/server/src/http/static.ts).
 import type { ReactNode } from 'react'
 import { Outlet, createRootRoute, createRoute, createRouter, stripSearchParams } from '@tanstack/react-router'
+import { Torrent } from './Torrent.tsx'
 import { Search } from './Search.tsx'
 import { Explore } from './Explore.tsx'
 import { Title } from './Title.tsx'
@@ -57,11 +58,18 @@ export const titleRoute = createRoute({
   search: { middlewares: [stripSearchParams({ title: '', year: '' })] },
   component: Title,
 })
+export const torrentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/t/{-$ih}',
+  validateSearch: (s: Record<string, unknown>) => ({ title: string(s.title), link: string(s.link), magnet: string(s.magnet) }),
+  search: { middlewares: [stripSearchParams({ title: '', link: '', magnet: '' })] },
+  component: Torrent,
+})
 const routeTree = rootRoute.addChildren([
   searchRoute,
   exploreRoute,
   titleRoute,
-  page('/t/{-$ih}', 'torrent'),
+  torrentRoute,
   page('/play/$ih/$idx', 'player'),
   page('/settings', 'settings'),
 ])

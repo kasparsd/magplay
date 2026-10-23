@@ -2,14 +2,12 @@
 // A module runs once per document, so leaving such a page, or opening another, is a full page load (see leaveVanilla).
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import torrent from '../pages/torrent.html?raw'
 import player from '../pages/player.html?raw'
 import settings from '../pages/settings.html?raw'
 
 interface Page { html: string, title: string, bodyClass?: string, load: () => Promise<unknown> }
 
 export const PAGES = {
-  torrent: { html: torrent, title: 'magplay', load: () => import('../torrent.ts') },
   player: { html: player, title: 'magplay', bodyClass: 'player-page', load: () => import('../player.ts') },
   settings: { html: settings, title: 'Settings · magplay', load: () => import('../settings.ts') },
 } satisfies Record<string, Page>
