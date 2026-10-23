@@ -50,9 +50,10 @@ Coverage:
 
 - Cache headers, conditional GET/HEAD, raw/tar ranges, completed/progressive subtitles and HLS session freshness.
 - Real generated non-media single-file and tar downloads, download-only phone layout, mixed-torrent Resume and Explore-only adult-setting copy.
+- Explore filters in the URL (Back steps through them, a new type drops the genre), Show more without repeated tiles, and a title's releases, best release and back link, from recorded BitMagnet answers routed in the browser.
 - Cached torrent file lists without torrent activation, Settings save/lock/source-field behavior, Debug polling/focus, and connection-test warnings.
 
-The deliberately failed/malformed POST responses and delayed audio-switch response are the only playback-response interventions. Codecs, probing, streams and successful decisions are not mocked. Each test uses a fresh browser context; each worker owns its server/cache. Teardown navigates away, stops leftover sessions through the API, shuts down the child and deletes its temporary files. Failure artifacts contain a screenshot, trace and server log.
+The deliberately failed/malformed POST responses and delayed audio-switch response are the only playback-response interventions; Explore's answers are recorded because the fixtures have no BitMagnet. Codecs, probing, streams and successful decisions are not mocked. Each test uses a fresh browser context; each worker owns its server/cache. Teardown navigates away, stops leftover sessions through the API, shuts down the child and deletes its temporary files. Failure artifacts contain a screenshot, trace and server log.
 
 ## What this does not prove
 

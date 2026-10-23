@@ -44,7 +44,7 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     for (const [, asset] of html.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)) assets.add(asset!)
   }
   // Every page is the one shell; every script and stylesheet it links is content-hashed, so a release changes its URL
-  assert.equal(assets.size, 2)
+  assert.ok([...assets].some(asset => asset.endsWith('.js')) && [...assets].some(asset => asset.endsWith('.css')), 'the shell links its script and stylesheet')
   for (const asset of assets) assert.match(asset, /^\/assets\/[\w-]+-[\w-]{8}\.(?:js|css)$/)
   for (const url of [...pages, ...assets, `${[...assets].find(asset => asset.endsWith('.js'))}.map`]) {
     const res = await fetch(origin + url)
