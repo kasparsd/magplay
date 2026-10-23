@@ -1,7 +1,7 @@
 // What a file holds, read from its headers in Node with Mediabunny's demuxers: no ffprobe. Inputs are URLs (the app's
 // /raw loopback URL, read with Range requests) or local paths (tests).
 import fs from 'node:fs/promises'
-import { ALL_FORMATS, EncodedPacketSink, FilePathSource, Input, MATROSKA, MP4, MPEG_TS, QTFF, UrlSource, WEBM } from 'mediabunny'
+import { ALL_FORMATS, FilePathSource, Input, MATROSKA, MP4, MPEG_TS, QTFF, UrlSource, WEBM } from 'mediabunny'
 import type { InputAudioTrack, InputTrack, InputVideoTrack, Source } from 'mediabunny'
 import type { AudioTrack, ProbeResult, SubtitleTrack, VideoTrack } from '@magplay/api-contract'
 import { MediaToolError } from './errors.ts'
@@ -174,12 +174,17 @@ export function probe (input: string, fileName: string, options: ProbeOptions = 
     const primary = (await media.getPrimaryVideoTrack()) ?? videoTracks[0]
     const video = primary ? await videoTrack(primary) : undefined
     const audio = await Promise.all(audioTracks.map(audioTrack))
+    // The earliest timestamp of any track, as ffmpeg's start_time: its -ss counts from there
+    const firsts = await Promise.all([...(primary ? [primary] : []), ...audioTracks].map(t => t.getFirstTimestamp().catch(() => null)))
+    const known = firsts.filter((t): t is number => t !== null && Number.isFinite(t))
+    const startTime = known.length ? Math.min(...known) : 0
     let subtitles: SubtitleTrack[] = []
     if (container === 'matroska' || container === 'webm') {
       subtitles = await matroskaSubtitles(rangeReader(input, options.fetchFn)).catch(() => [])
     }
     return {
       duration: duration && duration > 0 ? duration : null,
+      startTime,
       container,
       isWebm: container === 'webm' || /\.webm$/i.test(fileName),
       ...(video && { video }),
@@ -187,23 +192,4 @@ export function probe (input: string, fileName: string, options: ProbeOptions = 
       subtitles,
     }
   }).catch((err: unknown) => { throw err instanceof MediaToolError ? err : new MediaToolError(`Reading the file failed: ${err instanceof Error ? err.message : String(err)}`) })
-}
-
-/**
- * The video keyframe at or just before `start` seconds: copied video can only begin there. Reads the file's index;
- * falls back to `start` when the file has none or can't be read in time.
- */
-export async function keyframeBefore (input: string, start: number, options: ProbeOptions = {}): Promise<number> {
-  if (!(start > 0)) return 0
-  try {
-    return await withInput(input, { timeoutMs: 20_000, ...options }, async media => {
-      const track = await media.getPrimaryVideoTrack()
-      if (!track) return start
-      const packet = await new EncodedPacketSink(track).getKeyPacket(start, { metadataOnly: true })
-      const pts = packet?.timestamp
-      return pts !== undefined && pts >= 0 && pts <= start + 0.001 ? pts : start
-    })
-  } catch {
-    return start
-  }
 }

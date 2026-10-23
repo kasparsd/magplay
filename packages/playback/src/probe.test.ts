@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
 import { once } from 'node:events'
-import { codecDetails, keyframeBefore, probe } from './probe.ts'
+import { codecDetails, probe } from './probe.ts'
 import { matroskaSubtitles } from './matroska-tracks.ts'
 import { MediaToolError } from './errors.ts'
 
@@ -93,9 +93,6 @@ test('an HTTP input is read with Range requests, head first, never whole', async
   assert.equal(info.subtitles.length, 1)
   assert.ok(ranges.length > 0)
   assert.ok(ranges.every(r => r.startsWith('bytes=')))
-  assert.equal(await keyframeBefore(url, 0.3), 0)
-  assert.equal(await keyframeBefore(url, 0), 0)
-  assert.equal(await keyframeBefore(`${url}-missing`, 5), 5) // unreadable: the request time itself
 })
 
 test('Matroska subtitle scan follows the SeekHead and tolerates junk', async () => {

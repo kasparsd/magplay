@@ -3,9 +3,10 @@
 The player stays imperative in `apps/client/src/player.ts`; no controller/framework migration is required for these fixes.
 
 - Each page activation owns an AbortController for title/probe requests, playback requests and status polling. `pagehide` aborts them. A restored document starts one new polling loop with a fresh activation/tab ID.
-- Each playback attempt owns playlist waiting, HLS callbacks and autoplay results. Superseded attempts cannot update the replacement UI. Playback POSTs remain serialized while the page is active, rather than cancelling them on every audio change and creating out-of-order server mutations.
+- Each playback attempt (the first one, an audio switch or a retry; seeking is not one) owns its HLS callbacks and autoplay results. Superseded attempts cannot update the replacement UI. Playback POSTs remain serialized while the page is active, rather than cancelling them on every audio change and creating out-of-order server mutations.
 - Each subtitle selection owns its request and delay. Switching tracks or leaving cancels both; aborts while reading the response body are handled too.
 - Countdown ownership is explicit: restarting, resuming playback, cancelling or leaving clears its timer and listener.
+- A segment request waits while the server converts it; the browser leaving the request (hls.js aborts it on a seek) cancels only that wait, never the conversion.
 - `POST /api/play/tab/:tab` closes a page activation even if the browser never received its session ID. A bounded, three-minute closed-tab fence rejects a late POST for that activation. A restored activation uses a new ID. The server also checks for a disconnected request before expensive probing/session creation.
 - Known sessions are explicitly stopped on teardown. Server-side idle cleanup remains the fallback for browser crashes, dropped beacons or forced context disposal.
 

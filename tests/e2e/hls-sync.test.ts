@@ -2,12 +2,12 @@
 // MSE parsers do: edit lists ignored. hls.js never reads them and Chrome skips empty edits, so an offset
 // that only exists in an edit list (the gap between the seek keyframe and the trimmed audio, the B-frame delay)
 // plays as audio ahead of video. No browser is needed: the check is on the segments themselves.
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { ffmpegArgs, keyframeBefore } from '@magplay/playback'
+import { ffmpegArgs, keyframeIndex, TIMELINE_OFFSET } from '@magplay/playback'
 import { test, expect } from './fixtures.js'
 
 const exec = promisify(execFile)
@@ -27,23 +27,34 @@ async function markerSource (dir: string): Promise<string> {
   return file
 }
 
-/** Runs the server's remux arguments for `start` and returns init + segments as one fragmented MP4. */
+const info = { startTime: 0, video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 2, language: null, title: null, default: true }], subtitles: [] }
+
+/** Runs one HLS run's ffmpeg arguments from `start` and returns the fragmented MP4 it writes to fd 3. */
+async function run (dir: string, input: string, start: number): Promise<Buffer> {
+  const proc = spawn('ffmpeg', ffmpegArgs({ input, info, audio: 0, start, mode: 'remux', dir, transcodeMaxHeight: 720 }), { stdio: ['ignore', 'ignore', 'pipe', 'pipe'] })
+  const chunks: Buffer[] = []
+  proc.stdio[3]!.on('data', (chunk: Buffer) => chunks.push(chunk))
+  let stderr = ''
+  proc.stderr!.on('data', chunk => { stderr += String(chunk) })
+  const code = await new Promise(resolve => proc.on('close', resolve))
+  expect(code, stderr).toBe(0)
+  return Buffer.concat(chunks)
+}
+
+/** Runs the server's remux arguments for `start` and returns the output as one fragmented MP4 file. */
 async function remuxed (dir: string, input: string, start: number): Promise<{ file: string, init: Buffer }> {
-  const out = path.join(dir, `hls-${start}`)
-  await fs.mkdir(out)
-  const info = { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 2, language: null, title: null, default: true }], subtitles: [] }
-  await exec('ffmpeg', ffmpegArgs({ input, info, audio: 0, start, mode: 'remux', dir: out, transcodeMaxHeight: 720 }), { timeout: 60_000 })
-  const segments = (await fs.readdir(out)).filter(name => name.endsWith('.m4s')).sort()
-  expect(segments.length).toBeGreaterThan(0)
-  const init = await fs.readFile(path.join(out, 'init.mp4'))
+  const media = await run(dir, input, start)
+  const moof = media.indexOf('moof')
+  expect(moof).toBeGreaterThan(0)
   const file = path.join(dir, `joined-${start}.mp4`)
-  await fs.writeFile(file, Buffer.concat([init, ...await Promise.all(segments.map(name => fs.readFile(path.join(out, name))))]))
-  return { file, init }
+  await fs.writeFile(file, media)
+  return { file, init: media.subarray(0, moof - 4) }
 }
 
 /** When the picture first turns white and when the tone first starts, in the file's own timeline. */
 async function markers (file: string): Promise<{ flash: number, beep: number }> {
-  const ignoreEdits = ['-hide_banner', '-nostdin', ...(file.endsWith('.mp4') ? ['-ignore_editlist', '1'] : [])]
+  // -copyts reports the file's own timestamps rather than rebasing them to its first packet
+  const ignoreEdits = ['-hide_banner', '-nostdin', '-copyts', ...(file.endsWith('.mp4') ? ['-ignore_editlist', '1'] : [])]
   const video = await exec('ffmpeg', [...ignoreEdits, '-i', file, '-an', '-vf', 'signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'])
   let at = NaN
   let flash = NaN
@@ -72,9 +83,8 @@ test('HLS remux keeps audio and video aligned without edit lists, from the start
       const { flash, beep } = await markers(file)
       expect(Math.abs(flash - beep), `start ${start}: audio leads video by ${(flash - beep).toFixed(3)} s (flash at ${flash}, beep at ${beep})`).toBeLessThan(0.05)
       expect(init.includes('elst'), `start ${start}: init.mp4 relies on an edit list`).toBe(false)
-      // The session begins where the seek landed, so the markers are near the start of a resumed timeline
-      if (start) expect(flash).toBeLessThan(2)
-      else expect(flash).toBeGreaterThan(FLASH_AT - 0.1)
+      // Every run keeps the file's own timeline (plus the fixed offset), wherever it starts
+      expect(Math.abs(flash - (FLASH_AT + TIMELINE_OFFSET)), `start ${start}: flash at ${flash}`).toBeLessThan(0.1)
     }
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
@@ -94,7 +104,7 @@ function childBox (buf: Buffer, start: number, end: number, type: string): { off
   return null
 }
 
-/** Timescale of the first track, which is the video. */
+/** Timescale of the first track, which is the video (read from the stream's moov). */
 function videoTimescale (init: Buffer): number {
   const moov = childBox(init, 0, init.length, 'moov')
   const trak = moov && childBox(init, moov.off + 8, moov.off + moov.size, 'trak')
@@ -144,6 +154,18 @@ function videoPts (seg: Buffer): number[] {
   return pts
 }
 
+/** Each top-level moof (with what follows it) of a fragmented MP4 stream. */
+function moofs (media: Buffer): Buffer[] {
+  const found: Buffer[] = []
+  for (let off = 0; off + 8 <= media.length;) {
+    const size = media.readUInt32BE(off)
+    if (size < 8) break
+    if (media.toString('latin1', off + 4, off + 8) === 'moof') found.push(media.subarray(off))
+    off += size
+  }
+  return found
+}
+
 /** Every video packet's presentation time in the source, as ffprobe reports it. */
 async function sourcePts (file: string): Promise<number[]> {
   const { stdout } = await exec('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time', '-of', 'csv=p=0', file])
@@ -159,31 +181,40 @@ test('an open GOP keeps each segment\'s opening frame, and a resume begins at th
       '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
       '-t', '20', '-c:v', 'libx264', '-preset', 'medium', '-bf', '3', '-x264-params', 'open-gop=1',
       '-g', '48', '-crf', '30', '-pix_fmt', 'yuv420p', '-c:a', 'ac3', '-b:a', '192k', source], { timeout: 60_000 })
-    // Keyframes are every 2 s. 11.4 s can only start at 10; 12 s is itself a keyframe.
-    expect(await keyframeBefore(source, 11.4)).toBe(10)
-    expect(await keyframeBefore(source, 12)).toBe(12)
-    expect(await keyframeBefore(source, 0)).toBe(0)
-    const out = path.join(dir, 'hls')
-    await fs.mkdir(out)
-    const info = { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 2, language: null, title: null, default: true }], subtitles: [] }
-    await exec('ffmpeg', ffmpegArgs({ input: source, info, audio: 0, start: 0, mode: 'remux', dir: out, transcodeMaxHeight: 720 }), { timeout: 60_000 })
-    const timescale = videoTimescale(await fs.readFile(path.join(out, 'init.mp4')))
-    const segments = (await fs.readdir(out)).filter(name => name.endsWith('.m4s')).sort()
-    expect(segments.length).toBeGreaterThan(2)
+    // Keyframes are every 2 s, and the file's own index says so
+    const handle = await fs.open(source)
+    const { size } = await handle.stat()
+    const keyframes = await keyframeIndex(async (from, to) => {
+      const bytes = Buffer.alloc(Math.max(0, Math.min(to, size) - from))
+      await handle.read(bytes, 0, bytes.length, from)
+      return bytes
+    }, size)
+    await handle.close()
+    expect(keyframes?.slice(0, 7)).toEqual([0, 2, 4, 6, 8, 10, 12])
+    const media = await run(dir, source, 0)
+    const timescale = videoTimescale(media)
+    const fragments = moofs(media)
+    expect(fragments.length).toBeGreaterThan(2)
     // The DASH index used to move a later segment's opening sample onto a time the stream already presents,
     // so Chrome dropped one of the two frames. The remux must keep every source frame at its own time: the
     // same frame count, and one constant shift between source and output (ffmpeg versions place the whole
     // stream a frame or two differently, which is harmless because audio moves with it; the alignment test
     // above covers that). An open GOP's leading pictures legitimately present before the segment's keyframe.
     const frames = (await sourcePts(source)).sort((a, b) => a - b)
-    const output: number[] = []
-    for (const name of segments) output.push(...videoPts(await fs.readFile(path.join(out, name))).map(pts => pts / timescale))
-    output.sort((a, b) => a - b)
+    const output = fragments.flatMap(f => videoPts(f).map(pts => pts / timescale)).sort((a, b) => a - b)
     expect(output.length, 'the remux has a different number of frames than the source').toBe(frames.length)
     const shift = (output[0] ?? 0) - (frames[0] ?? 0)
+    expect(Math.abs(shift - TIMELINE_OFFSET)).toBeLessThan(0.1)
     output.forEach((pts, i) => {
       expect(Math.abs(pts - shift - (frames[i] ?? NaN)), `frame ${i} presents at ${pts.toFixed(3)} s, expected ${((frames[i] ?? NaN) + shift).toFixed(3)} s`).toBeLessThan(0.002)
     })
+    // A run restarted at the 12 s boundary (warming up from the keyframe before it) presents the same frames at
+    // the same times from there on, so segments from the two runs join without a gap or a jump
+    const restarted = (await run(dir, source, 10.15)).subarray(0)
+    const later = moofs(restarted).flatMap(f => videoPts(f).map(pts => pts / timescale)).filter(t => t >= 12 + TIMELINE_OFFSET - 0.001).sort((a, b) => a - b)
+    const same = output.filter(t => t >= 12 + TIMELINE_OFFSET - 0.001)
+    expect(later.length).toBe(same.length)
+    later.forEach((pts, i) => expect(Math.abs(pts - (same[i] ?? NaN)), `restarted frame ${i}`).toBeLessThan(0.002))
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }

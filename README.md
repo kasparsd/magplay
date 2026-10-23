@@ -303,11 +303,10 @@ is on the server, how much is buffered, and ffmpeg's speed (e.g. `85x`). If
 ffmpeg runs below 1.0x and playback catches up with it, a warning appears on
 the video. A file the browser can't play gets a card on the video with the
 first external player for your device, **Copy stream link** and **Back to
-files**. ffmpeg is paused once it is 4 minutes ahead of playback. Seeking past
-what ffmpeg has produced restarts it at the new position (the seek bar uses the
-probed duration). Switching the audio track also restarts at the current
-position. Text subtitles (SRT/ASS/WebVTT inside the file, or `.srt`/`.vtt`
+files**. Text subtitles (SRT/ASS/WebVTT inside the file, or `.srt`/`.vtt`
 files in the torrent) can be selected; image subtitles are listed but disabled.
+
+In remux and transcode modes the browser gets one playlist for the whole file, so the seek bar, duration and subtitles are the file's own and a seek is an ordinary seek. The server converts the part being watched (with ffmpeg, or in Node on a server without it): conversion pauses once it is 4 minutes ahead of playback, so it doesn't fill the disk with segments nobody has watched yet, and a seek to a part it hasn't converted restarts it there. Parts already converted stay until the HLS storage limit needs the space, so seeking back plays at once. The seek bar shows what is converted, and its tooltip says "Converts from here" over the rest. Switching the audio track starts a new conversion at the current position. Files without a keyframe index (MPEG-TS, AVI) are converted from the start instead and can be seeked only as far as conversion has reached; a resume position is jumped to once it gets there.
 
 If autoplay with sound is blocked (Firefox does this on a fresh tab), playback
 starts muted. Click the video or press **M** to unmute. Other keys: **space**
@@ -330,8 +329,8 @@ downloadable; browser audio-only playback is not implemented.
 
 - **No video transcoding by default.** The ARM CPU can't re-encode 1080p in
   real time. Use an external player for HEVC/10-bit in Firefox.
-- **Seek accuracy in HLS modes:** ffmpeg starts at the keyframe before the
-  requested time, so after a seek the clock can be a few seconds off.
+- **Files without a keyframe index** (MPEG-TS, AVI, MKV without cues, fragmented MP4) play from a playlist that grows from the start in remux mode, so they can be seeked only as far as conversion has reached.
+- **Segment joins:** where two conversions of the same file meet, audio can overlap by up to one AAC frame (about 21 ms).
 - **Embedded subtitles in direct mode** (rare: MP4 with `mov_text`) require
   reading the whole file first. In remux mode they come from the same ffmpeg
   and appear as it goes.

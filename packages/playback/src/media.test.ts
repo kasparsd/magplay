@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decide, detectTranscodeEncoders, ffmpegArgs, resolveTranscodeEncoder } from './media.ts'
+import { decide, detectTranscodeEncoders, ffmpegArgs, resolveTranscodeEncoder, TIMELINE_OFFSET } from './media.ts'
 import type { DecideInput, EncoderCommandRunner } from './media.ts'
 import { NoSuchTrackError, UnplayableError } from './errors.ts'
 
@@ -52,54 +52,69 @@ test('invalid audio selections and missing video have typed errors', () => {
   assert.throws(() => decide(info({ video: null }), caps, policy), UnplayableError)
 })
 
-test('remux copies HEVC as hvc1, converts audio and maps only text subtitles', () => {
+test('remux copies HEVC as hvc1, converts audio, maps only text subtitles and keeps the file timeline', () => {
   const args = ffmpegArgs({
     input: 'http://127.0.0.1:8080/raw/x/2',
     audio: 0,
-    start: 30,
+    start: 30.15,
     mode: 'remux',
     dir: '/tmp/hls',
     transcodeMaxHeight: 720,
     info: {
+      startTime: -0.005,
       video: { codec: 'hevc' },
       audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }],
       subtitles: [{ index: 0, codec: 'subrip', language: null, title: null, text: true }, { index: 1, codec: 'hdmv_pgs_subtitle', language: null, title: null, text: false }],
     },
   })
-  const value = (key: string) => args[args.indexOf(key) + 1]
-  assert.equal(value('-ss'), '30')
+  const value = (key: string, from = 0) => args[args.indexOf(key, from) + 1]
+  assert.ok(args.includes('-noaccurate_seek'))
+  assert.equal(Number(value('-ss')), 30.155) // -ss counts from the file's start time
   assert.equal(value('-i'), 'http://127.0.0.1:8080/raw/x/2')
   assert.equal(value('-c:v'), 'copy')
   assert.equal(value('-tag:v'), 'hvc1')
   assert.equal(value('-c:a'), 'aac')
+  assert.equal(Number(value('-output_ts_offset')), 30.15 + TIMELINE_OFFSET)
+  assert.match(value('-movflags') ?? '', /frag_keyframe.*frag_discont/)
+  assert.equal(value('-avoid_negative_ts'), 'disabled')
+  assert.equal(args[args.indexOf('-use_editlist') + 2], 'pipe:3')
   assert.ok(args.includes('0:s:0'))
   assert.ok(!args.includes('0:s:1'))
+  assert.equal(value('-output_ts_offset', args.indexOf('0:s:0')), '30.15') // subtitles on the plain file timeline
+  assert.equal(args.at(-1), '/tmp/hls/sub_0.vtt')
 })
 
-test('HLS sessions keep track start offsets in fragment timestamps, never in edit lists', () => {
-  const options = { input: '/raw/x/2', audio: 0, mode: 'remux' as const, dir: '/tmp/hls', transcodeMaxHeight: 720, info: { video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }], subtitles: [] } }
+test('transcode seeks exactly and forces keyframes on segment boundaries; a run from the start has no -ss', () => {
+  const args = ffmpegArgs({ input: 'x', audio: 0, start: 1.4, mode: 'transcode', dir: '/tmp/hls', transcodeMaxHeight: 720, info: { startTime: 1.4, audio: [], subtitles: [] } })
+  assert.ok(!args.includes('-ss'))
+  assert.ok(!args.includes('-noaccurate_seek'))
+  assert.equal(args[args.indexOf('-force_key_frames') + 1], 'expr:gte(t,n_forced*6)')
+  assert.equal(args[args.indexOf('-output_ts_offset') + 1], String(1.4 + TIMELINE_OFFSET))
+})
+
+test('HLS runs keep track start offsets in fragment timestamps, never in edit lists', () => {
+  const options = { input: '/raw/x/2', audio: 0, mode: 'remux' as const, dir: '/tmp/hls', transcodeMaxHeight: 720, info: { startTime: 0, video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }], subtitles: [] } }
   const resumed = ffmpegArgs({ ...options, start: 36.5 })
   const value = (args: string[], key: string) => args[args.indexOf(key) + 1]
   // Converted audio must start where copied video does: the keyframe the seek lands on, not a later trim
   assert.deepEqual(resumed.slice(resumed.indexOf('-noaccurate_seek'), resumed.indexOf('-i') + 1), ['-noaccurate_seek', '-ss', '36.5', '-i'])
-  // Edit lists are ignored by MSE; skip_sidx keeps an open GOP's first sample from being moved onto the previous segment
-  assert.equal(value(resumed, '-hls_segment_options'), 'use_editlist=0:movflags=+frag_discont+skip_sidx:avoid_negative_ts=disabled')
-  assert.equal(value(resumed, '-hls_segment_type'), 'fmp4')
+  // Edit lists are ignored by MSE: every start offset is in tfdt
+  assert.equal(value(resumed, '-use_editlist'), '0')
+  assert.match(value(resumed, '-movflags') ?? '', /frag_discont/)
   // Copied video keeps the container's timebase, so millisecond MKV timestamps are not rounded into a codec-derived one
   assert.deepEqual(resumed.slice(resumed.indexOf('-c:v'), resumed.indexOf('-c:v') + 4), ['-c:v', 'copy', '-copytb', '1'])
   const fresh = ffmpegArgs({ ...options, start: 0 })
-  assert.ok(!fresh.includes('-ss') && !fresh.includes('-noaccurate_seek'))
-  assert.equal(value(fresh, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
+  assert.ok(!fresh.includes('-ss'))
   // Re-encoded video can begin on the requested frame, so it does not disable accurate seeking
-  const transcode = ffmpegArgs({ ...options, mode: 'transcode', start: 36.5 })
+  const transcode = ffmpegArgs({ ...options, mode: 'transcode', start: 36 })
   assert.equal(transcode.includes('-noaccurate_seek'), false)
   assert.equal(transcode.includes('-copytb'), false)
-  assert.equal(value(transcode, '-ss'), '36.5')
-  assert.equal(value(transcode, '-hls_segment_options'), value(resumed, '-hls_segment_options'))
+  assert.equal(value(transcode, '-ss'), '36')
   // A resolved hardware encoder is written through; argument building does not run detection again
   const vaapi = ffmpegArgs({ ...options, mode: 'transcode', start: 0, transcodeEncoder: 'h264_vaapi', vaapiDevice: '/dev/dri/renderD129' })
   assert.equal(value(vaapi, '-c:v'), 'h264_vaapi')
   assert.equal(value(vaapi, '-vaapi_device'), '/dev/dri/renderD129')
+  assert.equal(value(vaapi, '-force_key_frames'), 'expr:gte(t,n_forced*6)')
 })
 
 const encoderList = (...encoders: string[]): string => encoders.map(encoder => ` V..... ${encoder} test encoder`).join('\n')
@@ -171,4 +186,30 @@ test('ffmpeg detection reports a missing binary as no server conversion', async 
   assert.deepEqual(await tools.refreshFfmpeg(), { path: '/nonexistent/ffmpeg', version: null, encoders: [] })
   assert.equal(tools.serverConversion(), false)
   assert.deepEqual(tools.detectedEncoders(), [])
+})
+
+test('keyframe indexes are cached per input; a failed read returns null and is retried next time', async () => {
+  const { createMediaTools } = await import('./media.ts')
+  const { box, u32 } = await import('./test-helpers.ts')
+  // An MP4 whose video track has keyframes at 0 and 2 s (25 fps, timescale 12800)
+  const moov = box('moov', box('trak', box('mdia',
+    box('mdhd', [0, 0, 0, 0], u32(0), u32(0), u32(12_800), u32(0)),
+    box('hdlr', [0, 0, 0, 0], u32(0), [...'vide'].map(c => c.charCodeAt(0))),
+    box('minf', box('stbl', box('stts', [0, 0, 0, 0], u32(1), u32(100), u32(512)), box('stss', [0, 0, 0, 0], u32(2), u32(1), u32(51)))))))
+  const file = Uint8Array.from([...box('ftyp', u32(0)), ...moov])
+  let reads = 0
+  let broken = true
+  const tools = createMediaTools({
+    live: () => ({ ffprobePath: 'ffprobe', ffmpegPath: 'ffmpeg', maxProbes: 1, maxSubtitleJobs: 1 }),
+    readRanges: () => (start, end) => {
+      reads++
+      return broken ? Promise.reject(new Error('connection reset')) : Promise.resolve(file.subarray(start, end))
+    },
+  })
+  assert.equal(await tools.keyframes('a', file.length), null)
+  broken = false
+  assert.deepEqual(await tools.keyframes('a', file.length), [0, 2])
+  const before = reads
+  assert.deepEqual(await tools.keyframes('a', file.length), [0, 2])
+  assert.equal(reads, before)
 })

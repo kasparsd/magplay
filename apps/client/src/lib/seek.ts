@@ -1,5 +1,5 @@
-// What a jump on the Player's seek bar will do, and the seek bar's layers. Pure: the page passes in
-// the decision, the browser's ranges and the file's downloaded ranges, so the tooltip and seekTo() agree.
+// What a jump on the Player's seek bar will do, and the seek bar's layers. Pure: the page passes in the mode, the
+// browser's buffer and the server's converted and downloaded ranges. Every mode plays on the file's own timeline.
 
 /** A time range in seconds. */
 export type Span = [start: number, end: number]
@@ -13,25 +13,26 @@ export interface RangeList {
 
 export interface SeekContext {
   mode: 'direct' | 'browser-remux' | 'remux' | 'transcode'
-  /** Absolute media time where the session starts; 0 in direct and browser-remux modes. */
-  offset: number
   /** Whole media duration in seconds. */
   duration: number
-  /** video.buffered, relative to the session. */
+  /** video.buffered. */
   buffered: Span[]
-  /** video.seekable, relative to the session. */
-  seekable: Span[]
+  /** HLS: the converted time ranges from the latest status poll, or null until the first one. */
+  ready: Span[] | null
+  /** A growing HLS playlist (no keyframe index) ends here; null for every other file. */
+  growingEnd: number | null
   /** status.file.ranges: fractions of the file's bytes on the server, or null until the first status poll. */
   ranges: Array<[number, number]> | null
 }
 
 /**
  * - `buffered`: the browser has it; the jump is instant.
- * - `seekable`: the browser can land there in this session (direct mode: the bytes are on the server).
- * - `restart`: outside what the browser has, so the conversion restarts there (browser-remux and HLS modes).
+ * - `seekable`: the server can send it straight away (direct mode: the bytes are on the server; HLS: it is converted).
+ * - `convert`: conversion starts from there (HLS: on the server; browser-remux: in the page).
  * - `missing`: not downloaded yet; playback waits for peers.
+ * - `unconverted`: past the end of a growing playlist; the seek stops at its end.
  */
-export type SeekOutcome = 'buffered' | 'seekable' | 'restart' | 'missing'
+export type SeekOutcome = 'buffered' | 'seekable' | 'convert' | 'missing' | 'unconverted'
 
 /** The ranges of a TimeRanges object as [start, end] pairs. */
 export function spans (ranges: RangeList): Span[] {
@@ -45,26 +46,18 @@ export function onServer (fraction: number, ranges: Array<[number, number]> | nu
   return !ranges || ranges.some(([a, b]) => fraction >= a && fraction <= b)
 }
 
-/**
- * Whether session-relative time `rel` is where the browser can seek. The seekable range lags ffmpeg's
- * output (hls.js re-reads the growing playlist on its own schedule) and seeking past it clamps to
- * its edge, so stay 2 s inside the end.
- */
-export function canSeekLocally (rel: number, seekable: Span[]): boolean {
-  const from = seekable[0]?.[0] ?? 0
-  const end = seekable.at(-1)?.[1] ?? 0
-  return rel >= from - 2 && rel < end - 2
-}
+/** Where a seek to `t` lands: a growing playlist can only be seeked as far as it has been converted. */
+export const seekTarget = (t: number, growingEnd: number | null): number => growingEnd === null ? t : Math.min(t, Math.max(0, growingEnd - 1))
 
-/** What jumping to absolute time `t` does; mirrors seekTo() in player.ts. */
+/** What jumping to time `t` does; the tooltip shows it before seekTo() does it. */
 export function seekOutcome (t: number, ctx: SeekContext): SeekOutcome {
-  const rel = t - ctx.offset
-  if (inside(rel, ctx.buffered)) return 'buffered'
-  const present = onServer(ctx.duration > 0 ? t / ctx.duration : 0, ctx.ranges)
-  if (ctx.mode === 'direct') return present ? 'seekable' : 'missing'
-  if (ctx.mode === 'browser-remux') return present ? 'restart' : 'missing'
-  if (canSeekLocally(rel, ctx.seekable)) return 'seekable'
-  return present ? 'restart' : 'missing'
+  if (inside(t, ctx.buffered)) return 'buffered'
+  const hls = ctx.mode === 'remux' || ctx.mode === 'transcode'
+  if (hls && ctx.growingEnd !== null && t >= ctx.growingEnd - 1) return 'unconverted'
+  if (hls && ctx.ready && inside(t, ctx.ready)) return 'seekable'
+  if (!onServer(ctx.duration > 0 ? t / ctx.duration : 0, ctx.ranges)) return 'missing'
+  if (ctx.mode === 'browser-remux') return 'convert'
+  return ctx.mode === 'direct' || !ctx.ready ? 'seekable' : 'convert'
 }
 
 /** The tooltip's second line for an outcome, or '' when the time alone says it. */
@@ -72,8 +65,9 @@ export function seekHint (outcome: SeekOutcome): string {
   switch (outcome) {
     case 'buffered':
     case 'seekable': return ''
-    case 'restart': return 'Restarts conversion here'
+    case 'convert': return 'Converts from here'
     case 'missing': return 'Not downloaded yet. Starts when peers send it.'
+    case 'unconverted': return 'Not converted yet'
   }
 }
 

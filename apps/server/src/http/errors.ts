@@ -2,7 +2,7 @@
 // app services throw HttpError directly.
 import { FileNotFoundError, MalformedPathError } from '@magplay/http-kit'
 import { LinkExpired, NoSourcesError, SearchTimeout, SourceError } from '@magplay/indexers'
-import { MediaToolError, NoSuchTrackError, PlaybackBusyError, UnplayableError } from '@magplay/playback'
+import { HlsFailedError, HlsNotFoundError, MediaToolError, NoSuchTrackError, PlaybackBusyError, UnplayableError } from '@magplay/playback'
 import { EngineBusyError, InvalidTorrentError, NoSuchFileError, TorrentFailedError, TorrentTimeoutError } from '@magplay/torrent-engine'
 
 /** An error with an HTTP status, shown to the user as-is. */
@@ -45,5 +45,7 @@ export function toHttpError (err: unknown): HttpFailure {
   if (err instanceof UnplayableError) return known(422, err.message)
   if (err instanceof NoSuchTrackError) return known(400, err.message)
   if (err instanceof PlaybackBusyError) return known(503, err.message, 5)
+  if (err instanceof HlsNotFoundError) return known(404, err.message)
+  if (err instanceof HlsFailedError) return known(502, err.message)
   return { status: 500, message: err instanceof Error ? err.message : String(err), retryAfter: undefined, unexpected: true }
 }

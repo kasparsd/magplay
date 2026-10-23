@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canSeekLocally, layerBackground, seekHint, seekOutcome, spans } from './seek.ts'
+import { layerBackground, seekHint, seekOutcome, seekTarget, spans } from './seek.ts'
 import type { SeekContext } from './seek.ts'
 
 const hls = (over: Partial<SeekContext> = {}): SeekContext => ({
-  mode: 'remux', offset: 60, duration: 600, buffered: [[0, 20]], seekable: [[0, 40]], ranges: [[0, 0.5]], ...over,
+  mode: 'remux', duration: 600, buffered: [[60, 80]], ready: [[0, 120], [400, 420]], growingEnd: null, ranges: [[0, 0.5]], ...over,
 })
 
 test('spans reads TimeRanges-like objects', () => {
@@ -12,30 +12,42 @@ test('spans reads TimeRanges-like objects', () => {
   assert.deepEqual(spans(ranges), [[0, 5], [10, 20]])
 })
 
-test('HLS outcomes: buffer, seekable session, restart on the server, missing', () => {
+test('HLS outcomes: buffer, converted, converts on the server, missing', () => {
   assert.equal(seekOutcome(70, hls()), 'buffered')
-  assert.equal(seekOutcome(90, hls()), 'seekable')
-  // seekTo stays 2 s inside the seekable end, so the tooltip does too
-  assert.equal(seekOutcome(99, hls()), 'restart')
-  assert.equal(seekOutcome(30, hls()), 'restart') // before the session's offset
-  assert.equal(seekOutcome(400, hls()), 'missing') // past half of the file
-  assert.equal(seekHint('restart'), 'Restarts conversion here')
+  assert.equal(seekOutcome(100, hls()), 'seekable')
+  assert.equal(seekOutcome(410, hls()), 'seekable') // converted even though the bytes aren't all on the server
+  assert.equal(seekOutcome(200, hls()), 'convert')
+  assert.equal(seekOutcome(500, hls()), 'missing') // past half of the file
+  assert.equal(seekOutcome(200, hls({ ready: null })), 'seekable') // unknown until the first poll
+  assert.equal(seekHint('convert'), 'Converts from here')
   assert.equal(seekHint('missing'), 'Not downloaded yet. Starts when peers send it.')
   assert.equal(seekHint('seekable'), '')
 })
 
+test('a growing playlist can only be seeked as far as it has been converted', () => {
+  const growing = hls({ growingEnd: 130 })
+  assert.equal(seekOutcome(100, growing), 'seekable')
+  assert.equal(seekOutcome(129.5, growing), 'unconverted')
+  assert.equal(seekOutcome(300, growing), 'unconverted')
+  assert.equal(seekHint('unconverted'), 'Not converted yet')
+  assert.equal(seekTarget(300, 130), 129)
+  assert.equal(seekTarget(300, null), 300)
+  assert.equal(seekTarget(10, 0.5), 0)
+})
+
+test('a browser remux converts from any point outside its buffer that is on the server', () => {
+  const browser = hls({ mode: 'browser-remux', ready: null })
+  assert.equal(seekOutcome(70, browser), 'buffered')
+  assert.equal(seekOutcome(200, browser), 'convert')
+  assert.equal(seekOutcome(500, browser), 'missing')
+})
+
 test('direct outcomes depend only on the buffer and the server', () => {
-  const direct = hls({ mode: 'direct', offset: 0, seekable: [[0, 600]], buffered: [[0, 30]] })
+  const direct = hls({ mode: 'direct', ready: null, buffered: [[0, 30]] })
   assert.equal(seekOutcome(10, direct), 'buffered')
   assert.equal(seekOutcome(200, direct), 'seekable')
   assert.equal(seekOutcome(500, direct), 'missing')
   assert.equal(seekOutcome(500, { ...direct, ranges: null }), 'seekable') // unknown until the first poll
-})
-
-test('local seeks need the browser\'s seekable range, with 2 s slack at the end', () => {
-  assert.equal(canSeekLocally(10, [[0, 30]]), true)
-  assert.equal(canSeekLocally(29, [[0, 30]]), false)
-  assert.equal(canSeekLocally(5, []), false)
 })
 
 test('layer backgrounds merge ranges into one gradient', () => {

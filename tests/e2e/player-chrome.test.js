@@ -1,7 +1,7 @@
 // The Player's overlay chrome: the same controls in every playback mode, menus in fullscreen,
 // the seek tooltip, keys and remembered choices.
 import { test, expect } from './fixtures.js'
-import { capHlsPlaylist, chooseAudio, chooseSubtitles, direct, expectCues, expectPlaying, openPlayer, playResponse, remux, showChrome } from './helpers.js'
+import { chooseAudio, chooseSubtitles, countPlays, direct, expectCues, expectPlaying, long, openPlayer, playResponse, remux, sessionStatus, showChrome } from './helpers.js'
 
 test('one chrome in direct and HLS modes, hiding while playing and back on pointer move', async ({ page, app }) => {
   for (const file of [direct, remux]) {
@@ -68,24 +68,23 @@ test('menus close with Escape', async ({ page, app }) => {
   await expect(page.locator('#more-slot summary')).toBeFocused()
 })
 
-test('a seek outside the converted range is predicted, restarts the session and says where', async ({ page, app }) => {
-  await capHlsPlaylist(page) // the browser never sees past the first ~18 s of the session
-  await openPlayer(page, app, remux)
+test('the seek tooltip says when a jump has to be converted first, and the jump plays without a new session', async ({ page, app }) => {
+  const decision = await openPlayer(page, app, long, 160)
+  await expect.poll(async () => (await sessionStatus(page, app, decision)).paused, { timeout: 30_000 }).toBe(true)
   await showChrome(page)
   const track = await page.locator('#seekbar .track').boundingBox()
   const at = fraction => [track.x + track.width * fraction, track.y + track.height / 2]
   await page.mouse.move(...at(0.02))
   await expect(page.locator('#seektip')).toBeVisible()
   await expect(page.locator('#seektip span')).toHaveText('')
-  await page.mouse.move(...at(60 / 90))
-  await expect(page.locator('#seektip b')).toHaveText(/^(0:59|1:00)$/)
-  await expect(page.locator('#seektip span')).toHaveText('Restarts conversion here')
-  const restarting = playResponse(page)
-  await page.mouse.click(...at(60 / 90))
-  await expect(page.locator('#playback-status')).toContainText(/Starting at (0:59|1:00)…/)
-  const decision = await (await restarting).json()
-  expect(decision.offset).toBeGreaterThanOrEqual(58)
-  await expectPlaying(page)
+  await page.mouse.move(...at(480 / 600))
+  await expect(page.locator('#seektip b')).toHaveText(/^(7:59|8:00)$/)
+  await expect(page.locator('#seektip span')).toHaveText('Converts from here')
+  const plays = countPlays(page)
+  await page.mouse.click(...at(480 / 600))
+  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(475)
+  await expectPlaying(page, 160)
+  expect(plays).toEqual([])
 })
 
 test('keys work and choices are remembered for the next file', async ({ page, app }) => {

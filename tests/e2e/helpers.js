@@ -1,11 +1,20 @@
 // Shared steps for the browser tests: open the player, wait for real playback, seek, use the chrome menus.
-import fs from 'node:fs/promises'
-import path from 'node:path'
 import { expect } from './fixtures.js'
 
 export const direct = 'Playback.S01E01.mp4'
 export const remux = 'Playback.S01E02.mkv'
 export const scope = 'Playback.S01E04.mp4' // 478×200, 2.39:1
+export const long = 'Playback.S02E01.mkv' // 10 minutes, 160×90: conversion pauses long before the end
+export const unindexed = 'Playback.S02E02.ts' // no keyframe index: a growing playlist
+/** The player's HLS session as the status poll reports it. */
+export const sessionStatus = async (page, app, decision) =>
+  (await (await page.request.get(`${app.origin}/api/torrents/${app.ih}/status?session=${decision.session}`)).json()).session
+/** Counts /api/play requests from now on. */
+export function countPlays (page) {
+  const plays = []
+  page.on('request', r => { if (r.url().endsWith('/api/play') && r.method() === 'POST') plays.push(r.postDataJSON()) })
+  return plays
+}
 export const playResponse = page => page.waitForResponse(r => r.url().endsWith('/api/play') && r.request().method() === 'POST')
 
 export async function expectPlaying (page, width = 320) {
@@ -38,7 +47,7 @@ export async function seek (page, seconds) {
   }, seconds)
   // The slider keeps the dragged value until the next timeupdate publishes the
   // real position; wait for one tick so polls can't pass on the stale value.
-  // Bounded: a seek that restarts the HLS session has no ticks until then.
+  // Bounded: a seek into a part the server is still converting has no ticks until then.
   await page.locator('#video').evaluate(v => new Promise(resolve => {
     const timer = setTimeout(resolve, 5000)
     v.addEventListener('timeupdate', () => { clearTimeout(timer); resolve() }, { once: true })
@@ -73,30 +82,4 @@ export const chooseSubtitles = (page, value) => choose(page, 'subs-slot', value)
 export async function expectCues (page, text) {
   await expect.poll(() => page.locator('#video').evaluate(v =>
     [...v.textTracks[0].cues ?? []].map(c => c.text))).toContain(text)
-}
-
-/** Serves only the first `segments` of every HLS playlist, so the browser's seekable range stays fixed however fast ffmpeg works. */
-export async function capHlsPlaylist (page, segments = 3) {
-  await page.route('**/hls/*/index.m3u8', async route => {
-    const response = await route.fetch()
-    const kept = []
-    let seen = 0
-    for (const line of (await response.text()).split('\n')) {
-      if (seen >= segments) break
-      kept.push(line)
-      if (line.endsWith('.m4s')) seen++
-    }
-    const headers = { ...response.headers() }
-    delete headers['content-length']
-    delete headers['transfer-encoding']
-    await route.fulfill({ response, headers, body: kept.join('\n') })
-  })
-}
-
-/** Seconds of media ffmpeg has written into the current HLS session, read from disk — unaffected by what the browser was served. */
-export async function producedSeconds (app) {
-  const [session] = await fs.readdir(path.join(app.cache, 'hls'))
-  if (!session) return 0
-  const text = await fs.readFile(path.join(app.cache, 'hls', session, 'index.m3u8'), 'utf8').catch(() => '')
-  return [...text.matchAll(/#EXTINF:([\d.]+)/g)].reduce((sum, m) => sum + Number(m[1]), 0)
 }

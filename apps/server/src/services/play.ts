@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { noopLogger, noopMetrics, outcome } from '@magplay/observability'
 import type { Logger, Metrics, OperationContext } from '@magplay/observability'
-// Playback: probe → decide → a direct /raw URL or an HLS session for the player's tab.
+// Playback: probe → decide → a direct or browser-remux /raw URL, or an HLS session for the player's tab whose playlist
+// covers the whole file (segments cut on the keyframes from the file's index when the video is copied).
 import { decide } from '@magplay/playback'
 import type { MediaTools, PlaybackPolicy } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
@@ -132,22 +133,22 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         const { reason } = decision
         if (decision.mode === 'direct') {
           tabs.stop(tab)
-          return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, offset: 0 }
+          return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}` }
         }
         if (decision.mode === 'browser-remux') {
           tabs.stop(tab)
-          return { mode: 'browser-remux', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, offset: 0, audio }
+          return { mode: 'browser-remux', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, audio }
         }
-        // Copied video begins at the keyframe before the request. Report that time as the session origin so the
-        // clock and subtitles match the picture; the player seeks the remainder inside the session.
-        const origin = (decision.mode === 'remux' || node) && start > 0 ? await media.keyframeBefore(input(ih, idx), start) : start
+        // Copied video is cut into segments on the keyframes from the file's own index; without one the playlist grows
+        const keyframes = decision.mode === 'transcode' ? null : await during(ih, idx, 'probing', () => media.keyframes(input(ih, idx), file.length, { logger: log }), log)
         check()
         const wireMode = decision.mode === 'transcode' ? 'transcode' : 'remux'
         const s = tabs.start(tab, {
           input: input(ih, idx),
           info,
           audio,
-          start: origin,
+          start,
+          keyframes,
           mode: node ? 'node-remux' : wireMode,
           context: { logger: log },
           onReady: () => {
@@ -163,8 +164,9 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
           duration: info.duration,
           url: `/hls/${s.id}/index.m3u8`,
           session: s.id,
-          offset: origin,
-          // ffmpeg writes text subtitles beside the segments; a Node remux doesn't, so external subtitle files are the way
+          growing: s.growing,
+          // ffmpeg writes text subtitles on the file's timeline beside the segments; a Node remux doesn't, so external
+          // subtitle files are the way
           subtitles: node ? [] : info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
         }
       } catch (err) {

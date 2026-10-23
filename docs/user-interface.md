@@ -113,20 +113,19 @@ Decided on 2026-10-17: replace the Player's controls with one overlay chrome for
 
 - **Visibility.** The chrome is visible while paused, while a menu is open, while focus is inside it, and for 2.5 s after the last pointer move, touch or key press. While playing it fades out and the cursor hides over the video. In fullscreen the same rules apply.
 - **Left to right:** play/pause, back 10 s, forward 10 s, mute with a volume slider, `0:22 / 26:06`, a flexible gap, **Next: S01E02** (only when there is a next file), Subtitles, Audio, Speed, ⋯ More, Fullscreen. More holds the Open in items, Download file, Copy stream link and Picture in picture, so the Player offers the same file actions as the torrent page's ⋯ menu.
-- **Menus** open upward inside the video, use the shared `menu()` from `lib/ui.ts` (extended to open upward and stay inside the stage), and close with Escape. Subtitles and Audio list the same choices as today's selects. Choosing an audio track still restarts the session at the current position, as `start(position())` does today.
+- **Menus** open upward inside the video, use the shared `menu()` from `lib/ui.ts` (extended to open upward and stay inside the stage), and close with Escape. Subtitles and Audio list the same choices as today's selects. Choosing an audio track starts a new session at the current position (`start(position())`).
 - **Seek bar.** The full duration, with four layers drawn on one track from bottom to top:
   1. *On the server*: `status.file.ranges` (fractions of the file's bytes, used as an approximation of time).
-  2. *Converted by ffmpeg* (remux and transcode only): from `cur.offset` to `cur.offset + produced`.
-  3. *In the browser*: `video.buffered` ranges, shifted by `cur.offset` in HLS modes.
+  2. *Converted by ffmpeg* (remux and transcode only): the session's `ready` ranges.
+  3. *In the browser*: `video.buffered` ranges. Every mode plays on the file's own timeline.
   4. *Played*: 0 to `position()`, in the accent colour.
 
   `#pieces` and its 2 s background-gradient update are removed.
-- **Seek tooltip.** On hover or drag, show the time under the pointer and what a jump there will do. The rules mirror `seekTo()`:
-  - Inside the browser buffer, or anywhere in `direct` mode when that part is on the server: just the time.
-  - Inside the session's browser-seekable range (`video.seekable` shifted by `offset`): just the time.
-  - Outside the converted range but on the server: "Restarts conversion here".
+- **Seek tooltip.** On hover or drag, show the time under the pointer and what a jump there will do (`seekOutcome()` in `lib/seek.ts`):
+  - Inside the browser buffer, anywhere in `direct` mode when that part is on the server, or inside a converted range: just the time.
+  - Outside the converted ranges but on the server: "Converts from here". The seek is an ordinary seek; the server restarts ffmpeg there and the wait explanation covers the conversion.
   - Not on the server: "Not downloaded yet. Starts when peers send it."
-- **Seek feedback.** When a seek restarts ffmpeg, the overlay says "Starting at 14:20…" with the spinner instead of the generic "Buffering…".
+  - Past the end of a growing playlist (a file without a keyframe index): "Not converted yet"; the seek stops at the converted end.
 - **Title overlay.** In fullscreen only, the top of the video shows the title (see step 2) on a gradient that fades with the controls.
 - **End of video.** The existing 10 s countdown to the next file stays on the video, as a card with **Play now** and **Cancel**.
 - **Icons** are inline SVG with `fill: currentColor`. No emoji and no icon font.

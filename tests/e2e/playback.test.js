@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { test, expect } from './fixtures.js'
-import { capHlsPlaylist, chooseAudio, chooseSubtitles, direct, expectCues, expectPlaying, openPlayer, playResponse, producedSeconds, remux, seek } from './helpers.js'
+import { chooseAudio, chooseSubtitles, countPlays, direct, expectCues, expectPlaying, long, openPlayer, playResponse, remux, seek, sessionStatus, unindexed } from './helpers.js'
 
 test('cold concurrent torrent/probe requests share one initialization', async ({ page, app }) => {
   const responses = await Promise.all(Array.from({ length: 8 }, (_, i) =>
@@ -28,42 +28,67 @@ test('search → torrent → direct MP4: real decoded frames and Range seeking',
   await expectPlaying(page)
 })
 
-test('MKV/AC3 remux: seek, switch audio, restart before session offset', async ({ page, app }) => {
-  expect((await openPlayer(page, app, remux)).mode).toBe('remux')
+test('MKV/AC3 remux: seeks are ordinary seeks on the file timeline; switching audio keeps the position', async ({ page, app }) => {
+  const decision = await openPlayer(page, app, remux)
+  expect(decision.mode).toBe('remux')
+  expect(decision.growing).toBe(false)
+  expect(decision.offset).toBeUndefined()
+  const playlist = await (await page.request.get(app.origin + decision.url)).text()
+  expect(playlist).toContain('#EXT-X-PLAYLIST-TYPE:VOD')
+  expect(playlist).toContain('#EXT-X-ENDLIST')
+  const plays = countPlays(page)
   await seek(page, 35)
-  await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(35)
-  const requested = await page.locator('#seek').inputValue().then(Number)
+  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(35)
+  await expectPlaying(page)
+  await seek(page, 10)
+  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeLessThan(30)
+  await expectPlaying(page)
+  expect(plays).toEqual([]) // seeking never asks for a new session
+  await seek(page, 40)
+  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(40)
   const switching = playResponse(page)
   await chooseAudio(page, 1)
   const switched = await (await switching).json()
-  expect(switched.mode).toBe('remux')
-  // Copied video starts at the keyframe before the request; playback seeks the remainder inside the session
-  const lead = requested - switched.offset
-  expect(lead).toBeGreaterThan(0.2)
-  expect(lead).toBeLessThan(2.5)
+  expect(switched.session).not.toBe(decision.session)
+  expect(plays.at(-1).start).toBeGreaterThanOrEqual(40)
   await expectPlaying(page)
-  expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThan(lead - 0.75)
-  const restarting = playResponse(page)
-  await seek(page, 10)
-  const restarted = await (await restarting).json()
-  expect(restarted.session).not.toBe(switched.session)
-  expect(restarted.offset).toBe(10)
-  await expectPlaying(page)
+  expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(40)
 })
 
-test('seeking past the loaded HLS playlist restarts the session at the exact target', async ({ page, app }) => {
-  await capHlsPlaylist(page) // the browser never sees past the first ~18 s of the session
-  await openPlayer(page, app, remux)
-  // ffmpeg is not capped: once it has produced well past the seek target, a
-  // decision based on server-side progress would wrongly seek in-session and
-  // the browser would silently clamp to the capped playlist's end instead
-  await expect.poll(() => producedSeconds(app), { timeout: 30_000 }).toBeGreaterThan(32)
-  const restarting = playResponse(page)
-  await seek(page, 30)
-  const decision = await (await restarting).json()
-  expect(decision.offset).toBe(30)
+test('a seek past what has been converted restarts ffmpeg there, without a new play request', async ({ page, app }) => {
+  const decision = await openPlayer(page, app, long, 160)
+  // Conversion stops about four minutes ahead of the player
+  await expect.poll(async () => (await sessionStatus(page, app, decision)).paused, { timeout: 30_000 }).toBe(true)
+  const before = (await sessionStatus(page, app, decision)).ready
+  expect(before.every(([, end]) => end < 400)).toBe(true)
+  const plays = countPlays(page)
+  await seek(page, 500)
+  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(500)
+  await expectPlaying(page, 160)
+  expect(plays).toEqual([])
+  const after = (await sessionStatus(page, app, decision)).ready
+  expect(after.some(([start, end]) => start <= 500 && end > 500)).toBe(true)
+  expect(after[0][0]).toBe(0) // what was converted before is kept
+  expect(app.logs().match(/"event":"hls\.run\.started"/g).length).toBeGreaterThanOrEqual(2)
+  // Back to the start: served from what was already converted
+  await seek(page, 5)
+  await expectPlaying(page, 160)
+  expect(plays).toEqual([])
+})
+
+test('a file without a keyframe index plays from a growing playlist', async ({ page, app }) => {
+  const decision = await openPlayer(page, app, unindexed)
+  expect(decision.mode).toBe('remux')
+  expect(decision.growing).toBe(true)
+  await expect.poll(async () => (await page.request.get(app.origin + decision.url).then(r => r.text())).includes('#EXT-X-ENDLIST')).toBe(true)
+  const playlist = await (await page.request.get(app.origin + decision.url)).text()
+  expect(playlist).toContain('#EXT-X-PLAYLIST-TYPE:EVENT')
+  // The player learns how far conversion has got from its status poll, every 2 s
+  await expect(async () => {
+    await seek(page, 20)
+    expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(20)
+  }).toPass({ timeout: 15_000 })
   await expectPlaying(page)
-  await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(30)
 })
 
 test('rapid audio changes preserve position and leave only the latest session', async ({ page, app }) => {
@@ -92,11 +117,12 @@ test('rapid audio changes preserve position and leave only the latest session', 
     expect(requests.at(-1).audio).toBe(1)
     expect(requests.at(-1).start).toBeGreaterThanOrEqual(30)
     await expectPlaying(page)
+    expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(30)
     await expect.poll(async () => (await fs.readdir(path.join(app.cache, 'hls'))).length).toBe(1)
   } finally { release() }
 })
 
-test('embedded and external subtitles follow a restarted HLS offset', async ({ page, app }) => {
+test('embedded and external subtitles stay on the file timeline across an audio switch', async ({ page, app }) => {
   await openPlayer(page, app, remux)
   await chooseSubtitles(page, 'embedded:0')
   await expectCues(page, 'First subtitle')
@@ -104,17 +130,17 @@ test('embedded and external subtitles follow a restarted HLS offset', async ({ p
   await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(30)
   const switching = playResponse(page)
   await chooseAudio(page, 1)
-  const decision = await (await switching).json()
+  await switching
   await expectPlaying(page)
   await expectCues(page, 'Middle subtitle')
   await expectCues(page, 'Last subtitle')
   const embeddedStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
-  expect(Math.abs(embeddedStart - (70 - decision.offset))).toBeLessThan(0.2)
+  expect(Math.abs(embeddedStart - 70)).toBeLessThan(0.1)
   const external = `file:${app.files['Playback.S01E02.srt']}`
   await chooseSubtitles(page, external)
   await expectCues(page, 'Last subtitle')
   const lastStart = await page.locator('#video').evaluate(v => [...v.textTracks[0].cues].find(c => c.text === 'Last subtitle').startTime)
-  expect(Math.abs(lastStart - (70 - decision.offset))).toBeLessThan(0.2)
+  expect(lastStart).toBe(70)
   // A → Off → A must not create duplicate polling loops/cues.
   await chooseSubtitles(page, '')
   await chooseSubtitles(page, external)
@@ -267,7 +293,7 @@ test('direct playback persists per-file progress and offers resume or start over
   expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeLessThan(5)
 })
 
-test('HLS resume uses absolute file position after audio/seek session offsets', async ({ page, app }) => {
+test('HLS resume starts at the saved position in the file', async ({ page, app }) => {
   await openPlayer(page, app, remux)
   await seek(page, 30)
   await expect.poll(() => page.locator('#seek').inputValue().then(Number)).toBeGreaterThanOrEqual(30)
@@ -278,11 +304,11 @@ test('HLS resume uses absolute file position after audio/seek session offsets', 
   await page.locator('#video').evaluate(v => v.pause())
   await page.reload()
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible()
-  const response = playResponse(page)
+  const request = page.waitForRequest(r => r.url().endsWith('/api/play') && r.method() === 'POST')
   await page.getByRole('button', { name: 'Resume', exact: true }).click()
-  const decision = await (await response).json()
-  expect(decision.offset).toBeGreaterThanOrEqual(30)
+  expect((await request).postDataJSON().start).toBeGreaterThanOrEqual(30)
   await expectPlaying(page)
+  expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(30)
 })
 
 test('completed media restarts instead of offering to resume at the credits', async ({ page, app }) => {
@@ -361,8 +387,8 @@ test('HTTP media cache policies preserve ranges, validators and session freshnes
   expect(segment).toBeTruthy()
   const segmentUrl = `${app.origin}/hls/${decision.session}/${segment}`
   const media = await page.request.get(segmentUrl)
-  expect(media.headers()['cache-control']).toBe('private, no-cache')
-  expect((await page.request.head(segmentUrl, { headers: { 'If-None-Match': media.headers().etag } })).status()).toBe(304)
+  expect(media.status()).toBe(200)
+  expect(media.headers()['cache-control']).toBe('no-store')
   const sub = await page.request.get(`${app.origin}/hls/${decision.session}/sub_0.vtt`, { headers: { 'If-None-Match': '*' } })
   expect(sub.status()).toBe(200)
   expect(sub.headers()['cache-control']).toBe('no-store')
@@ -371,7 +397,7 @@ test('HTTP media cache policies preserve ranges, validators and session freshnes
   expect(subtitles.headers()['cache-control']).toBe('private, no-cache')
   expect((await page.request.get(completedSub, { headers: { 'If-None-Match': subtitles.headers().etag } })).status()).toBe(304)
   await page.request.delete(`${app.origin}/api/play/${decision.session}`)
-  const removed = await page.request.get(segmentUrl, { headers: { 'If-None-Match': media.headers().etag } })
+  const removed = await page.request.get(segmentUrl)
   expect(removed.status()).toBe(404)
   expect(removed.headers()['cache-control']).toBe('no-store')
 })

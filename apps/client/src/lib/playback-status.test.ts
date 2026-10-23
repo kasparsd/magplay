@@ -13,6 +13,8 @@ const session = (over: Partial<SessionStats> = {}): SessionStats => ({
   cpu: null,
   produced: 20,
   readyUntil: 0,
+  ready: [],
+  growing: false,
   running: true,
   paused: false,
   failed: false,
@@ -36,7 +38,7 @@ const status = (over: Partial<Extract<TorrentStatus, { loaded: true }>> = {}): T
 })
 const signals = (over: Partial<PlaybackSignals> = {}): PlaybackSignals => ({
   phase: 'buffering',
-  decision: { mode: 'transcode', reason: 'MPEG4 → H.264', offset: 60, duration: 90, url: '/hls/s/index.m3u8', session: 's', subtitles: [] },
+  decision: { mode: 'transcode', reason: 'MPEG4 → H.264', duration: 90, url: '/hls/s/index.m3u8', session: 's', growing: false, subtitles: [] },
   status: status(),
   statusAge: 0,
   waitingMs: 9000,
@@ -91,7 +93,7 @@ test('incomplete file with connected peers and present tail keeps the general do
 test('published segments, not ffmpeg timestamps, distinguish conversion and browser buffering', () => {
   assert.equal(explainPlayback(signals({ slowSamples: 0, status: status({ session: session({ produced: 50, readyUntil: 0 }) }) }))?.key, 'conversion')
   assert.equal(explainPlayback(signals({ status: status({ session: session({ readyUntil: 24 }) }) }))?.key, 'browser')
-  // Position is session relative even when the absolute offset is nonzero.
+  // Position and readyUntil are both on the file's timeline.
   assert.equal(explainPlayback(signals({ position: 25, status: status({ session: session({ readyUntil: 24 }) }) }))?.key, 'slow')
 })
 
@@ -146,7 +148,7 @@ test('cached input and published output distinguish concurrent readiness from co
 })
 
 test('debug pin shows healthy direct, paused, and throttled playback without blocking waits', () => {
-  const direct = signals({ phase: 'playing', decision: { mode: 'direct', reason: 'Supported', offset: 0, duration: 90, url: '/raw' }, status: status({ session: null }), buffer: 30 })
+  const direct = signals({ phase: 'playing', decision: { mode: 'direct', reason: 'Supported', duration: 90, url: '/raw' }, status: status({ session: null }), buffer: 30 })
   assert.equal(playbackPresentation(direct, false), null)
   const model = playbackPresentation(direct, true)!
   assert.equal(model.kind, 'debug')
@@ -164,7 +166,7 @@ test('stale status clears upstream checks while preserving direct mode and brows
   assert.equal(stale.flow.focus, null)
   assert.deepEqual(stale.flow.stages.slice(0, 3).map(stage => stage.state), ['unknown', 'unknown', 'unknown'])
   assert.equal(stale.flow.stages[1]?.progress, null)
-  const direct = playbackPresentation(signals({ phase: 'playing', decision: { mode: 'direct', reason: 'Supported', offset: 0, duration: 90, url: '/raw' }, statusAge: 6001, buffer: 12 }), true)!
+  const direct = playbackPresentation(signals({ phase: 'playing', decision: { mode: 'direct', reason: 'Supported', duration: 90, url: '/raw' }, statusAge: 6001, buffer: 12 }), true)!
   assert.equal(direct.flow.stages[2]?.state, 'bypassed')
   assert.equal(direct.flow.stages[3]?.state, 'ready')
 })

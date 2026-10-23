@@ -1,34 +1,52 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs/promises'
-import os from 'node:os'
+import { once } from 'node:events'
+import type { EventEmitter } from 'node:events'
 import path from 'node:path'
-import { runNodeRemux } from './node-remux.ts'
+import { TIMELINE_OFFSET } from './media.ts'
+import { fragmentSplitter, fragmentStart, readInit } from './mp4.ts'
+import type { InitInfo } from './mp4.ts'
+import { nodeRemuxProcess } from './node-remux.ts'
 
 const fixture = path.join(import.meta.dirname, '../test-fixtures/h264-ac3-aac-srt.mkv')
 
-test('a Node remux of an AC-3 MKV publishes fMP4 HLS with a real segment duration', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-node-remux-'))
-  try {
-    await runNodeRemux({
-      input: fixture,
-      dir,
-      audio: 0,
-      start: 0,
-      signal: new AbortController().signal,
-      position: () => 0,
-      onOutput () {},
-    })
-    const playlist = await fs.readFile(path.join(dir, 'index.m3u8'), 'utf8')
-    assert.match(playlist, /#EXT-X-MAP:URI="init\.mp4"/)
-    assert.match(playlist, /#EXT-X-ENDLIST/)
-    const duration = Number(playlist.match(/#EXTINF:([\d.]+)/)?.[1])
-    assert.ok(duration > 0.4 && duration < 0.7, playlist)
-    const init = await fs.readFile(path.join(dir, 'init.mp4'))
-    assert.equal(init.subarray(4, 8).toString('ascii'), 'ftyp')
-    const segment = await fs.readFile(path.join(dir, 'seg_00000.m4s'))
-    assert.equal(segment.subarray(4, 8).toString('ascii'), 'moof')
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true })
-  }
+/** Runs a Node remux to the end; returns how it closed and each video fragment's start on the file timeline. */
+async function run (firstKeyframe: number | null): Promise<{ code: unknown, init: InitInfo | null, starts: number[] }> {
+  const proc = nodeRemuxProcess({ input: fixture, audio: 0, start: 0, firstKeyframe })
+  let init: InitInfo | null = null
+  const starts: number[] = []
+  const split = fragmentSplitter({
+    init: data => { init = readInit(data) },
+    begin: moof => {
+      const at = init && fragmentStart(moof, init)
+      if (at != null) starts.push(at - TIMELINE_OFFSET)
+    },
+    data: () => {},
+  })
+  ;(proc.stdio[3] as NodeJS.ReadableStream).on('data', (chunk: Buffer) => split.push(chunk))
+  const [code] = await once(proc as unknown as EventEmitter, 'close') as [unknown]
+  return { code, init, starts }
+}
+
+test('a Node remux of an AC-3 MKV streams fragmented MP4 like an ffmpeg run, on the file timeline', async () => {
+  const { code, init, starts } = await run(0)
+  assert.equal(code, 0)
+  assert.ok(init, 'no init segment')
+  assert.ok(starts.length > 0, 'no video fragment')
+  assert.ok(Math.abs(starts[0]!) < 0.001, `first video fragment at ${starts[0]}`)
+})
+
+test('without a keyframe to anchor to, a Node remux keeps its own timeline from zero', async () => {
+  const { code, starts } = await run(null)
+  assert.equal(code, 0)
+  assert.ok(starts[0]! >= 0 && starts[0]! < 0.1, `first video fragment at ${starts[0]}`)
+})
+
+test('SIGSTOP pauses a Node remux and SIGKILL cancels it with a signal, as with ffmpeg', async () => {
+  const proc = nodeRemuxProcess({ input: fixture, audio: 0, start: 0, firstKeyframe: 0 })
+  proc.kill('SIGSTOP')
+  proc.kill('SIGKILL')
+  const [code, signal] = await once(proc as unknown as EventEmitter, 'close') as [unknown, unknown]
+  assert.equal(code, null)
+  assert.equal(signal, 'SIGKILL')
 })

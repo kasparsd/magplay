@@ -1,7 +1,7 @@
 // The server without ffmpeg (the magplay-core image): files stream directly or are repackaged in the browser.
 // The fixtures are still generated with ffmpeg on the test machine; only the server under test lacks it.
 import { test, expect } from './fixtures.js'
-import { chooseAudio, chooseSubtitles, direct, expectCues, expectPlaying, openPlayer, playResponse, remux, seek } from './helpers.js'
+import { chooseAudio, chooseSubtitles, countPlays, direct, expectCues, expectPlaying, openPlayer, playResponse, remux, seek } from './helpers.js'
 
 test.use({ serverEnv: { FFMPEG_PATH: '/nonexistent/ffmpeg' } })
 
@@ -56,9 +56,18 @@ test('a browser that cannot repackage gets the file repackaged in Node and plays
   const decision = await openPlayer(page, app, remux)
   expect(decision.mode).toBe('remux')
   expect(decision.session).toEqual(expect.any(String))
-  expect(decision.offset).toBe(0)
+  expect(decision.offset).toBeUndefined()
+  expect(decision.growing).toBe(false)
   expect(decision.subtitles).toEqual([])
   const playlist = await page.request.get(`${app.origin}/hls/${decision.session}/index.m3u8`)
   expect(playlist.ok()).toBeTruthy()
-  expect(await playlist.text()).toContain('#EXT-X-MAP:URI="init.mp4"')
+  const text = await playlist.text()
+  expect(text).toContain('#EXT-X-MAP:URI="init.mp4"')
+  expect(text).toContain('#EXT-X-PLAYLIST-TYPE:VOD') // the whole file, as with ffmpeg
+  // A seek is an ordinary seek here too: the Node conversion follows it
+  const plays = countPlays(page)
+  await seek(page, 60)
+  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(60)
+  await expectPlaying(page)
+  expect(plays).toEqual([])
 })
