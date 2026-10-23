@@ -25,7 +25,7 @@ npx playwright show-trace test-results/<failed-test>/trace.zip
 
 ## What is real
 
-The worker generates an original 90-second 320×180 H.264/AAC MP4 with ffmpeg, a second MP4 episode, an MKV with AC3/AAC audio tracks and embedded SRT, and an external SRT file. No media binaries are committed or downloaded.
+The worker generates an original 90-second 320×180 H.264/AAC MP4 with ffmpeg, a second MP4 episode, an MKV with a 5.1 AC3 and an AAC audio track and embedded SRT, and an external SRT file. No media binaries are committed or downloaded.
 
 `hls-sync.test.ts` needs no browser: it generates a source with a visual flash and a tone at the same instant, remuxes it with the server's real ffmpeg arguments, and decodes the segments with edit lists ignored (as browsers' MSE parsers do) to check that audio and video stay aligned from a fresh start and after a resume. It also checks that an open-GOP remux presents exactly the source's frames (same count, one constant shift) across every segment boundary, and that a resume time resolves to the preceding keyframe.
 

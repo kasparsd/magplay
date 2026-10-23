@@ -9,10 +9,12 @@ import type { InitInfo } from './mp4.ts'
 import { nodeRemuxProcess } from './node-remux.ts'
 
 const fixture = path.join(import.meta.dirname, '../test-fixtures/h264-ac3-aac-srt.mkv')
+// 16 s, longer than one conversion step, with a 5.1 and a 5.0 AC-3 track
+const multichannel = path.join(import.meta.dirname, '../test-fixtures/h264-ac3-5.1-5.0.mkv')
 
 /** Runs a Node remux to the end; returns how it closed and each video fragment's start on the file timeline. */
-async function run (firstKeyframe: number | null): Promise<{ code: unknown, init: InitInfo | null, starts: number[] }> {
-  const proc = nodeRemuxProcess({ input: fixture, audio: 0, start: 0, firstKeyframe })
+async function run (firstKeyframe: number | null, input = fixture, audio = 0): Promise<{ code: unknown, init: InitInfo | null, starts: number[] }> {
+  const proc = nodeRemuxProcess({ input, audio, start: 0, firstKeyframe })
   let init: InitInfo | null = null
   const starts: number[] = []
   const split = fragmentSplitter({
@@ -41,6 +43,15 @@ test('without a keyframe to anchor to, a Node remux keeps its own timeline from 
   assert.equal(code, 0)
   assert.ok(starts[0]! >= 0 && starts[0]! < 0.1, `first video fragment at ${starts[0]}`)
 })
+
+for (const [audio, layout] of [[0, '5.1'], [1, '5.0']] as const) {
+  test(`a Node remux downmixes ${layout} AC-3 and streams past its first step`, async () => {
+    const { code, init, starts } = await run(0, multichannel, audio)
+    assert.equal(code, 0)
+    assert.equal(init?.timescales.size, 2, 'expected a video and an audio track')
+    assert.ok(starts.at(-1)! > 12, `last video fragment at ${starts.at(-1)}`)
+  })
+}
 
 test('SIGSTOP pauses a Node remux and SIGKILL cancels it with a signal, as with ffmpeg', async () => {
   const proc = nodeRemuxProcess({ input: fixture, audio: 0, start: 0, firstKeyframe: 0 })
