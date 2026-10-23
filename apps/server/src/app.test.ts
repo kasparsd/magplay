@@ -5,12 +5,20 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
+import { TIMELINE_OFFSET } from '@magplay/playback'
 import type { FfmpegProcess } from '@magplay/playback'
 import { createApp } from './app.ts'
 import type { App, AppOptions } from './app.ts'
 import { loadConfig } from './config.ts'
 
 type Env = Record<string, string>
+
+// Minimal fragmented MP4: an init segment with a video track (timescale 1000), and fragments starting at a time
+const u32 = (n: number): number[] => [n >>> 24 & 0xff, n >>> 16 & 0xff, n >>> 8 & 0xff, n & 0xff]
+const box = (type: string, ...body: number[][]): number[] => { const data = body.flat(); return [...u32(8 + data.length), ...[...type].map(c => c.charCodeAt(0)), ...data] }
+const fullBox = (type: string, ...body: number[][]): number[] => box(type, [0, 0, 0, 0], ...body)
+const initSegment = (): Buffer => Buffer.from([...box('ftyp', u32(0)), ...box('moov', box('trak', fullBox('tkhd', u32(0), u32(0), u32(1)), box('mdia', fullBox('mdhd', u32(0), u32(0), u32(1000), u32(0)), fullBox('hdlr', u32(0), [...'vide'].map(c => c.charCodeAt(0))))))])
+const fragment = (seconds: number): Buffer => Buffer.from([...box('moof', box('traf', fullBox('tfhd', u32(1)), fullBox('tfdt', u32(seconds * 1000)))), ...box('mdat', [0])])
 
 /** An app on a free port with an isolated cache, no DHT/LSD and an unreachable indexer. */
 async function start (t: { after: (fn: () => Promise<void>) => void }, env: Env = {}, options: Partial<AppOptions> = {}): Promise<{ app: App, origin: string, dir: string }> {
@@ -113,8 +121,10 @@ test('saved live settings reach the running services without a restart', async t
 test('graceful shutdown: close() ends open streams, stops ffmpeg, frees the port and the torrent engine', { timeout: 20_000 }, async t => {
   const signals: string[] = []
   const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  const media = new PassThrough()
   const proc = Object.assign(new EventEmitter(), {
-    pid: 1, stdout, stderr: new PassThrough(), kill: (signal: string) => { signals.push(signal); return true },
+    pid: 1, stdout, stderr, stdio: [null, stdout, stderr, media], kill: (signal: string) => { signals.push(signal); return true },
   }) as unknown as FfmpegProcess
   const { app, origin, dir } = await start(t, {}, { spawnProcess: () => proc })
 
@@ -129,8 +139,9 @@ test('graceful shutdown: close() ends open streams, stops ffmpeg, frees the port
   })()
 
   // A paused (SIGSTOPped) ffmpeg would outlive the server; close() must resume and kill it
-  const session = app.hls.start({ input: `${origin}/raw/x/0`, info: { audio: [], subtitles: [] }, audio: 0, start: 0, mode: 'remux' })
-  stdout.write('out_time_us=300000000\nprogress=continue\n')
+  const session = app.hls.start({ input: `${origin}/raw/x/0`, info: { duration: 600, startTime: 0, audio: [], subtitles: [] }, audio: 0, start: 0, mode: 'remux', keyframes: [0, 300] })
+  media.write(Buffer.concat([initSegment(), fragment(TIMELINE_OFFSET), fragment(TIMELINE_OFFSET + 300)])) // far ahead of the player
+  await new Promise(resolve => setImmediate(resolve))
   assert.equal(session.paused, true)
   t.mock.method(console, 'log', () => {})
 

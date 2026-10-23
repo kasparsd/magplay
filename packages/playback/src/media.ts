@@ -7,6 +7,9 @@ import { execFile } from 'node:child_process'
 import type { AudioTrack, BrowserCapabilities, ProbeResult, SubtitleTrack, VideoCodecKey, VideoTrack } from '@magplay/api-contract'
 import { MediaToolError, NoSuchTrackError, PlaybackBusyError, UnplayableError } from './errors.ts'
 import { createLimiter } from './limits.ts'
+import { keyframeIndex } from './keyframes.ts'
+import type { ReadRange } from './keyframes.ts'
+import { SEGMENT_SECONDS } from './plan.ts'
 
 /** ffprobe's summary of a file, as the player API sends it (without the torrent's external subtitles). */
 export type MediaInfo = Omit<ProbeResult, 'externalSubtitles'>
@@ -66,6 +69,7 @@ export function parseProbe (data: unknown, fileName: string): MediaInfo {
   }
   return {
     duration: Number(format.duration) || Number(v?.duration) || null,
+    startTime: Number(format.start_time) || 0,
     container: str(format.format_name) ?? '',
     isWebm: /\.webm$/i.test(fileName),
     ...(video && { video }),
@@ -140,38 +144,50 @@ export function decide (info: DecideInput, caps: Partial<BrowserCapabilities>, p
   throw new UnplayableError(`This file is ${vName}. This browser can't play it and this server is too slow to convert it. Open it in an external player (VLC, IINA, Infuse…)${safari} or choose an x264 release.`)
 }
 
+/** fMP4 timestamps are the file's own plus this, so no run's early audio or B-frame reordering falls below zero. */
+export const TIMELINE_OFFSET = 10
+
 export interface FfmpegArgsOptions {
   input: string
-  info: Pick<MediaInfo, 'audio' | 'subtitles'> & { video?: Pick<VideoTrack, 'codec'> | undefined }
+  info: Pick<MediaInfo, 'audio' | 'subtitles' | 'startTime'> & { video?: Pick<VideoTrack, 'codec'> | undefined }
   audio: number
-  /** Seconds into the input. */
+  /** Where this run starts on the file's timeline, in seconds (see runStart() for how segments choose it). */
   start: number
   mode: 'remux' | 'transcode'
-  /** Where the playlist, segments and WebVTT files go. */
+  /** Where WebVTT files for text subtitles go. */
   dir: string
   transcodeMaxHeight: number
 }
 
-/** ffmpeg arguments for an HLS session starting at `start` seconds, plus WebVTT outputs for text subtitles. */
+/**
+ * ffmpeg arguments for one HLS run: fragmented MP4 on fd 3 with a fragment at every keyframe, progress on stdout, and
+ * a WebVTT file per text subtitle track. Timestamps stay on the file's timeline whichever point a run starts from:
+ * `-ss` counts from the file's start time, so the seek is `start - startTime`, and the output offset puts the
+ * first frame back at `start` (plus TIMELINE_OFFSET for the media; subtitles get the plain file time).
+ * Copied video keeps every packet from the keyframe ffmpeg lands on (no accurate seek), so audio isn't cut short;
+ * transcoded video seeks exactly and forces a keyframe at every segment boundary.
+ */
 export function ffmpegArgs ({ input, info, audio, start, mode, dir, transcodeMaxHeight }: FfmpegArgsOptions): string[] {
   const a = info.audio[audio]
+  const seek = start - info.startTime
+  const time = (t: number): string => String(Math.round(t * 1e6) / 1e6) // microseconds, without float noise
   const video = mode === 'transcode'
     ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p',
-        '-vf', `scale=-2:'min(${transcodeMaxHeight},ih)'`, '-g', '48', '-keyint_min', '48', '-sc_threshold', '0']
+        '-vf', `scale=-2:'min(${transcodeMaxHeight},ih)'`, '-g', '48', '-keyint_min', '48', '-sc_threshold', '0',
+        '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_SECONDS})`]
     : ['-c:v', 'copy', ...(info.video?.codec === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
   const audioArgs = !a ? [] : a.codec === 'aac' ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']
   const subs = info.subtitles.filter(s => s.text).flatMap(s =>
-    ['-map', `0:s:${s.index}`, '-c:s', 'webvtt', '-flush_packets', '1', '-f', 'webvtt', `${dir}/sub_${s.index}.vtt`])
+    ['-map', `0:s:${s.index}`, '-c:s', 'webvtt', '-output_ts_offset', time(start), '-flush_packets', '1', '-f', 'webvtt', `${dir}/sub_${s.index}.vtt`])
   return [
     '-hide_banner', '-nostdin', '-loglevel', 'warning', '-progress', 'pipe:1',
+    ...(mode === 'remux' ? ['-noaccurate_seek'] : []),
     // FLV can't seek even to 0 and would skip to the next keyframe
-    ...(start ? ['-ss', String(start)] : []), '-i', input,
+    ...(seek > 0 ? ['-ss', time(seek)] : []), '-i', input,
     '-map', '0:v:0', ...(a ? ['-map', `0:a:${audio}`] : []),
     ...video, ...audioArgs,
-    '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'event',
-    '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4',
-    '-hls_flags', 'independent_segments+temp_file',
-    '-hls_segment_filename', `${dir}/seg_%05d.m4s`, `${dir}/index.m3u8`,
+    '-output_ts_offset', time(start + TIMELINE_OFFSET),
+    '-f', 'mp4', '-movflags', '+frag_keyframe+empty_moov+default_base_moof+frag_discont+negative_cts_offsets', '-use_editlist', '0', 'pipe:3',
     ...subs,
   ]
 }
@@ -197,6 +213,11 @@ export interface MediaLive {
 export interface MediaTools {
   /** probe(), bounded and cached per input; a failed probe is forgotten so the next call retries. */
   probe: (input: string, fileName: string, context?: OperationContext) => Promise<MediaInfo>
+  /**
+   * The file's keyframe times from its own index (keyframeIndex()), cached per input like probes; null when it has
+   * none or it couldn't be read (a read failure is forgotten so the next call retries).
+   */
+  keyframes: (input: string, size: number, context?: OperationContext) => Promise<number[] | null>
   /** subtitleToVtt(), bounded. */
   subtitleToVtt: (input: string, track: number | null) => Promise<string>
   /** Busy slots and cached probe results, for the Debug page. */
@@ -206,12 +227,23 @@ export interface MediaTools {
 /** Probe results kept, most recently used first; a file's streams don't change, so only the count is bounded. */
 export const PROBE_CACHE_LIMIT = 256
 
+/** Range reads of an HTTP input (the app's /raw URL) for keyframeIndex(). */
+export function httpRanges (input: string, signal?: AbortSignal): ReadRange {
+  return async (start, end) => {
+    const res = await fetch(input, { headers: { Range: `bytes=${start}-${end - 1}` }, ...(signal && { signal }) })
+    if (res.status !== 206 && res.status !== 200) throw new MediaToolError(`Reading the file failed: HTTP ${res.status}`)
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    return res.status === 200 ? bytes.subarray(start, end) : bytes
+  }
+}
+
 /** Probing and subtitle conversion with process limits; overload fails fast with PlaybackBusyError. */
-export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, logger = noopLogger, metrics = noopMetrics }: { live: () => MediaLive, probeCacheLimit?: number, logger?: Logger, metrics?: Metrics }): MediaTools {
+export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, logger = noopLogger, metrics = noopMetrics, readRanges = httpRanges }: { live: () => MediaLive, probeCacheLimit?: number, logger?: Logger, metrics?: Metrics, readRanges?: (input: string, signal?: AbortSignal) => ReadRange }): MediaTools {
   const runProbe = createLimiter(() => live().maxProbes, () => { metrics.reject('probe', 'capacity'); logger.warn('resource.rejected', { resource: 'probe', reason: 'capacity' }); return new PlaybackBusyError('Media probing is busy. Try again shortly.') })
   const runSubtitle = createLimiter(() => live().maxSubtitleJobs, () => { metrics.reject('subtitle', 'capacity'); logger.warn('resource.rejected', { resource: 'subtitle', reason: 'capacity' }); return new PlaybackBusyError('Subtitle conversion is busy. Try again shortly.') })
   const probes = new Map<string, Promise<MediaInfo>>()
   const ids = new Map<string, string>()
+  const indexes = new Map<string, Promise<number[] | null>>()
   return {
     probe (input, fileName, context) {
       let p = probes.get(input)
@@ -230,6 +262,24 @@ export function createMediaTools ({ live, probeCacheLimit = PROBE_CACHE_LIMIT, l
         const oldest = probes.keys().next().value!
         probes.delete(oldest); ids.delete(oldest)
       }
+      return p
+    },
+    keyframes (input, size, context) {
+      let p = indexes.get(input)
+      if (p) indexes.delete(input) // move to the most recently used end
+      else {
+        const started = performance.now()
+        p = keyframeIndex(readRanges(input, AbortSignal.timeout(120_000)), size).then(times => {
+          context?.logger.info('keyframes.indexed', { keyframes: times?.length ?? 0, durationMs: performance.now() - started })
+          return times
+        }, (err: unknown) => {
+          (context?.logger ?? logger).warn('keyframes.failed', { err })
+          indexes.delete(input)
+          return null
+        })
+      }
+      indexes.set(input, p)
+      if (indexes.size > probeCacheLimit) indexes.delete(indexes.keys().next().value!)
       return p
     },
     subtitleToVtt: (input, track) => observeJob(logger, metrics, 'subtitle', async () => await runSubtitle(() => subtitleToVtt(input, track, live()))),

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { noopLogger, noopMetrics, outcome } from '@magplay/observability'
 import type { Logger, Metrics, OperationContext } from '@magplay/observability'
-// Playback: probe → decide → a direct /raw URL or an HLS session for the player's tab.
+// Playback: probe → decide → a direct /raw URL, or an HLS session for the player's tab whose playlist covers the
+// whole file (segments cut on the keyframes from the file's index when the video is copied).
 import { decide } from '@magplay/playback'
 import type { MediaTools, PlaybackPolicy } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
@@ -76,14 +77,17 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         const { reason } = decision
         if (decision.mode === 'direct') {
           tabs.stop(tab)
-          return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, offset: 0 }
+          return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}` }
         }
+        const keyframes = decision.mode === 'remux' ? await during(ih, idx, 'probing', () => media.keyframes(input(ih, idx), file.length, { logger: log }), log) : null
+        check()
         const s = tabs.start(tab, {
           input: input(ih, idx),
           info,
           audio,
           start,
           mode: decision.mode,
+          keyframes,
           context: { logger: log },
           onReady: () => {
             const durationMs = performance.now() - started
@@ -98,8 +102,8 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
           duration: info.duration,
           url: `/hls/${s.id}/index.m3u8`,
           session: s.id,
-          offset: start,
-          // Text subtitles are written by the same ffmpeg, timed relative to the session start
+          growing: s.growing,
+          // Text subtitles are written by the same ffmpeg runs, on the file's timeline
           subtitles: info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
         }
       } catch (err) {

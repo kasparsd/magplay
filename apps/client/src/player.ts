@@ -1,6 +1,8 @@
 import Hls from 'hls.js'
 // The player page, /play/<infohash>/<file index>. One chrome over the video for every playback mode:
-// direct files play from /raw, remux and transcode through an HLS session whose timeline starts at cur.offset.
+// direct files play from /raw, remux and transcode through an HLS playlist that covers the whole file, so
+// video.currentTime is always the position in the file and seeking is a normal seek; the server converts
+// whatever part is asked for.
 import type { PlaybackDecision, ProbeResult, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@magplay/api-contract'
 import { api } from './lib/api.ts'
 import type { ApiError } from './lib/api.ts'
@@ -17,7 +19,7 @@ import { audioTrackLabel, audioTrackName, preferredSubtitle, subtitleOptions } f
 import type { SubtitleOption } from './lib/player-tracks.ts'
 import { parseVtt } from './lib/subtitles.ts'
 import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
-import { canSeekLocally, layerBackground, seekHint, seekOutcome, spans } from './lib/seek.ts'
+import { layerBackground, seekHint, seekOutcome, seekTarget, spans } from './lib/seek.ts'
 import { $, copyButton, el, episodeLabel, fill, formatClock as clock, menu, menuChoice, menuHeading, menuSeparator, recall, remember } from './lib/ui.ts'
 import type { Child } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
@@ -28,7 +30,7 @@ import type { PlaybackAction, PlaybackPhase, PlaybackProblem } from './lib/playb
 import { playbackStatusView } from './lib/playback-status-view.ts'
 import './lib/topbar.ts'
 
-/** The server's decision for the current session; `complete` is set once its ffmpeg has finished. */
+/** The server's decision for the current session; `complete` is set while no ffmpeg is running for it. */
 type Current = PlaybackDecision & { complete?: boolean }
 /** A rejected play() or a failed request: DOMException, ApiError or a network error. */
 type Failure = Partial<ApiError> & { name: string, message: string }
@@ -51,6 +53,7 @@ let hls: Hls | null = null
 let audio = 0
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
+let deferredSeek = 0 // a growing playlist starts at the beginning: where to jump once it has been converted that far
 let starting = '' // what the busy spinner says until playback resumes ("Starting at 14:20…")
 let searchTitle = ''
 let file: TorrentFileInfo | undefined // this file's entry from the torrent's file list
@@ -78,6 +81,8 @@ const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playbac
 
 /** The file's ranges on the server, from the latest poll. */
 const fileRanges = (): Array<[number, number]> | null => lastStatus?.loaded ? lastStatus.file?.ranges ?? null : null
+/** The current HLS session's status from the latest poll. */
+const sessionStatus = (): TorrentStatus['session'] => cur?.session && lastStatus?.session?.id === cur.session ? lastStatus.session : null
 
 function setPlaybackPhase (phase: PlaybackPhase): void {
   if (!['playing', 'paused', 'idle', 'error'].includes(phase) && ['playing', 'paused', 'idle', 'error'].includes(playbackPhase)) waitingAt = Date.now()
@@ -218,7 +223,10 @@ function renderFacts (): void {
 
 const caps = measureCaps(video, window)
 
-const position = (): number => cur ? cur.offset + video.currentTime : pendingPosition
+/** Before the media has loaded, the position playback was asked to start at. */
+const position = (): number => cur && video.readyState > 0 ? video.currentTime : pendingPosition
+/** A growing HLS playlist (no keyframe index) can be seeked only this far; null otherwise. */
+const growingEnd = (): number | null => cur?.mode !== 'direct' && cur?.growing ? spans(video.seekable).at(-1)?.[1] ?? 0 : null
 /** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
 const duration = (): number => cur?.duration || info?.duration || (cur?.mode === 'direct' && Number.isFinite(video.duration) ? video.duration : 0)
 /** Seconds the browser has buffered past the playhead. */
@@ -305,19 +313,19 @@ async function start (at = 0, message = ''): Promise<void> {
     video.src = decision.url
     if (at) video.currentTime = at
   } else {
+    // The playlist covers the whole file, except a growing one, which starts at the beginning
+    const from = decision.growing ? 0 : at
+    deferredSeek = decision.growing ? at : 0
+    if (deferredSeek) notify(`This file is converted from the start. Playback jumps to ${clock(at)} when conversion gets there.`)
     setPlaybackPhase('playlist')
-    try {
-      await waitForPlaylist(decision.url, gen, signal)
-    } catch (err) {
-      if (current()) failPlayback('The stream did not become ready', (err as Failure).message)
-      return
-    }
-    if (gen !== generation) return
     // Safari plays HLS (and HEVC) natively; other browsers use hls.js
     if (!Hls.isSupported() || (navigator.vendor.includes('Apple') && video.canPlayType('application/vnd.apple.mpegurl'))) {
       video.src = decision.url
+      if (from) video.addEventListener('loadedmetadata', () => { if (current()) video.currentTime = from }, { once: true, signal })
     } else {
-      const player = hls = new Hls({ startPosition: 0, maxBufferLength: 60 })
+      // A segment the server hasn't converted yet answers once it has, which can take a while on a slow torrent
+      const patient = { maxTimeToFirstByteMs: 120_000, maxLoadTimeMs: 300_000, timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 }, errorRetry: { maxNumRetry: 3, retryDelayMs: 1000, maxRetryDelayMs: 8000 } }
+      const player = hls = new Hls({ startPosition: from, maxBufferLength: 60, fragLoadPolicy: { default: patient } })
       player.on(Hls.Events.ERROR, (_, data) => { if (current() && data.fatal) failPlayback('Playback stopped', `Playback error: ${data.details}`) })
       player.loadSource(decision.url)
       player.attachMedia(video)
@@ -340,33 +348,15 @@ async function start (at = 0, message = ''): Promise<void> {
   loadSubtitles(gen).catch(console.error)
 }
 
-async function waitForPlaylist (url: string, gen: number, signal: AbortSignal): Promise<void> {
-  const until = Date.now() + 45_000
-  while (Date.now() < until && gen === generation) { // eslint-disable-line no-unmodified-loop-condition -- generation is bumped by a new playlist load between polls
-    const res = await fetch(url, { cache: 'no-store', signal })
-    if (res.status === 500) throw new Error(await res.text())
-    if (res.ok && /\.m4s/.test(await res.text())) return
-    await sleep(1000, signal)
-  }
-  throw new Error('No playable segment became available within 45 s. Source data, conversion or stream delivery may be delayed. Try again or open the original file in another player.')
-}
-
-/** Jumps to absolute time `t`. The seek tooltip predicts the same outcome through seekOutcome(). */
+/** Jumps to time `t`; the server converts from there if it must. The seek tooltip predicts the outcome through seekOutcome(). */
 function seekTo (t: number): void {
   if (!cur) return
-  t = Math.max(0, Math.min(t, (duration() || Infinity) - 1))
-  if (cur.mode === 'direct') {
-    video.currentTime = t
-    return
-  }
-  const rel = t - cur.offset
-  // Only seek locally where the browser can actually land (see canSeekLocally); otherwise restart the session at the target
-  if (canSeekLocally(rel, spans(video.seekable))) video.currentTime = rel
-  else start(t, `Starting at ${clock(t)}…`).catch(console.error)
+  deferredSeek = 0
+  video.currentTime = seekTarget(Math.max(0, Math.min(t, (duration() || Infinity) - 1)), growingEnd())
 }
 
-// Subtitles share one text track. Parsing is pure; polling, growing-file
-// handling and HLS offset application remain owned by this page.
+// Subtitles share one text track. Parsing is pure; polling and adding new cues are owned by this page.
+// All cues are on the file's timeline.
 let subtitleRun = 0
 let subsChoice = '' // '' (off), 'embedded:<n>' or 'file:<idx>'
 let lastSubs = '' // the last track turned on, for C
@@ -382,10 +372,8 @@ async function loadSubtitles (gen = generation): Promise<void> {
   const session = cur
   const [kind, n] = choice.split(':')
   let url: string | undefined
-  let shift = 0
   if (kind === 'file') {
     url = `/subs/${ih}/${n}/file.vtt`
-    shift = -session.offset // external files are timed from the start of the video
   } else if (session.mode === 'direct') {
     url = `/subs/${ih}/${idx}/${n}.vtt`
     notify('Extracting subtitles (needs the whole file downloaded)…', 'busy')
@@ -393,12 +381,13 @@ async function loadSubtitles (gen = generation): Promise<void> {
     url = session.subtitles.find(s => s.index === Number(n))?.url
   }
   if (!url) return
-  let added = 0
-  // Session subtitles grow as ffmpeg works, so poll until it's done
+  const added = new Set<string>()
+  // Session subtitles grow as ffmpeg converts more of the file, wherever it is asked to, so keep polling
+  const live = url.startsWith('/hls/')
   for (;;) {
     const res = await fetch(url, { cache: 'no-store', signal }).catch(() => null)
     if (signal.aborted || gen !== generation || run !== subtitleRun || subsChoice !== choice) return
-    const growing = url.startsWith('/hls/') && !session.complete
+    const growing = live && !session.complete
     if (res?.ok) {
       let text
       try { text = await res.text() } catch {
@@ -408,14 +397,19 @@ async function loadSubtitles (gen = generation): Promise<void> {
       if (signal.aborted || gen !== generation || run !== subtitleRun || subsChoice !== choice) return
       const cues = parseVtt(text)
       const ready = growing ? cues.slice(0, -1) : cues // the last cue may be half-written
-      for (const c of ready.slice(added)) subTrack.addCue(new VTTCue(c.from + shift, c.to + shift, c.text))
-      added = Math.max(added, ready.length)
+      // Each ffmpeg run writes the cues of the part it converts, so the same cue can arrive twice
+      for (const c of ready) {
+        const key = `${c.from}|${c.to}|${c.text}`
+        if (added.has(key)) continue
+        added.add(key)
+        subTrack.addCue(new VTTCue(c.from, c.to, c.text))
+      }
       if (url.startsWith('/subs/')) notify('')
-    } else if (!growing) {
+    } else if (!live) {
       const body = await res?.json().catch(() => null) as { error?: string } | null | undefined
       return notify(`Subtitles failed: ${body?.error || 'unknown error'}`, 'warn')
     }
-    if (!growing) return
+    if (!live) return
     try { await sleep(10_000, signal) } catch { return }
   }
 }
@@ -591,7 +585,7 @@ async function pollStatus (signal = pageLife.signal): Promise<void> {
           fps: s?.fps ?? null,
           cpu: s?.cpu ?? null,
           paused: !!s?.paused,
-          ahead: s ? Math.max(0, s.produced - video.currentTime) : null,
+          ahead: s ? Math.max(0, s.readyUntil - video.currentTime) : null,
           buffer: bufferedAhead(),
           stalled: stalled || stallSeen,
         })
@@ -600,6 +594,11 @@ async function pollStatus (signal = pageLife.signal): Promise<void> {
       if (!$('#details').hidden) renderFacts()
       if (!$('#performance').hidden) renderPerformance()
       drawSeekbar()
+      if (deferredSeek && (growingEnd() ?? 0) > deferredSeek + 1) {
+        video.currentTime = deferredSeek
+        deferredSeek = 0
+        notify('')
+      }
     } else if (!st) slowSamples = 0
     renderPlaybackStatus()
     try { await sleep(2000, signal) } catch { return }
@@ -621,11 +620,9 @@ function drawSeekbar (): void {
     $('#layer-played').style.width = '0'
     return
   }
-  const offset = cur?.offset ?? 0
-  const session = cur?.session && lastStatus?.session?.id === cur.session ? lastStatus.session : null
   layer('#layer-server', layerBackground(fileRanges() ?? [], 'var(--seek-server)'))
-  layer('#layer-conv', layerBackground(session ? [[offset / total, (offset + session.produced) / total]] : [], 'var(--seek-conv)'))
-  layer('#layer-buf', layerBackground(cur ? spans(video.buffered).map(([a, b]) => [(a + offset) / total, (b + offset) / total]) : [], 'var(--seek-buf)'))
+  layer('#layer-conv', layerBackground((sessionStatus()?.ready ?? []).map(([a, b]) => [a / total, b / total]), 'var(--seek-conv)'))
+  layer('#layer-buf', layerBackground(cur ? spans(video.buffered).map(([a, b]) => [a / total, b / total]) : [], 'var(--seek-buf)'))
   $('#layer-played').style.width = `${Math.min(100, (dragging ? Number(seek.value) : position()) / total * 100)}%`
 }
 
@@ -646,7 +643,7 @@ function showTip (t: number, x: number): void {
   const total = duration()
   if (!total) return
   const outcome = cur
-    ? seekOutcome(t, { mode: cur.mode, offset: cur.offset, duration: total, buffered: spans(video.buffered), seekable: spans(video.seekable), ranges: fileRanges() })
+    ? seekOutcome(t, { mode: cur.mode, duration: total, buffered: spans(video.buffered), ready: sessionStatus()?.ready ?? null, growingEnd: growingEnd(), ranges: fileRanges() })
     : 'seekable'
   $('b', tip).textContent = clock(t)
   $('span', tip).textContent = seekHint(outcome)

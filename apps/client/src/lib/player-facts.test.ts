@@ -5,6 +5,7 @@ import { factRows } from './player-facts.ts'
 
 const info: ProbeResult = {
   duration: 90,
+  startTime: 0,
   container: 'mov,mp4,m4a,3gp,3g2,mj2',
   isWebm: false,
   video: { codec: 'h264', tag: 'avc1', profile: 'High', width: 1920, height: 800, sampleAspect: 1, bitDepth: 8 },
@@ -30,9 +31,9 @@ test('Details names the mode, file, container, tracks, torrent and ffmpeg', () =
     files: [],
     peers: [{ address: null, client: null, downloadSpeed: 0, uploadSpeed: 0, downloaded: 0, uploaded: 0, share: 1, choking: false }],
     file: { idx: 0, progress: 0.42, ranges: [] },
-    session: { id: 's', mode: 'remux', speed: 3.14, fps: null, cpu: null, produced: 0, readyUntil: 0, paused: true, running: true, failed: false, error: null },
+    session: { id: 's', mode: 'remux', speed: 3.14, fps: null, cpu: null, produced: 0, readyUntil: 0, ready: [], growing: false, paused: true, running: true, failed: false, error: null },
   } satisfies TorrentStatus
-  const decision: PlaybackDecision = { mode: 'remux', reason: 'AC-3 audio', duration: 90, url: '/hls/s/index.m3u8', offset: 0, session: 's', subtitles: [] }
+  const decision: PlaybackDecision = { mode: 'remux', reason: 'AC-3 audio', duration: 90, url: '/hls/s/index.m3u8', session: 's', growing: false, subtitles: [] }
   assert.deepEqual(factRows({ decision, file: { name: 'Show/Show.S01E01.mp4', size: 1.5e9 }, info, audio: 0, status, buffered: 12.4 }), [
     ['Mode', 'remux: AC-3 audio'],
     ['File', 'Show.S01E01.mp4 (1.5 GB)'],

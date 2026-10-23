@@ -5,6 +5,7 @@ import { audioTrackLabel, audioTrackName, preferredSubtitle, subtitleOptions } f
 
 const info: ProbeResult = {
   duration: 90,
+  startTime: 0,
   container: 'matroska,webm',
   isWebm: false,
   audio: [],

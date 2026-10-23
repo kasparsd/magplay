@@ -54,6 +54,8 @@ export interface SubtitleTrack {
 export interface ProbeResult {
   /** Seconds, or unknown. */
   duration: number | null
+  /** The file's first timestamp in seconds (ffprobe's start_time); 0 when unknown. */
+  startTime: number
   /** ffprobe format names, e.g. "matroska,webm". */
   container: string
   isWebm: boolean
@@ -65,8 +67,9 @@ export interface ProbeResult {
 }
 
 /**
- * POST /api/play. `start` is an absolute media timestamp in seconds; the server
- * chooses direct/remux/transcode from the probe and reported browser capabilities.
+ * POST /api/play. The server chooses direct/remux/transcode from the probe and reported browser
+ * capabilities. `start` (seconds on the file's timeline) is where conversion begins for HLS; seeking
+ * later needs no new request.
  */
 export interface PlayRequest {
   /** Torrent infohash. */
@@ -89,27 +92,26 @@ export interface DirectDecision {
   duration: number | null
   /** Same-origin /raw URL. */
   url: string
-  /** video.currentTime already refers to the whole media file. */
-  offset: 0
   session?: never
   subtitles?: never
 }
 
 /**
- * HLS playback uses a session-relative video timeline. Absolute media position is
- * offset + video.currentTime; embedded session subtitles use that relative timeline.
+ * HLS playback: a playlist on the file's own timeline, so video.currentTime is the position in the file
+ * and seeking is a normal seek. The server converts segments as they are asked for. Files without a
+ * keyframe index get a growing playlist instead, seekable only as far as conversion has reached.
  */
 export interface HlsDecision {
   mode: 'remux' | 'transcode'
   reason: string
-  /** Whole media duration, not the HLS session duration. */
+  /** Whole media duration. */
   duration: number | null
   /** Same-origin /hls/:session/index.m3u8 URL. */
   url: string
-  /** Absolute media start in seconds. */
-  offset: number
   session: string
-  /** Embedded text-track indexes and session URLs. */
+  /** No keyframe index: the playlist grows from the start and can be seeked only as far as it has been converted. */
+  growing: boolean
+  /** Embedded text-track indexes and session URLs; cues are on the file's timeline. */
   subtitles: Array<{ index: number, url: string }>
 }
 
@@ -126,10 +128,14 @@ export interface SessionStats {
   fps: number | null
   /** ffmpeg's share of all CPU cores since the previous poll (0–1, 1 saturates the server), or null where it can't be measured. */
   cpu: number | null
-  /** Seconds generated relative to this session's start. */
+  /** How far the running conversion has got, in seconds on the file's timeline. */
   produced: number
-  /** End of published playable HLS segments, relative to this session's start. */
+  /** End of the converted, playable stretch holding the player's position (the position itself when none). */
   readyUntil: number
+  /** Converted, playable time ranges on the file's timeline. */
+  ready: Array<[number, number]>
+  /** A growing playlist (no keyframe index): seekable only as far as conversion has reached. */
+  growing: boolean
   /** Paused ahead of playback, not the video's play/pause state. */
   paused: boolean
   running: boolean
@@ -159,9 +165,9 @@ export type PlaybackPreparation = 'loading-file' | 'probing'
 
 /**
  * GET /api/torrents/:ih/status. Unloaded responses omit torrent statistics.
- * `idx` adds file ranges and keeps the torrent active; `session` and session-relative
- * `pos` keep ffmpeg alive and drive its ahead-of-playback throttle. Polling must not
- * be cached or automatically retried by the transport.
+ * `idx` adds file ranges and keeps the torrent active; `session` and `pos` (the player's
+ * position in the file) keep ffmpeg alive and drive its ahead-of-playback throttle. Polling
+ * must not be cached or automatically retried by the transport.
  */
 export type TorrentStatus = { preparation: PlaybackPreparation | null } & ({
   loaded: false

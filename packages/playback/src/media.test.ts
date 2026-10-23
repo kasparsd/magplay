@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decide, ffmpegArgs, parseProbe, sampleAspect } from './media.ts'
+import { decide, ffmpegArgs, parseProbe, sampleAspect, TIMELINE_OFFSET } from './media.ts'
 import type { DecideInput, MediaInfo } from './media.ts'
 import { MediaToolError, NoSuchTrackError, UnplayableError } from './errors.ts'
 
@@ -40,28 +40,43 @@ test('invalid audio selections and missing video have typed errors', () => {
   assert.throws(() => decide(info({ video: null }), caps, policy), UnplayableError)
 })
 
-test('remux copies HEVC as hvc1, converts audio and maps only text subtitles', () => {
+test('remux copies HEVC as hvc1, converts audio, maps only text subtitles and keeps the file timeline', () => {
   const args = ffmpegArgs({
     input: 'http://127.0.0.1:8080/raw/x/2',
     audio: 0,
-    start: 30,
+    start: 30.15,
     mode: 'remux',
     dir: '/tmp/hls',
     transcodeMaxHeight: 720,
     info: {
+      startTime: -0.005,
       video: { codec: 'hevc' },
       audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }],
       subtitles: [{ index: 0, codec: 'subrip', language: null, title: null, text: true }, { index: 1, codec: 'hdmv_pgs_subtitle', language: null, title: null, text: false }],
     },
   })
-  const value = (key: string) => args[args.indexOf(key) + 1]
-  assert.equal(value('-ss'), '30')
+  const value = (key: string, from = 0) => args[args.indexOf(key, from) + 1]
+  assert.ok(args.includes('-noaccurate_seek'))
+  assert.equal(Number(value('-ss')), 30.155) // -ss counts from the file's start time
   assert.equal(value('-i'), 'http://127.0.0.1:8080/raw/x/2')
   assert.equal(value('-c:v'), 'copy')
   assert.equal(value('-tag:v'), 'hvc1')
   assert.equal(value('-c:a'), 'aac')
+  assert.equal(Number(value('-output_ts_offset')), 30.15 + TIMELINE_OFFSET)
+  assert.match(value('-movflags') ?? '', /frag_keyframe.*frag_discont.*negative_cts_offsets/)
+  assert.equal(args[args.indexOf('-use_editlist') + 2], 'pipe:3')
   assert.ok(args.includes('0:s:0'))
   assert.ok(!args.includes('0:s:1'))
+  assert.equal(value('-output_ts_offset', args.indexOf('0:s:0')), '30.15') // subtitles on the plain file timeline
+  assert.equal(args.at(-1), '/tmp/hls/sub_0.vtt')
+})
+
+test('transcode seeks exactly and forces keyframes on segment boundaries; a run from the start has no -ss', () => {
+  const args = ffmpegArgs({ input: 'x', audio: 0, start: 1.4, mode: 'transcode', dir: '/tmp/hls', transcodeMaxHeight: 720, info: { startTime: 1.4, audio: [], subtitles: [] } })
+  assert.ok(!args.includes('-ss'))
+  assert.ok(!args.includes('-noaccurate_seek'))
+  assert.equal(args[args.indexOf('-force_key_frames') + 1], 'expr:gte(t,n_forced*6)')
+  assert.equal(args[args.indexOf('-output_ts_offset') + 1], String(1.4 + TIMELINE_OFFSET))
 })
 
 test('sample aspect ratios: anamorphic, square and unknown', () => {
@@ -83,6 +98,7 @@ test('ffprobe JSON parses into tracks; junk is a media tool error', () => {
     ],
   }, 'Show.S01E01.mkv')
   assert.equal(parsed.duration, 61.5)
+  assert.equal(parsed.startTime, 0)
   assert.deepEqual(parsed.video, { codec: 'hevc', tag: 'hev1', profile: 'Main 10', width: 1920, height: 1080, sampleAspect: 1, bitDepth: 10 })
   assert.deepEqual(parsed.audio.map(a => [a.index, a.codec, a.language, a.default]), [[0, 'eac3', 'eng', true], [1, 'aac', null, false]])
   assert.deepEqual(parsed.subtitles.map(s => [s.index, s.text, s.language]), [[0, true, 'lav'], [1, false, null]])
@@ -113,4 +129,30 @@ test('probe results are cached per input, keeping only the most recently used', 
   assert.equal(await count(), 3)
   await tools.probe('b', 'b.mp4')
   assert.equal(await count(), 4)
+})
+
+test('keyframe indexes are cached per input; a failed read returns null and is retried next time', async () => {
+  const { createMediaTools } = await import('./media.ts')
+  const { box, u32 } = await import('./test-helpers.ts')
+  // An MP4 whose video track has keyframes at 0 and 2 s (25 fps, timescale 12800)
+  const moov = box('moov', box('trak', box('mdia',
+    box('mdhd', [0, 0, 0, 0], u32(0), u32(0), u32(12_800), u32(0)),
+    box('hdlr', [0, 0, 0, 0], u32(0), [...'vide'].map(c => c.charCodeAt(0))),
+    box('minf', box('stbl', box('stts', [0, 0, 0, 0], u32(1), u32(100), u32(512)), box('stss', [0, 0, 0, 0], u32(2), u32(1), u32(51)))))))
+  const file = Uint8Array.from([...box('ftyp', u32(0)), ...moov])
+  let reads = 0
+  let broken = true
+  const tools = createMediaTools({
+    live: () => ({ ffprobePath: 'ffprobe', ffmpegPath: 'ffmpeg', maxProbes: 1, maxSubtitleJobs: 1 }),
+    readRanges: () => (start, end) => {
+      reads++
+      return broken ? Promise.reject(new Error('connection reset')) : Promise.resolve(file.subarray(start, end))
+    },
+  })
+  assert.equal(await tools.keyframes('a', file.length), null)
+  broken = false
+  assert.deepEqual(await tools.keyframes('a', file.length), [0, 2])
+  const before = reads
+  assert.deepEqual(await tools.keyframes('a', file.length), [0, 2])
+  assert.equal(reads, before)
 })

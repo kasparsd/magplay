@@ -12,6 +12,8 @@ const session = (over: Partial<SessionStats> = {}): SessionStats => ({
   cpu: null,
   produced: 20,
   readyUntil: 0,
+  ready: [],
+  growing: false,
   running: true,
   paused: false,
   failed: false,
@@ -35,7 +37,7 @@ const status = (over: Partial<Extract<TorrentStatus, { loaded: true }>> = {}): T
 })
 const signals = (over: Partial<PlaybackSignals> = {}): PlaybackSignals => ({
   phase: 'buffering',
-  decision: { mode: 'transcode', reason: 'MPEG4 → H.264', offset: 60, duration: 90, url: '/hls/s/index.m3u8', session: 's', subtitles: [] },
+  decision: { mode: 'transcode', reason: 'MPEG4 → H.264', duration: 90, url: '/hls/s/index.m3u8', session: 's', growing: false, subtitles: [] },
   status: status(),
   statusAge: 0,
   waitingMs: 9000,

@@ -5,7 +5,7 @@ import { createPlay } from './play.ts'
 import type { PlayOptions } from './play.ts'
 import type { MediaInfo } from '@magplay/playback'
 
-const info: MediaInfo = { container: 'mp4', isWebm: false, duration: 90, video: { codec: 'h264', tag: '', bitDepth: 8, profile: null, width: 320, height: 180, sampleAspect: 1 }, audio: [], subtitles: [] }
+const info: MediaInfo = { container: 'mp4', isWebm: false, duration: 90, startTime: 0, video: { codec: 'h264', tag: '', bitDepth: 8, profile: null, width: 320, height: 180, sampleAspect: 1 }, audio: [], subtitles: [] }
 
 function deferred () {
   let finish!: (value: MediaInfo) => void

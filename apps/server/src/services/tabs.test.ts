@@ -10,10 +10,12 @@ import type { FfmpegProcess, HlsSessions } from '@magplay/playback'
 import { createTabs } from './tabs.ts'
 import { HttpError } from '../http/errors.ts'
 
-const fakeProcess = (): FfmpegProcess => Object.assign(new EventEmitter(), {
-  pid: 1, stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true,
-}) as unknown as FfmpegProcess
-const options = { input: 'http://127.0.0.1/raw/x/0', info: { audio: [], subtitles: [] }, audio: 0, start: 0, mode: 'remux' as const }
+const fakeProcess = (): FfmpegProcess => {
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  return Object.assign(new EventEmitter(), { pid: 1, stdout, stderr, stdio: [null, stdout, stderr, new PassThrough()], kill: () => true }) as unknown as FfmpegProcess
+}
+const options = { input: 'http://127.0.0.1/raw/x/0', info: { duration: 60, startTime: 0, audio: [], subtitles: [] }, audio: 0, start: 0, mode: 'remux' as const, keyframes: [0, 6, 12] }
 
 async function setup (t: { after: (fn: () => Promise<void>) => void }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-tabs-'))
