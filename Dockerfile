@@ -58,6 +58,9 @@ COPY apps/client/*.html ./apps/client/
 RUN mkdir -p /data && chown node:node /data
 USER node
 ENV CACHE_DIR=/data
+# Node 24 keeps a 259 MiB heap ceiling in any container of 512 MiB or less, so it would allocate past a small limit
+# instead of collecting. 128 MiB is enough for the server; set NODE_OPTIONS to override.
+ENV NODE_OPTIONS=--max-old-space-size=128
 EXPOSE 8080 6881/tcp 6881/udp
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 CMD ["node", "apps/server/src/main.ts"]

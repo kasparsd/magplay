@@ -76,7 +76,7 @@ declare module 'webtorrent' {
     destroyed: boolean
     /** Bytes/s for every torrent together; -1 turns the throttle off, 0 stops uploads. */
     throttleUpload: (rate: number) => void
-    add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean, fileModtimes?: number[] }) => Torrent
+    add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean, fileModtimes?: number[], storeCacheSlots?: number }) => Torrent
     destroy: (cb?: (err?: Error | null) => void) => void
   }
 }
