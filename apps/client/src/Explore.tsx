@@ -24,6 +24,7 @@ export function Explore (): ReactNode {
   const params = new URLSearchParams(filters).toString()
   const apply = (changes: Partial<typeof filters>): void => {
     navigate({
+      state: previous => ({ catalogQuery: previous.catalogQuery }),
       search: {
         ...filters,
         ...(changes.type && changes.type !== filters.type ? { genre: '', year: '', res: '' } : {}),

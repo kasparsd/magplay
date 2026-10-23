@@ -36,3 +36,17 @@ Catalog retries show their pending state immediately, Explore retains facet choi
 Fullscreen transitions reveal the Player controls and reset their idle timeout. PiP availability comes from the controller snapshot and respects the video restriction; the controller also guards the command. Release-selection links and external-player menu triggers carry their action attributes.
 
 Eight added browser regressions cover delayed facets, retries on all four catalog pages, search node/focus/referrer behavior, fullscreen wake and PiP restrictions. Follow-up validation passed: typecheck, lint and `npm run test:all` (321 Node tests, 4 peer entries and 99 Chromium tests; browser suite 4.1 minutes). The earlier local Docker acceptance is unchanged; it was not repeated for these UI fixes. Published commits are retained; the review fixes use a sentence-style follow-up commit on the existing PR.
+
+## Interactive browser pass
+
+Used the Codex in-app browser against the built local app, with generated cached media and a temporary loopback proxy supplying synthetic Explore/Title data and delayed search/facet responses. No live indexer or owner deployment was used. Inspected 375×812 and 1100×800 layouts.
+
+Observed Search → Torrent → Results preserving the query without focusing the search box; a delayed failed search retry immediately displaying “Searching…”; genre/year/quality choices remaining visible during delayed facet refresh; Title → Explore restoring the selected genre; and Settings declining navigation while retaining a draft, then discarding it back to the saved value.
+
+Played decoded MP4 video, switched to the MKV episode, resumed after a reload, changed audio to Latvian, selected the sidecar subtitle, entered/exited fullscreen and returned to the torrent with its resume action updated. The tab’s warning/error log query returned no entries. This is local in-app browser evidence, not physical phone, TV or owner-server acceptance.
+
+The pass exposed an additional bug: changing Explore filters dropped the remembered header search query. Filter navigation now carries the catalog query in Router state. Rechecked genre, year, quality and sort changes in the live browser: “Playback” remains in the header. Extended the catalog regression; typecheck, lint and all 11 focused catalog/review browser tests pass. The full 321/4/99 run above predates this one-line filter-state fix and was not repeated.
+
+- [Phone playback](2026-10-23-react-client/manual-browser-phone.png)
+- [Desktop playback](2026-10-23-react-client/manual-browser-desktop.png)
+- [Explore query retention](2026-10-23-react-client/manual-browser-explore.png)
