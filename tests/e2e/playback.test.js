@@ -83,8 +83,11 @@ test('a file without a keyframe index plays from a growing playlist', async ({ p
   await expect.poll(async () => (await page.request.get(app.origin + decision.url).then(r => r.text())).includes('#EXT-X-ENDLIST')).toBe(true)
   const playlist = await (await page.request.get(app.origin + decision.url)).text()
   expect(playlist).toContain('#EXT-X-PLAYLIST-TYPE:EVENT')
-  await seek(page, 20)
-  await expect.poll(() => page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(20)
+  // The player learns how far conversion has got from its status poll, every 2 s
+  await expect(async () => {
+    await seek(page, 20)
+    expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(20)
+  }).toPass({ timeout: 15_000 })
   await expectPlaying(page)
 })
 
@@ -113,8 +116,8 @@ test('rapid audio changes preserve position and leave only the latest session', 
     await expect.poll(() => requests.length).toBe(2)
     expect(requests.at(-1).audio).toBe(1)
     expect(requests.at(-1).start).toBeGreaterThanOrEqual(30)
-    expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(30)
     await expectPlaying(page)
+    expect(await page.locator('#video').evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(30)
     await expect.poll(async () => (await fs.readdir(path.join(app.cache, 'hls'))).length).toBe(1)
   } finally { release() }
 })

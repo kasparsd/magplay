@@ -225,8 +225,14 @@ const caps = measureCaps(video, window)
 
 /** Before the media has loaded, the position playback was asked to start at. */
 const position = (): number => cur && video.readyState > 0 ? video.currentTime : pendingPosition
-/** A growing HLS playlist (no keyframe index) can be seeked only this far; null otherwise. */
-const growingEnd = (): number | null => cur?.mode !== 'direct' && cur?.growing ? spans(video.seekable).at(-1)?.[1] ?? 0 : null
+/**
+ * A growing HLS playlist (no keyframe index) can be seeked only as far as the server has converted; null for other
+ * files. The browser's seekable range lags the server and isn't kept for a live playlist that has since ended.
+ */
+function growingEnd (): number | null {
+  if (cur?.mode === 'direct' || !cur?.growing) return null
+  return Math.max(sessionStatus()?.ready.at(-1)?.[1] ?? 0, spans(video.seekable).at(-1)?.[1] ?? 0)
+}
 /** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
 const duration = (): number => cur?.duration || info?.duration || (cur?.mode === 'direct' && Number.isFinite(video.duration) ? video.duration : 0)
 /** Seconds the browser has buffered past the playhead. */
