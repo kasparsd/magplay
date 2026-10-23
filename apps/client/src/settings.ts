@@ -5,6 +5,7 @@ import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsE
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, optionalNote, renderControl } from './lib/controls.ts'
 import type { ControlContext, ReadoutValue } from './lib/controls.ts'
+import { poll } from './lib/resource.ts'
 import { presentSetting } from './lib/setting-rules.ts'
 import { readPreferences, setPreference } from './lib/preferences.ts'
 import type { PreferenceKey, Preferences } from './lib/preferences.ts'
@@ -466,8 +467,6 @@ function watchLiveSections (): void {
     if (node) observer.observe(node)
   }
 }
-setInterval(() => {
-  if (!document.hidden && onScreen.size) loadDebug().catch(console.error)
-}, 5000)
+poll(loadDebug, { everyMs: 5000, when: () => onScreen.size > 0 })
 
 load().catch(console.error)

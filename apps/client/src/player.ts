@@ -18,6 +18,7 @@ import { layerBackground, seekHint, seekOutcome } from './lib/seek.ts'
 import { $, copyButton, el, episodeLabel, fill, formatClock as clock, menu, menuChoice, menuHeading, menuSeparator } from './lib/ui.ts'
 import type { Child } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
+import { parts } from './lib/view.ts'
 import './lib/topbar.ts'
 
 const video = $<HTMLVideoElement>('#video')
@@ -33,14 +34,9 @@ let dragging = false
 const button = (label: string, onclick: () => void, primary?: boolean): HTMLButtonElement => el('button', { type: 'button', className: `button${primary ? ' primary' : ''}`, textContent: label, onclick })
 const linkButton = (label: string, href: string, primary?: boolean): HTMLAnchorElement => el('a', { className: `button${primary ? ' primary' : ''}`, href, textContent: label })
 
-/** Calls `draw` when any of `deps` differs from the last call for `part`. */
-const drawn = new Map<string, unknown[]>()
-function when (part: string, deps: unknown[], draw: () => void): void {
-  const last = drawn.get(part)
-  if (last && last.length === deps.length && last.every((value, i) => Object.is(value, deps[i]))) return
-  drawn.set(part, deps)
-  draw()
-}
+const { when, forget } = parts()
+/** View state the snapshot doesn't have. Kept here and written to the DOM, never read back from it. */
+const ui = { details: false, performance: false, keys: false }
 
 const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playback-announcement'), name => {
   if (name === 'retry') return button('Try again', () => { player.retry() }, true)
@@ -72,8 +68,8 @@ function render (): void {
   when('subtitles', [s.subtitleOptions, s.subtitles], renderSubtitlesMenu)
   when('speed', [s.media.rate], renderSpeedMenu)
   when('more', [s.file, s.media.pip, s.media.rate, flowPinned], renderMore)
-  if (!$('#details').hidden) when('facts', [s.decision, s.file, s.info, s.audio, s.status], renderFacts)
-  if (!$('#performance').hidden) when('performance', [s.history, s.decision], renderPerformance)
+  if (ui.details) when('facts', [s.decision, s.file, s.info, s.audio, s.status], renderFacts)
+  if (ui.performance) when('performance', [s.history, s.decision], renderPerformance)
   updateTimeline()
 }
 
@@ -103,6 +99,7 @@ function renderOverlay (overlay: Overlay | null): void {
         button('Cancel', () => { player.cancelCountdown() }))
     case 'missing':
       // Retrying can't help, so offer only the way back and hide the empty controls
+      ui.details = ui.performance = false
       for (const sel of ['#title-actions', '#details', '#performance', '#chrome']) $(sel).hidden = true
       return card(overlay.message, linkButton('Back to files', urls.torrent(ih), true))
     case 'busy': case 'notice': case 'warn':
@@ -301,7 +298,7 @@ function wake (): void {
   idleTimer = setTimeout(sleepChrome, 2500)
 }
 function sleepChrome (): void {
-  if (video.paused || !snap.decision || stage.classList.contains('has-playback-wait') || $('#stage details.menu[open]') || !$('#keys').hidden || $('#stage :focus-visible') || dragging) return
+  if (video.paused || !snap.decision || stage.classList.contains('has-playback-wait') || $('#stage details.menu[open]') || ui.keys || $('#stage :focus-visible') || dragging) return
   stage.classList.add('idle')
   hideTip()
 }
@@ -375,7 +372,8 @@ $('#fullscreen').addEventListener('click', toggleFullscreen)
 document.addEventListener('fullscreenchange', () => { renderFullscreen(); wake() })
 
 /** The ? sheet over the video. */
-function showKeys (open = $('#keys').hidden): void {
+function showKeys (open = !ui.keys): void {
+  ui.keys = open
   $('#keys').hidden = !open
   if (open) $('#keys-close').focus()
   wake()
@@ -405,7 +403,7 @@ document.addEventListener('keydown', e => {
   if ((e.key === ' ' || e.key === 'Enter') && target.closest('button, summary, a')) return
   wake()
   if (e.key === '?') { showKeys(); return }
-  if (e.key === 'Escape' && !$('#keys').hidden) { showKeys(false); return }
+  if (e.key === 'Escape' && ui.keys) { showKeys(false); return }
   if (!snap.decision) return
   const command = keyCommand(e.key)
   if (!command) return
@@ -414,16 +412,17 @@ document.addEventListener('keydown', e => {
 })
 
 /** ⓘ Details and other disclosures under the title row: a button that shows and hides its panel. */
-function disclosure (toggle: HTMLElement, panel: HTMLElement, part: string): void {
+function disclosure (toggle: HTMLElement, panel: HTMLElement, key: 'details' | 'performance', part: string): void {
   toggle.addEventListener('click', () => {
-    panel.hidden = !panel.hidden
-    toggle.setAttribute('aria-expanded', String(!panel.hidden))
-    drawn.delete(part)
+    ui[key] = !ui[key]
+    panel.hidden = !ui[key]
+    toggle.setAttribute('aria-expanded', String(ui[key]))
+    forget(part)
     render()
   })
 }
-disclosure($('#details-toggle'), $('#details'), 'facts')
-disclosure($('#perf-toggle'), $('#performance'), 'performance')
+disclosure($('#details-toggle'), $('#details'), 'details', 'facts')
+disclosure($('#perf-toggle'), $('#performance'), 'performance', 'performance')
 
 // Theater layout: the stage takes the largest box that fits the band's width and the viewport height
 // left by the top bar and the title row (see #stage in style.css). Phones in landscape give the video
