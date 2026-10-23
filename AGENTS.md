@@ -10,4 +10,4 @@
 
 - Always use soft-line breaks (not hard) for documentation.
 
-- Add a release note with every change (`npm run changeset`, or `npm run changeset -- --empty` when users see no difference). [docs/releases.md](docs/releases.md) explains what to write and which bump to pick.
+- Add a release note with every change (`npm run release -- note --patch -m "..."`, or `npm run release -- note --empty` when users see no difference). [docs/releases.md](docs/releases.md) explains what to write and which bump to pick.

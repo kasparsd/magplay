@@ -54,20 +54,21 @@ export function audioFormat (codec: string, channels: number): string {
   return `${name} ${CHANNELS[channels] ?? `${channels} ch`}`
 }
 
-const FORMATS: Array<[RegExp, string]> = [
-  [/^mov,mp4/, 'MP4'], [/^matroska/, 'Matroska'], [/^avi$/, 'AVI'], [/^mpegts$/, 'MPEG-TS'], [/^flv$/, 'Flash Video'],
-  [/^ogg$/, 'Ogg'], [/^asf$/, 'Windows Media'], [/^mpeg$/, 'MPEG-PS'],
-]
+const FORMATS: Readonly<Record<string, string>> = {
+  mp4: 'MP4',
+  mov: 'QuickTime',
+  matroska: 'Matroska',
+  webm: 'WebM',
+  avi: 'AVI',
+  mpegts: 'MPEG-TS',
+  flv: 'Flash Video',
+  ogg: 'Ogg',
+  asf: 'Windows Media',
+  mpeg: 'MPEG-PS',
+}
 
-/**
- * "MP4" for ffprobe's format_name "mov,mp4,m4a,3gp,3g2,mj2". ffprobe names a family of containers at once, so the
- * file's extension tells QuickTime from MP4 and WebM from Matroska; an unknown format keeps its first name.
- */
-export function containerLabel (formatName: string | null | undefined, fileName = ''): string {
-  if (!formatName) return ''
-  const ext = /\.(\w+)$/.exec(fileName)?.[1]?.toLowerCase()
-  const family = FORMATS.find(([pattern]) => pattern.test(formatName))?.[1]
-  if (family === 'MP4' && ext === 'mov') return 'QuickTime'
-  if (family === 'Matroska' && ext === 'webm') return 'WebM'
-  return family ?? formatName.split(',')[0]!.toUpperCase()
+/** "MP4" for the probe's container id "mp4"; an unknown id is shown upper-cased. */
+export function containerLabel (container: string | null | undefined): string {
+  if (!container) return ''
+  return FORMATS[container] ?? container.toUpperCase()
 }

@@ -96,7 +96,21 @@ export function readInit (init: Uint8Array): InitInfo {
   return info
 }
 
-/** The video track's decode time at the start of a fragment (its moof's tfdt), in seconds; null without one. */
+/** The first sample's composition offset in a trun (0 when the run has none), in track units. */
+function firstOffset (bytes: Uint8Array, trun: Box): number {
+  const v = view(bytes)
+  const flags = v.getUint32(trun.body) & 0xffffff
+  if (!(flags & 0x800) || v.getUint32(trun.body + 4) === 0) return 0
+  let at = trun.body + 8 + (flags & 0x1 ? 4 : 0) + (flags & 0x4 ? 4 : 0)
+  at += (flags & 0x100 ? 4 : 0) + (flags & 0x200 ? 4 : 0) + (flags & 0x400 ? 4 : 0)
+  return bytes[trun.body] === 1 ? v.getInt32(at) : v.getUint32(at)
+}
+
+/**
+ * When a fragment's first video sample is shown, in seconds: its decode time (the moof's tfdt) plus its composition
+ * offset, which B-frames make positive. A fragment starts on a keyframe, so this is the keyframe's presentation
+ * time. Null without a video track.
+ */
 export function fragmentStart (moof: Uint8Array, init: InitInfo): number | null {
   const root = [...boxes(moof)].find(b => b.type === 'moof')
   if (!root || init.videoTrack === null) return null
@@ -105,7 +119,8 @@ export function fragmentStart (moof: Uint8Array, init: InitInfo): number | null 
     const tfdt = child(moof, traf, 'tfdt')
     if (!tfhd || !tfdt || view(moof).getUint32(tfhd.body + 4) !== init.videoTrack) continue
     const scale = init.timescales.get(init.videoTrack)
-    return scale ? versioned(moof, tfdt, 4, 4) / scale : null
+    const trun = child(moof, traf, 'trun')
+    return scale ? (versioned(moof, tfdt, 4, 4) + (trun ? firstOffset(moof, trun) : 0)) / scale : null
   }
   return null
 }

@@ -30,7 +30,7 @@ function paxRecord (key: string, value: string | number): string {
   const bodyLength = Buffer.byteLength(body)
   let length = bodyLength + 1
   while (String(length).length + bodyLength !== length) length = String(length).length + bodyLength
-  return length + body
+  return `${length}${body}`
 }
 
 /** Turns a torrent path into a safe relative archive path. */

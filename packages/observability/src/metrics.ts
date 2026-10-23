@@ -58,11 +58,11 @@ export function createMetrics ({ version = 'unknown', runtime = true }: { versio
       duration.observe({ group }, Math.max(0, seconds))
     },
     playback (mode, result, seconds) {
-      const m = oneOf(mode, ['direct', 'remux', 'transcode', 'unknown'])
+      const m = oneOf(mode, ['direct', 'browser-remux', 'remux', 'transcode', 'unknown'])
       plays.inc({ mode: m, outcome: result })
       if (result === 'success' && m === 'direct') ready.observe({ mode: m }, seconds)
     },
-    ready (mode, seconds) { ready.observe({ mode: oneOf(mode, ['direct', 'remux', 'transcode']) }, Math.max(0, seconds)) },
+    ready (mode, seconds) { ready.observe({ mode: oneOf(mode, ['direct', 'browser-remux', 'remux', 'transcode']) }, Math.max(0, seconds)) },
     job (kind, result, seconds) { jobs.inc({ kind, outcome: result }); jobTime.observe({ kind }, seconds) },
     reject (resource, reason) { rejected.inc({ resource, reason: oneOf(reason, ['capacity', 'free-space', 'storage']) }) },
   }

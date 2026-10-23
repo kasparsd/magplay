@@ -4,6 +4,7 @@ declare module 'parse-torrent' {
     infoHash: string
     name?: string
     length?: number
+    files?: { name: string, path: string, length: number }[]
     announce?: string[]
     created?: Date
     /** The bencoded info dictionary, present when parsed from a .torrent file. */

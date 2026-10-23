@@ -1,18 +1,19 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { connectionLevel, measureConnection, readConnection, saveConnection, CONNECTION_MAX_AGE_MS } from './speedtest.ts'
+import { connectionLevel, connectionWarning, measureConnection, readConnection, saveConnection, CONNECTION_MAX_AGE_MS } from './speedtest.ts'
+import type { PreferenceStorage } from './preferences.ts'
 import { getPreference, readPreferences, setPreference } from './preferences.ts'
 
-function memoryStorage (): Storage {
+function memoryStorage (): PreferenceStorage {
   const data = new Map<string, string>()
-  return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v) } } as unknown as Storage
+  return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v) } }
 }
 
 test('measureConnection takes the median ping and excludes the warmup from the download speed', async () => {
   let clock = 0
   const pings = [30, 10, 20, 50, 40]
   let ping = 0
-  const fetch = ((url: string) => {
+  const fetch: typeof globalThis.fetch = (url) => {
     if (url === '/health') {
       clock += pings[ping++]!
       return Promise.resolve(new Response('{}'))
@@ -26,7 +27,7 @@ test('measureConnection takes the median ping and excludes the warmup from the d
         controller.enqueue(new Uint8Array(1_000_000))
       },
     })))
-  }) as unknown as typeof globalThis.fetch
+  }
   const r = await measureConnection({ fetch, now: () => clock, warmupMs: 1000, durationMs: 4000 })
   assert.equal(r.latencyMs, 30)
   // Chunks at 500…4000 ms; measuring starts at the 1000 ms chunk and counts 6 MB over 3 s
@@ -48,21 +49,24 @@ test('results and preferences round-trip through storage, and bad stored values 
   saveConnection({ at: 1, downBytesPerSec: 2, latencyMs: 3 }, store)
   assert.deepEqual(readConnection(store), { at: 1, downBytesPerSec: 2, latencyMs: 3 })
 
-  assert.equal(getPreference('player.speed', store), 1)
-  assert.equal(setPreference('player.speed', 1.25, store), true)
-  assert.equal(setPreference('player.speed', 3, store), false)
-  assert.equal(getPreference('player.speed', store), 1.25)
-  assert.equal(store.getItem('magplay:player:speed'), '1.25')
-  // Values the Player wrote with remember(): its keys, its codes, null for no audio preference
+  assert.equal(getPreference('player.volume', store), 1)
+  assert.equal(setPreference('player.volume', 0.5, store), true)
+  assert.equal(setPreference('player.volume', 7, store), false)
+  assert.equal(getPreference('player.volume', store), 0.5)
+  assert.equal(store.getItem('magplay:player:volume'), '0.5')
+  // Values the Player wrote with remember(): its keys. Out-of-range falls back to the default.
   store.setItem('magplay:player:volume', '7')
-  store.setItem('magplay:player:subtitleLanguage', '"eng"')
-  store.setItem('magplay:player:audioLanguage', 'null')
+  store.setItem('magplay:player:muted', 'true')
   const prefs = readPreferences(store)
   assert.equal(prefs['player.volume'], 1)
-  assert.equal(prefs['player.subtitleLanguage'], 'eng')
-  assert.equal(prefs['player.audioLanguage'], '')
-  assert.equal(setPreference('player.audioLanguage', '', store), true)
-  assert.equal(store.getItem('magplay:player:audioLanguage'), 'null')
-  assert.equal(setPreference('player.subtitleLanguage', 'not a language', store), false)
-  assert.equal(getPreference('player.speed', null), 1)
+  assert.equal(prefs['player.muted'], true)
+  assert.equal(getPreference('player.volume', null), 1)
+})
+
+test('connection warnings identify download and latency limits independently', () => {
+  const result = { at: 1, downBytesPerSec: 2e6, latencyMs: 20 }
+  assert.equal(connectionWarning(result), 'Download speed is below 10.0 MB/s.')
+  assert.equal(connectionWarning({ ...result, downBytesPerSec: 50e6, latencyMs: 150 }), 'Latency is above 100 ms.')
+  assert.equal(connectionWarning({ ...result, latencyMs: 150 }), 'Download speed is below 10.0 MB/s. Latency is above 100 ms.')
+  assert.equal(connectionWarning({ ...result, downBytesPerSec: 10e6, latencyMs: 100 }), '')
 })

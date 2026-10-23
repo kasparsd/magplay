@@ -59,8 +59,14 @@ export interface DebugInfo {
   version: string
   node: string
   uptimeS: number
+  /** ffmpeg's version, or null when it doesn't run (the core image). */
   ffmpeg: string | null
-  ffprobe: string | null
+  /** Whether the server converts (remux, transcode, subtitles); otherwise the browser repackages and nothing is re-encoded. */
+  serverConversion: boolean
+  /** Encoders ffmpeg reports (H.264). */
+  encoders?: string[]
+  /** Configured transcode encoder setting. */
+  transcodeEncoder?: string
   /** Busy slots and limits for each kind of heavy work. */
   resources: DebugResource[]
   disk: { free: number, size: number, cacheBytes: number, cacheMaxBytes: number } | null

@@ -23,13 +23,14 @@ export function factRows ({ decision, file, info, audio, status, buffered }: Fac
   const rows: Array<[string, string | null | undefined | false]> = [
     ['Mode', decision && `${decision.mode}: ${decision.reason}`],
     ['File', file && `${baseName(file.name)} (${formatBytes(file.size)})`],
-    ['Container', containerLabel(info?.container, file?.name)],
+    ['Container', containerLabel(info?.container)],
     ['Video', v && `${v.codec}${v.profile ? ` ${v.profile}` : ''}, ${v.width}×${v.height}, ${(v.width * (v.sampleAspect || 1) / v.height).toFixed(2)}:1, ${v.bitDepth}-bit`],
     ['Audio', a && [audioFormat(a.codec, a.channels), languageName(a.language)].filter(Boolean).join(', ')],
     ['Peers', status?.loaded && `${status.peers.length} · ↓ ${formatSpeed(status.downloadSpeed)}`],
     ['On the server', status?.loaded && status.file && `${Math.round(status.file.progress * 100)}% of this file`],
     ['Buffered', decision && `${Math.max(0, Math.round(buffered))} s ahead`],
     ['ffmpeg', s && `${s.speed ? `${s.speed.toFixed(1)}x` : '…'}${s.paused ? ', paused far enough ahead' : s.running ? '' : ', finished'}`],
+    ['Encoder', s?.encoder],
   ]
   return rows.filter((row): row is [string, string] => !!row[1])
 }

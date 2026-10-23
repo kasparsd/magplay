@@ -12,7 +12,7 @@ export interface RangeList {
 }
 
 export interface SeekContext {
-  mode: 'direct' | 'remux' | 'transcode'
+  mode: 'direct' | 'browser-remux' | 'remux' | 'transcode'
   /** Whole media duration in seconds. */
   duration: number
   /** video.buffered. */
@@ -28,7 +28,7 @@ export interface SeekContext {
 /**
  * - `buffered`: the browser has it; the jump is instant.
  * - `seekable`: the server can send it straight away (direct mode: the bytes are on the server; HLS: it is converted).
- * - `convert`: HLS only: the server starts converting from there.
+ * - `convert`: conversion starts from there (HLS: on the server; browser-remux: in the page).
  * - `missing`: not downloaded yet; playback waits for peers.
  * - `unconverted`: past the end of a growing playlist; the seek stops at its end.
  */
@@ -52,9 +52,11 @@ export const seekTarget = (t: number, growingEnd: number | null): number => grow
 /** What jumping to time `t` does; the tooltip shows it before seekTo() does it. */
 export function seekOutcome (t: number, ctx: SeekContext): SeekOutcome {
   if (inside(t, ctx.buffered)) return 'buffered'
-  if (ctx.mode !== 'direct' && ctx.growingEnd !== null && t >= ctx.growingEnd - 1) return 'unconverted'
-  if (ctx.mode !== 'direct' && ctx.ready && inside(t, ctx.ready)) return 'seekable'
+  const hls = ctx.mode === 'remux' || ctx.mode === 'transcode'
+  if (hls && ctx.growingEnd !== null && t >= ctx.growingEnd - 1) return 'unconverted'
+  if (hls && ctx.ready && inside(t, ctx.ready)) return 'seekable'
   if (!onServer(ctx.duration > 0 ? t / ctx.duration : 0, ctx.ranges)) return 'missing'
+  if (ctx.mode === 'browser-remux') return 'convert'
   return ctx.mode === 'direct' || !ctx.ready ? 'seekable' : 'convert'
 }
 

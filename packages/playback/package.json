@@ -1,6 +1,6 @@
 {
   "name": "@magplay/playback",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,6 +8,10 @@
   },
   "dependencies": {
     "@magplay/api-contract": "*",
-    "@magplay/observability": "*"
+    "@magplay/observability": "*",
+    "@mediabunny/aac-encoder": "1.61.6",
+    "@mediabunny/ac3": "1.61.6",
+    "@mediabunny/dts": "1.61.6",
+    "mediabunny": "1.61.6"
   }
 }

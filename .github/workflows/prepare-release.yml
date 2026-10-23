@@ -1,0 +1,47 @@
+name: Prepare release
+
+# Pending release notes open or update the release pull request.
+# The pull request is opened with GITHUB_TOKEN, so its test runs wait for approval;
+# dispatching the test workflow starts them (workflow_dispatch always runs).
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.changeset/**'
+      - 'packages/release/**'
+      - '.github/workflows/prepare-release.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - id: version
+        run: npm run release -- version --github-output
+      - if: steps.version.outputs.applied == 'true'
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - uses: peter-evans/create-pull-request@v7
+        if: steps.version.outputs.applied == 'true'
+        with:
+          commit-message: ${{ steps.version.outputs.title }}
+          branch: release/next
+          delete-branch: true
+          title: ${{ steps.version.outputs.title }}
+          body: ${{ steps.version.outputs.body }}
+      - if: steps.version.outputs.applied == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run test.yml --ref release/next

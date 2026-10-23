@@ -27,10 +27,19 @@ export interface ListedFile extends Episode {
   isProgram: boolean
 }
 
+export type PlaybackEffort = 'direct' | 'remux' | 'transcode'
+
+/** Sort title-only playback estimates without preferring a transcode over an unknown release. */
+export function playbackRank (effort: PlaybackEffort | null | undefined): number {
+  return effort === 'direct' ? 0 : effort === 'remux' ? 1 : 2
+}
+
 export interface TitleBadges {
   badges: string[]
-  /** A guess whether Firefox can play it without ffmpeg work. */
+  /** True only for the lowest-effort title estimate. */
   likelyDirect: boolean
+  /** Relative ffmpeg effort to make it playable: direct (none), remux (cheap), transcode (expensive), or null when it isn't video. */
+  playbackEffort: PlaybackEffort | null
   /** A note for programs and archives, or null. */
   warning: string | null
 }
@@ -80,7 +89,7 @@ export function listFiles (torrent: TorrentLike): ListedFile[] {
 
 /** A note about a torrent's contents, judged from its file list (see listFiles), or null. */
 export function contentWarning (files: ReadonlyArray<{ isVideo: boolean }>): string | null {
-  return files.some(f => f.isVideo) ? null : 'No media file found'
+  return files.some(f => f.isVideo) ? null : 'Download only · no video files'
 }
 
 // Titles that name a program or an archive: not something magplay can play
@@ -109,13 +118,13 @@ const RULES: ReadonlyArray<readonly [kind: 'res' | 'video' | 'hdr' | 'tenBit' | 
   ['source', /\bwebrip\b/i, 'WEBRip'],
 ]
 
-/** Badges parsed from a release title, a note for programs and archives, and a guess whether Firefox can play it without ffmpeg work. */
+/** Badges parsed from a release title, a note for programs and archives, and a title-only playback estimate. */
 export function badges (title: string): TitleBadges {
   const program = title.match(PROGRAM_EXT)?.[1]
   const archive = title.match(ARCHIVE_EXT)?.[1]
   const warning = program
-    ? `Not a media file (.${program.toLowerCase()})`
-    : archive ? `Archive (.${archive.toLowerCase()}), can't stream` : null
+    ? `Download (.${program.toLowerCase()})`
+    : archive ? `Download archive (.${archive.toLowerCase()})` : null
   const found: { res?: string, video?: string, hdr?: string, tenBit?: string, audio?: string[], source?: string } = {}
   const words = title.replaceAll('_', ' ') // `\b` treats underscores as letters: big_buck_bunny_h264
   for (const [kind, re, label] of RULES) {
@@ -130,9 +139,20 @@ export function badges (title: string): TitleBadges {
   }
   const audioOk = !found.audio || found.audio.every(a => a === 'AAC')
   const labels = [found.res, found.video, found.hdr, found.tenBit, ...(found.audio ?? []), found.source]
+  // Estimated effort from the title alone. Containers and browser capabilities
+  // are unknown here, so even "direct" may need a remux once the file is probed.
+  let playbackEffort: PlaybackEffort | null = null
+  if (!warning && found.video) {
+    if (found.video === 'H.264' && !found.tenBit) {
+      playbackEffort = audioOk ? 'direct' : 'remux'
+    } else {
+      playbackEffort = 'transcode'
+    }
+  }
   return {
     badges: labels.filter((label): label is string => label !== undefined),
-    likelyDirect: !warning && found.video === 'H.264' && audioOk && !found.tenBit,
+    likelyDirect: playbackEffort === 'direct',
+    playbackEffort,
     warning,
   }
 }

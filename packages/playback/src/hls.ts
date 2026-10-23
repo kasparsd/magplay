@@ -13,9 +13,10 @@ import os from 'node:os'
 import path from 'node:path'
 import type { SessionStats } from '@magplay/api-contract'
 import { PlaybackBusyError } from './errors.ts'
-import { ffmpegArgs, TIMELINE_OFFSET } from './media.ts'
+import { ffmpegArgs, resolveTranscodeEncoder, TIMELINE_OFFSET } from './media.ts'
 import type { FfmpegArgsOptions } from './media.ts'
 import { fragmentSplitter, fragmentStart, readInit } from './mp4.ts'
+import { nodeRemuxProcess } from './node-remux.ts'
 import type { InitInfo } from './mp4.ts'
 import { fixedPlan, keyframePlan, renderPlaylist, runStart, SEGMENT_SECONDS, segmentAt, TIME_TOLERANCE } from './plan.ts'
 import type { SegmentPlan } from './plan.ts'
@@ -28,6 +29,8 @@ const WAIT_AHEAD_S = { remux: 30, transcode: SEGMENT_SECONDS + 1 } as const
 /** When disk space must be reclaimed, segments this close to the player are kept: behind it, and ahead of it. */
 const KEEP_BEHIND_S = 60
 const KEEP_AHEAD_S = 300
+/** A start-time difference larger than this isn't priming; the fragment is taken as it is. */
+const MAX_SKEW_S = 0.25
 // /proc/<pid>/stat counts CPU time in clock ticks; Linux uses 100 per second on every common platform
 const CLOCK_TICKS = 100
 
@@ -68,9 +71,12 @@ export interface HlsLive {
   /** Free space to keep on the HLS disk. */
   minFreeBytes: number
   transcodeMaxHeight: number
+  transcodeEncoder?: string
+  vaapiDevice?: string
+  detectedEncoders?: string[]
 }
 
-export const DEFAULT_HLS_LIVE: HlsLive = { ffmpegPath: 'ffmpeg', maxSessions: 2, hlsMaxBytes: 8 * 1024 ** 3, minFreeBytes: 256 * 1024 ** 2, transcodeMaxHeight: 720 }
+export const DEFAULT_HLS_LIVE: HlsLive = { ffmpegPath: 'ffmpeg', maxSessions: 2, hlsMaxBytes: 8 * 1024 ** 3, minFreeBytes: 256 * 1024 ** 2, transcodeMaxHeight: 720, transcodeEncoder: 'auto', vaapiDevice: '/dev/dri/renderD128', detectedEncoders: [] }
 
 export interface HlsSessionsOptions {
   logger?: Logger
@@ -88,8 +94,10 @@ export interface HlsSessionsOptions {
   onStop?: (id: string) => void
 }
 
-export interface StartOptions extends Pick<FfmpegArgsOptions, 'input' | 'audio' | 'mode'> {
+export interface StartOptions extends Pick<FfmpegArgsOptions, 'input' | 'audio'> {
   info: FfmpegArgsOptions['info'] & { duration: number | null }
+  /** `node-remux` repackages in this process when the browser can't and ffmpeg isn't installed. The session reports `remux`. */
+  mode: 'remux' | 'transcode' | 'node-remux'
   /** Where playback starts on the file's timeline: the first ffmpeg run begins at the segment holding it. */
   start: number
   /** The file's keyframe times, for copied video; null (or an unknown duration) plays a growing playlist from the start. */
@@ -125,7 +133,7 @@ export class HlsFailedError extends Error {
 }
 
 export interface HlsSessions {
-  /** Creates a session and starts ffmpeg, or throws PlaybackBusyError when the limit or disk budget doesn't allow another. */
+  /** Creates a session and starts ffmpeg or a Node remux, or throws PlaybackBusyError when the limit or disk budget doesn't allow another. */
   start: (options: StartOptions) => HlsSession
   get: (id: string) => HlsSession | undefined
   /** Marks a session as alive; `position` is the player's time on the file's timeline. */
@@ -192,6 +200,10 @@ interface Waiter { key: number | 'init', resolve: () => void, reject: (err: Erro
 interface Session {
   id: string
   mode: 'remux' | 'transcode'
+  /** ffmpeg, or Mediabunny in this process (Node remux) when ffmpeg isn't installed. */
+  producer: 'ffmpeg' | 'node'
+  /** The video encoder: `copy` for a remux, the resolved H.264 encoder for a transcode, `node` for a Node remux. */
+  encoder: string
   dir: string
   input: string
   info: StartOptions['info']
@@ -220,6 +232,12 @@ interface Session {
   waiters: Set<Waiter>
   /** The segment playback started in; readiness is reported once it is published. */
   startSegment: number
+  /**
+   * How far every fragment sits from the indexed keyframe it starts on, the same for every run: ffmpeg's -ss counts
+   * from its own start time, which includes the audio codec's priming delay that the probe doesn't. Learned from
+   * the first fragment; 0 without an index.
+   */
+  skew: number | null
   ready: boolean
   onReady: (() => void) | undefined
   stopped: boolean
@@ -248,6 +266,7 @@ export function createHlsSessions ({
 
   const sessions = new Map<string, Session>()
   const removals = new Set<Promise<void>>()
+  const warnedEncoderFallbacks = new Set<string>()
 
   function removeDir (folder: string): void {
     const removal: Promise<void> = fs.promises.rm(folder, { recursive: true, force: true })
@@ -348,6 +367,16 @@ export function createHlsSessions ({
     }
   }
 
+  /** The first fragment's distance from the nearest indexed keyframe, when that is small enough to be this skew. */
+  function skew (s: Session, at: number): number {
+    let nearest = Infinity
+    for (const t of s.plan?.keyframes ?? []) if (Math.abs(t - at) < Math.abs(nearest - at)) nearest = t
+    const d = at - nearest
+    if (Math.abs(d) > MAX_SKEW_S) return 0
+    if (Math.abs(d) > TIME_TOLERANCE) s.log.debug('hls.skew', { seconds: d })
+    return d
+  }
+
   // ---- Runs ----
 
   function throttle (s: Session): void {
@@ -395,13 +424,20 @@ export function createHlsSessions ({
   }
 
   function startRun (s: Session, k: number): void {
-    const { ffmpegPath, transcodeMaxHeight } = live()
+    const { ffmpegPath, transcodeMaxHeight, vaapiDevice } = live()
     const target = s.plan ? runStart(s.plan, k) : 0
     const n = s.runs++
     const runDir = path.join(s.dir, `run${n}`)
     fs.mkdirSync(runDir, { recursive: true })
-    const args = ffmpegArgs({ input: s.input, info: s.info, audio: s.audio, start: target, mode: s.mode, dir: runDir, transcodeMaxHeight })
-    const proc = spawnProcess(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe', 'pipe'] })
+    let proc: FfmpegProcess
+    if (s.producer === 'node') {
+      // Mediabunny starts on the keyframe at or before the target and rebases its output there
+      const firstKeyframe = s.plan ? s.plan.keyframes.filter(t => t <= target + TIME_TOLERANCE).at(-1) ?? s.plan.keyframes[0] ?? null : null
+      proc = nodeRemuxProcess({ input: s.input, audio: s.audio, start: target, firstKeyframe })
+    } else {
+      const args = ffmpegArgs({ input: s.input, info: s.info, audio: s.audio, start: target, mode: s.mode, dir: runDir, transcodeMaxHeight, transcodeEncoder: s.encoder, ...(vaapiDevice ? { vaapiDevice } : {}) })
+      proc = spawnProcess(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe', 'pipe'] })
+    }
     const run: Run = {
       n,
       first: k,
@@ -428,7 +464,7 @@ export function createHlsSessions ({
     }
     s.run = run
     s.failure = null
-    run.log.info('hls.run.started', { segment: k, startSeconds: target })
+    run.log.info('hls.run.started', { segment: k, startSeconds: target, producer: s.producer })
     let fragments = 0
 
     const split = fragmentSplitter({
@@ -443,8 +479,9 @@ export function createHlsSessions ({
       begin (moof) {
         if (s.stopped || s.run !== run) return
         closeCurrent(s, run, true)
-        const tfdt = s.initInfo ? fragmentStart(moof, s.initInfo) : null
-        const start = tfdt === null ? (run.latest ?? target) : tfdt - TIMELINE_OFFSET
+        const shown = s.initInfo ? fragmentStart(moof, s.initInfo) : null
+        if (shown !== null && s.skew === null) s.skew = skew(s, shown - TIMELINE_OFFSET)
+        const start = shown === null ? (run.latest ?? target) : shown - TIMELINE_OFFSET - (s.skew ?? 0)
         if (s.plan) assign(s, run, start)
         else grow(s, run, start)
         const file = path.join(run.dir, `f${fragments++}.m4s`)
@@ -666,8 +703,16 @@ export function createHlsSessions ({
   }
 
   return {
-    start ({ input, info, audio, start: at, mode, keyframes, replaces, context, onReady }) {
-      const { maxSessions, minFreeBytes, hlsMaxBytes } = live()
+    start ({ input, info, audio, start: at, mode: requested, keyframes, replaces, context, onReady }) {
+      const { maxSessions, minFreeBytes, hlsMaxBytes, transcodeEncoder, detectedEncoders } = live()
+      const mode = requested === 'transcode' ? 'transcode' : 'remux'
+      const producer = requested === 'node-remux' ? 'node' : 'ffmpeg'
+      const resolvedEncoder = resolveTranscodeEncoder(transcodeEncoder, detectedEncoders ?? [])
+      const requestedEncoder = (transcodeEncoder ?? 'auto').trim()
+      if (mode === 'transcode' && requestedEncoder !== 'auto' && requestedEncoder !== 'libx264' && resolvedEncoder === 'libx264' && !warnedEncoderFallbacks.has(requestedEncoder)) {
+        warnedEncoderFallbacks.add(requestedEncoder)
+        logger.warn('hls.encoder.fallback', { requestedEncoder, encoder: resolvedEncoder })
+      }
       const admitted = [...sessions.values()].filter(s => !s.failure && s.id !== replaces)
       if (admitted.length >= maxSessions) {
         metrics.reject('hls', 'capacity')
@@ -698,6 +743,8 @@ export function createHlsSessions ({
       const s: Session = {
         id,
         mode,
+        producer,
+        encoder: producer === 'node' ? 'node' : mode === 'transcode' ? resolvedEncoder : 'copy',
         dir: folder,
         input,
         info,
@@ -720,15 +767,16 @@ export function createHlsSessions ({
         failure: null,
         waiters: new Set(),
         startSegment,
+        skew: plan?.keyframes.length && producer === 'ffmpeg' ? null : 0,
         ready: false,
         onReady,
         stopped: false,
-        log: (context?.logger ?? logger).child({ component: 'hls', sessionId: id, mode }),
+        log: (context?.logger ?? logger).child({ component: 'hls', sessionId: id, mode, producer }),
         started: performance.now(),
         get paused () { return this.run?.paused ?? false },
       }
       sessions.set(id, s)
-      s.log.info('hls.created', { replacesSessionId: replaces, startSeconds: at, segments: plan?.starts.length ?? null, growing: !plan })
+      s.log.info('hls.created', { replacesSessionId: replaces, startSeconds: at, segments: plan?.starts.length ?? null, growing: !plan, encoder: s.encoder })
       startRun(s, startSegment)
       return s
     },
@@ -742,6 +790,7 @@ export function createHlsSessions ({
       return {
         id: s.id,
         mode: s.mode,
+        encoder: s.encoder,
         speed: run?.speed ?? null,
         fps: run?.fps ?? null,
         cpu: run ? sampleCpu(run, now) : null,

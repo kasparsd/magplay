@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { badges, contentWarning, detectEpisode, listFiles } from './index.ts'
+import { badges, contentWarning, detectEpisode, listFiles, playbackRank } from './index.ts'
 import type { Episode } from './index.ts'
 
 test('episode patterns', () => {
@@ -35,11 +35,23 @@ test('file list: samples, extras and small files are not videos; episodes sorted
   assert.deepEqual(files.filter(f => f.isSub).map(f => f.name), ['Show.S01E01.eng.srt'])
 })
 
-test('title badges and the Firefox hint', () => {
-  assert.deepEqual(badges('Big Buck Bunny.S01.720p.BluRay.x264-OpenContent'), { badges: ['720p', 'H.264', 'AAC', 'BluRay'], likelyDirect: true, warning: null })
-  assert.equal(badges('Show.S01.1080p.WEB-DL.DDP5.1.H.264').likelyDirect, false)
-  assert.equal(badges('Show.1080p.x265.10bit.AAC').likelyDirect, false)
+test('title badges and playback effort estimates', () => {
+  assert.deepEqual(badges('Big Buck Bunny.S01.720p.BluRay.x264-OpenContent'), { badges: ['720p', 'H.264', 'AAC', 'BluRay'], likelyDirect: true, playbackEffort: 'direct', warning: null })
+  assert.deepEqual(
+    { effort: badges('Show.S01.1080p.WEB-DL.DDP5.1.H.264').playbackEffort, direct: badges('Show.S01.1080p.WEB-DL.DDP5.1.H.264').likelyDirect },
+    { effort: 'remux', direct: false }
+  )
+  assert.equal(badges('Show.1080p.H264.10bit.AAC').playbackEffort, 'transcode')
+  assert.equal(badges('Show.1080p.HEVC.AAC').playbackEffort, 'transcode')
+  assert.equal(badges('Show.1080p.AAC').playbackEffort, null)
   assert.deepEqual(badges('Movie.2160p.UHD.BluRay.REMUX.HDR.HEVC.TrueHD.Atmos').badges, ['2160p', 'HEVC', 'HDR', 'TrueHD', 'Atmos', 'Remux'])
+})
+
+test('playback effort ranks direct before remux, and does not prefer transcode over unknown', () => {
+  assert.deepEqual(
+    ['direct', 'remux', 'transcode', null, undefined].map(effort => playbackRank(effort as Parameters<typeof playbackRank>[0])),
+    [0, 1, 2, 2, 2]
+  )
 })
 
 test('a program file is flagged and is never a video', () => {
@@ -77,19 +89,34 @@ test('small videos count when nothing big exists; extras count when nothing else
 test('titles of programs and archives get a note instead of the Firefox hint', () => {
   const exe = badges('You Can See Everything 2026.1080p. HD h264- OpenContent.exe')
   assert.equal(exe.likelyDirect, false)
-  assert.equal(exe.warning, 'Not a media file (.exe)')
-  assert.equal(badges('Movie.2020.1080p.x264.rar').warning, "Archive (.rar), can't stream")
+  assert.equal(exe.playbackEffort, null)
+  assert.equal(exe.warning, 'Download (.exe)')
+  const archive = badges('Movie.2020.1080p.x264.rar')
+  assert.equal(archive.warning, 'Download archive (.rar)')
+  assert.equal(archive.playbackEffort, null)
   assert.equal(badges('Big Buck Bunny.S01.720p.BluRay.x264-OpenContent').warning, null)
 })
 
 test('content note from the file list', () => {
   const v = { name: 'Movie.mkv', isVideo: true, isProgram: false }
   const exe = { name: 'dir/Movie.1080p.exe', isVideo: false, isProgram: true }
-  assert.equal(contentWarning([exe]), 'No media file found')
+  assert.equal(contentWarning([exe]), 'Download only · no video files')
   assert.equal(contentWarning([v, exe]), null)
 })
 
 test('OpenContent releases count as H.264 with AAC', () => {
-  assert.deepEqual(badges('It Was Just An Accident (2025) [1080p] [WEBRip] [5.1] [OpenContent]'), { badges: ['1080p', 'H.264', 'AAC', 'WEBRip'], likelyDirect: true, warning: null })
+  assert.deepEqual(badges('It Was Just An Accident (2025) [1080p] [WEBRip] [5.1] [OpenContent]'), { badges: ['1080p', 'H.264', 'AAC', 'WEBRip'], likelyDirect: true, playbackEffort: 'direct', warning: null })
   assert.equal(badges('Movie.2020.1080p.BluRay.x265-OpenContent').badges.includes('HEVC'), true) // an explicit codec wins
+})
+
+test('audio, books and disk images remain downloadable without claiming browser video playback', () => {
+  const files = listFiles({
+    name: 'Downloads',
+    files: ['song.flac', 'guide.pdf', 'linux.iso'].map(name => ({ name, path: `Downloads/${name}`, length: 1000 })),
+  })
+  assert.equal(files.length, 3)
+  assert.equal(files.some(f => f.isVideo), false)
+  assert.equal(contentWarning(files), 'Download only · no video files')
+  assert.equal(badges('linux.iso').warning, 'Download archive (.iso)')
+  assert.equal(badges('linux.iso').likelyDirect, false)
 })

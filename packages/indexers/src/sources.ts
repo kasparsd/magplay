@@ -7,7 +7,6 @@ import type { Source } from './source.ts'
 interface Common {
   /** The settings item id, for status checks. */
   id?: string
-  name: string
   url: string
   apiKey?: string
 }
@@ -30,7 +29,8 @@ export const jackettFeedUrl = (url: string, indexer = 'all'): string =>
 
 /** Builds one adapter; `deps` (e.g. a mock fetch) is passed through. Jackett is a Torznab preset. */
 export function createSource (config: SourceConfig, deps: { fetch?: Fetch } = {}): Source {
-  const { name, url, apiKey = '' } = config
+  const { url, apiKey = '' } = config
+  const name = new URL(url).hostname
   switch (config.type) {
     case 'torznab': return createTorznabSource({ name, url, apiKey }, deps)
     case 'jackett': return createTorznabSource({ name, url: jackettFeedUrl(url, config.indexer), apiKey }, deps)

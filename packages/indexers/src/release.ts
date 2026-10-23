@@ -1,5 +1,6 @@
 // The common shape every source adapter returns, so search, dedupe and the UI don't care where a result came from.
 import { badges } from '@magplay/release-info'
+import type { PlaybackEffort } from '@magplay/release-info'
 import { SourceError, fetchFailure, isAbort } from './errors.ts'
 
 /** fetch() as the adapters use it; tests pass a stand-in. */
@@ -18,6 +19,7 @@ export interface Release {
   sources: string[]
   badges: string[]
   likelyDirect: boolean
+  playbackEffort: PlaybackEffort | null
   warning: string | null
 }
 
@@ -108,6 +110,7 @@ export async function readBytes (res: Response, what: string, limit = MAX_BODY_B
   const chunks: Uint8Array[] = []
   let size = 0
   try {
+    // Node fetch bodies are async iterable; this project’s default DOM declarations omit that capability.
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
       size += chunk.byteLength
       if (size > limit) throw new SourceError(`${what} sent more than the ${limit / 1024 ** 2} MB limit`)

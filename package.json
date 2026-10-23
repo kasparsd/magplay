@@ -16,27 +16,23 @@
   ],
   "scripts": {
     "prestart": "npm run build",
-    "start": "node apps/server/src/main.ts",
-    "test": "npm run build && node --test '{apps,packages}/**/*.test.{js,ts}' 'tools/scripts/*.test.mjs'",
-    "test:e2e": "npm run build && playwright test",
+    "start": "node --env-file-if-exists=.env apps/server/src/main.ts",
+    "test": "npm run build && node --test '{apps,packages}/**/*.test.{js,ts}'",
+    "test:e2e": "npm run build && playwright test --reporter=line",
     "test:peers": "node --test tests/integration/*.test.js",
     "test:observability": "node tools/scripts/check-observability.mjs",
     "test:all": "npm test && npm run test:peers && npm run test:e2e",
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "build": "esbuild 'apps/client/src/*.js' 'apps/client/src/*.ts' public/style.css --bundle --minify --format=esm --sourcemap --entry-names=[name]-[hash] --outdir=dist/client/assets --metafile=dist/client/meta.json",
-    "dev": "npm run build -- --watch=forever & node --watch apps/server/src/main.ts",
-    "changeset": "changeset",
-    "changeset:status": "changeset status --verbose",
-    "changeset:check": "node tools/scripts/check-changesets.mjs",
-    "release:version": "changeset version && npm install --package-lock-only --ignore-scripts --no-audit --no-fund"
+    "build": "esbuild 'apps/client/src/*.js' 'apps/client/src/*.ts' public/style.css --bundle --minify --format=esm --splitting --sourcemap --entry-names=[name]-[hash] --outdir=dist/client/assets --metafile=dist/client/meta.json",
+    "dev": "npm run build -- --watch=forever & node --env-file-if-exists=.env --watch apps/server/src/main.ts",
+    "release": "node packages/release/src/cli.ts"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
-    "@changesets/cli": "3.0.3",
     "@playwright/test": "1.64.1",
     "@types/node": "24.19.2",
     "bittorrent-tracker": "11.2.3",

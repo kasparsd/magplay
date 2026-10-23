@@ -9,5 +9,5 @@ export async function addTorrent (engine: TorrentEngine, search: Pick<Search, 'l
   const link = linkId ? search.linkFor(linkId) : null
   const id = magnet || infoHash || (link && await resolveLink(link))
   if (!id) throw new HttpError(400, 'Send infoHash, magnet or linkId')
-  return engine.describe(await engine.add(id))
+  return engine.info(id)
 }

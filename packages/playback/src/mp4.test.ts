@@ -8,6 +8,8 @@ test('readInit finds the video track and every timescale; fragmentStart reads th
   assert.equal(init.videoTrack, 1)
   assert.deepEqual([...init.timescales], [[1, 1000], [2, 48_000]])
   assert.equal(fragmentStart(fragment(30.25), init), 30.25)
+  // With B-frames the keyframe is decoded before it is shown: the start is when it is shown
+  assert.equal(fragmentStart(fragment(30.25, 16, 0.083), init), 30.25)
   assert.equal(fragmentStart(fragment(1), { videoTrack: null, timescales: new Map() }), null)
 })
 

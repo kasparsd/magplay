@@ -6,7 +6,7 @@ import { factRows } from './player-facts.ts'
 const info: ProbeResult = {
   duration: 90,
   startTime: 0,
-  container: 'mov,mp4,m4a,3gp,3g2,mj2',
+  container: 'mp4',
   isWebm: false,
   video: { codec: 'h264', tag: 'avc1', profile: 'High', width: 1920, height: 800, sampleAspect: 1, bitDepth: 8 },
   audio: [{ index: 0, codec: 'aac', channels: 2, language: 'eng', title: null, default: true }],

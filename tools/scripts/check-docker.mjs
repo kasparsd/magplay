@@ -52,7 +52,7 @@ try {
   const part = await get(`/raw/${ih}/${directIdx}`, { headers: { Range: 'bytes=0-1023' } })
   assert.equal(part.status, 206)
   assert.equal((await part.arrayBuffer()).byteLength, 1024)
-  report.checks.push('cached torrent verification, ffprobe and raw byte range')
+  report.checks.push('cached torrent verification, probe and raw byte range')
   const play = async (idx, start = 0) => {
     const response = await get('/api/play', {
       method: 'POST',
@@ -64,7 +64,19 @@ try {
   }
   assert.equal((await play(directIdx)).mode, 'direct')
   report.checks.push('direct MP4 decision')
-  for (const start of [0, 30]) {
+  const { serverConversion } = await get('/api/debug').then(r => r.json())
+  report.variant = serverConversion ? 'full (ffmpeg)' : 'core (no ffmpeg)'
+  if (!serverConversion) {
+    const decision = await play(remuxIdx, 30)
+    assert.equal(decision.mode, 'browser-remux')
+    assert.equal(decision.offset, undefined) // the whole-file timeline, like every mode
+    assert.equal(decision.url, `/raw/${ih}/${remuxIdx}`)
+    assert.equal(decision.session, undefined)
+    const status = await get('/api/status').then(r => r.json())
+    assert.equal(status.checks.find(c => c.id === 'ffmpeg')?.level, 'warn', JSON.stringify(status.checks))
+    report.checks.push('core image: AC3 MKV repackages in the browser from /raw; missing ffmpeg is a warning')
+  }
+  for (const start of serverConversion ? [0, 30] : []) {
     const at = performance.now()
     const decision = await play(remuxIdx, start)
     assert.equal(decision.mode, 'remux')
@@ -85,7 +97,7 @@ try {
     await get(`/api/play/${decision.session}`, { method: 'DELETE' })
     assert.equal((await get(decision.url)).status, 404)
   }
-  report.checks.push('AC3 remux, VOD playlist, HLS bytes from 0 and from 30 seconds, and session cleanup')
+  if (serverConversion) report.checks.push('AC3 remux, VOD playlist, HLS bytes from 0 and from 30 seconds, and session cleanup')
   const metrics = await fetch(`http://127.0.0.1:${metricsPort}/metrics`).then(r => r.text())
   assert.match(metrics, /magplay_playback_attempts_total/)
   assert.match(metrics, /magplay_playback_ready_seconds/)
@@ -99,7 +111,7 @@ try {
   await docker('stop', '--time', '10', name)
   const lines = (await docker('logs', name)).split('\n').filter(Boolean).map(line => JSON.parse(line))
   assert.ok(lines.some(line => line.event === 'server.stopped'))
-  assert.ok(lines.some(line => line.event === 'hls.media.published'))
+  assert.ok(lines.some(line => line.event === (serverConversion ? 'hls.media.published' : 'ffmpeg.checked')))
   assert.ok(lines.every(line => line.time && line.level && line.runId && line.service === 'magplay'))
   assert.doesNotMatch(JSON.stringify(lines), /docker-secret/)
   assert.equal(await docker('inspect', name, '--format', '{{.State.ExitCode}}'), '0')

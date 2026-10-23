@@ -1,3 +1,5 @@
+export type PlaybackEffort = 'direct' | 'remux' | 'transcode'
+
 // GET /api/search and the torrent endpoints: POST /api/torrents, GET /api/torrents/:ih, GET /api/recent.
 
 /** One merged result. Download links stay on the server; `linkId` adds the torrent by it. */
@@ -15,6 +17,8 @@ export interface SearchResult {
   badges: string[]
   /** A guess whether the browser plays it without ffmpeg work. */
   likelyDirect: boolean
+  /** Relative ffmpeg effort to make it playable, or null when it isn't video. */
+  playbackEffort: PlaybackEffort | null
   /** A note for programs and archives, or a warning from a file list seen earlier. */
   warning: string | null
 }

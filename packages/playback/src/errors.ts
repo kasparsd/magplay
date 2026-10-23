@@ -1,6 +1,6 @@
 // Typed failures; the app decides which HTTP status each one becomes. Messages are written for the user.
 
-/** ffprobe or ffmpeg failed, timed out or answered with something unreadable. */
+/** The probe or ffmpeg failed, timed out or answered with something unreadable. */
 export class MediaToolError extends Error {
   override name = 'MediaToolError'
 }

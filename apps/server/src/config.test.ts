@@ -68,26 +68,26 @@ test('reads numbered Torznab feeds, Jackett and Prowlarr presets', () => {
     PROWLARR_APIKEY: 'p',
     PROWLARR_INDEXERS: '3, 7',
   })
-  assert.deepEqual(configs.map(c => [c.type, c.name]), [
-    ['torznab', 'bitmagnet'], ['torznab', 'NZBHydra2'], ['jackett', 'Jackett'], ['prowlarr', 'Prowlarr'],
+  assert.deepEqual(configs.map(c => c.type), [
+    'torznab', 'torznab', 'jackett', 'prowlarr',
   ])
   assert.equal(configs[1]?.apiKey, 'h')
-  assert.deepEqual(configs[2], { type: 'jackett', name: 'Jackett', url: 'http://jackett:9117', apiKey: 'j', indexer: 'tag:tv,!type:private' })
+  assert.deepEqual(configs[2], { id: 'env-2', type: 'jackett', url: 'http://jackett:9117', apiKey: 'j', indexer: 'tag:tv,!type:private' })
   assert.deepEqual(configs[3]?.type === 'prowlarr' && configs[3].indexerIds, ['3', '7'])
 })
 
 test('settings items become source configs with default names and indexers', () => {
   assert.deepEqual(sourceConfigs([
-    { id: 'a', type: 'torznab', name: '', url: 'http://bitmagnet:3333/torznab/api', apiKey: '' },
+    { id: 'a', type: 'torznab', url: 'http://bitmagnet:3333/torznab/api', apiKey: '' },
     { id: 'b', type: 'prowlarr', url: 'http://prowlarr:9696', apiKey: 'k', indexer: '' },
   ]), [
-    { id: 'a', type: 'torznab', name: 'bitmagnet', url: 'http://bitmagnet:3333/torznab/api', apiKey: '' },
-    { id: 'b', type: 'prowlarr', name: 'Prowlarr', url: 'http://prowlarr:9696', apiKey: 'k', indexerIds: ['-2'] },
+    { id: 'a', type: 'torznab', url: 'http://bitmagnet:3333/torznab/api', apiKey: '' },
+    { id: 'b', type: 'prowlarr', url: 'http://prowlarr:9696', apiKey: 'k', indexerIds: ['-2'] },
   ])
 })
 
 test('unknown source types and bad URLs fail at startup', () => {
-  assert.throws(() => sourceConfigs([{ id: 'x', type: 'unknown', name: 'x', url: 'http://x' }]), /Unknown source type/)
+  assert.throws(() => sourceConfigs([{ id: 'x', type: 'unknown', url: 'http://x' }]), /Unknown source type/)
   assert.throws(() => sourcesFromEnv({ TORZNAB_URL: 'bitmagnet:3333' }), /Not an http\(s\) URL/)
   assert.throws(() => sourcesFromEnv({ PROWLARR_URL: 'prowlarr' }), /Not an http\(s\) URL/)
 })

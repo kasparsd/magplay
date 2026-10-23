@@ -40,16 +40,12 @@ test('tracks are picked by language, with two- and three-letter codes matching',
   assert.equal(pickByLanguage(tracks, null), undefined)
 })
 
-const MP4_FAMILY = 'mov,mp4,m4a,3gp,3g2,mj2'
-
-test('containers read as one name, with the extension choosing within ffprobe\'s family', () => {
-  assert.equal(containerLabel(MP4_FAMILY, 'Big Buck Bunny.mp4'), 'MP4')
-  assert.equal(containerLabel(MP4_FAMILY, 'clip.mov'), 'QuickTime')
-  assert.equal(containerLabel(MP4_FAMILY), 'MP4')
-  assert.equal(containerLabel('matroska,webm', 'Show.S01E02.mkv'), 'Matroska')
-  assert.equal(containerLabel('matroska,webm', 'clip.webm'), 'WebM')
-  assert.equal(containerLabel('mpegts', 'a.ts'), 'MPEG-TS')
-  assert.equal(containerLabel('avi', 'wrongly-named.mkv'), 'AVI') // the extension can't override a different format
+test('containers read as one name', () => {
+  assert.equal(containerLabel('mp4'), 'MP4')
+  assert.equal(containerLabel('mov'), 'QuickTime')
+  assert.equal(containerLabel('matroska'), 'Matroska')
+  assert.equal(containerLabel('webm'), 'WebM')
+  assert.equal(containerLabel('mpegts'), 'MPEG-TS')
   assert.equal(containerLabel('nut'), 'NUT')
   assert.equal(containerLabel(null), '')
 })

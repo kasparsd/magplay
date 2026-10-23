@@ -24,8 +24,11 @@ export interface BrowserMedia { ManagedMediaSource?: TypeSupport, MediaSource?: 
  * ManagedMediaSource keeps its existing precedence over MediaSource. Native
  * fallback requires "probably", not "maybe". No user-agent or codec policy here.
  */
+/** A page can repackage a file itself when it can append media to a source buffer. */
+export const browserCanRemux = ({ ManagedMediaSource, MediaSource }: BrowserMedia = {}): boolean => !!(ManagedMediaSource || MediaSource)
+
 export function measureCaps (video: { canPlayType: (type: string) => string }, { ManagedMediaSource, MediaSource }: BrowserMedia = {}): BrowserCapabilities {
   const MS = ManagedMediaSource || MediaSource
   return Object.fromEntries(CODEC_KEYS.map(key =>
-    [key, !!(MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably')])) as BrowserCapabilities
+    [key, MS?.isTypeSupported?.(TYPES[key]) || video.canPlayType(TYPES[key]) === 'probably'])) as BrowserCapabilities
 }

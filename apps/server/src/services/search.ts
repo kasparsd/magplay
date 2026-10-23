@@ -38,7 +38,7 @@ export function createSearchService ({ sources, timeoutMs, engine, logger = noop
         // A file list seen earlier can tell more than the title
         const results = out.results.map(r => {
           const warning = r.infoHash && engine.knownWarning(r.infoHash)
-          return warning ? { ...r, warning, likelyDirect: false } : r
+          return warning ? { ...r, warning, likelyDirect: false, playbackEffort: null } : r
         })
         log.info('search.completed', { count: results.length, durationMs: performance.now() - started })
         return { ...out, results }

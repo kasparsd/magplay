@@ -1,24 +1,36 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decide, ffmpegArgs, parseProbe, sampleAspect, TIMELINE_OFFSET } from './media.ts'
-import type { DecideInput, MediaInfo } from './media.ts'
-import { MediaToolError, NoSuchTrackError, UnplayableError } from './errors.ts'
+import { decide, detectTranscodeEncoders, ffmpegArgs, resolveTranscodeEncoder, TIMELINE_OFFSET } from './media.ts'
+import type { DecideInput, EncoderCommandRunner } from './media.ts'
+import { NoSuchTrackError, UnplayableError } from './errors.ts'
 
 const info = (overrides: Partial<DecideInput> = {}): DecideInput => ({
-  container: 'mov,mp4,m4a,3gp,3g2,mj2',
+  container: 'mp4',
   isWebm: false,
   video: { codec: 'h264', bitDepth: 8, tag: 'avc1' },
   audio: [{ codec: 'aac' }],
   ...overrides,
 })
 const caps = { h264: true, aac: true, hevc: true, vp9: true, opus: true }
-const policy = { allowTranscode: false, transcodeMaxHeight: 720 }
+const policy = { serverConversion: true, allowTranscode: false, transcodeMaxHeight: 720 }
+const core = { ...policy, serverConversion: false }
 
 test('supported MP4 plays directly; MKV and alternate audio use remux', () => {
   assert.equal(decide(info(), caps, policy).mode, 'direct')
-  assert.equal(decide(info({ container: 'matroska,webm' }), caps, policy).mode, 'remux')
+  assert.equal(decide(info({ container: 'matroska' }), caps, policy).mode, 'remux')
   assert.equal(decide(info({ audio: [{ codec: 'aac' }, { codec: 'aac' }] }), caps, policy, 1).mode, 'remux')
   assert.equal(decide(info({ audio: [{ codec: 'ac3' }] }), caps, policy).mode, 'remux')
+})
+
+test('without ffmpeg the browser remuxes what it can demux and decode; nothing is transcoded', () => {
+  assert.equal(decide(info(), caps, core).mode, 'direct')
+  const mkv = decide(info({ container: 'matroska', audio: [{ codec: 'ac3' }] }), caps, core)
+  assert.equal(mkv.mode, 'browser-remux')
+  assert.equal(decide(info({ container: 'matroska', audio: [{ codec: 'ac3' }] }), caps, core, 0, false).mode, 'node-remux')
+  assert.match(mkv.reason, /converting ac3 audio to AAC, in the browser/)
+  assert.throws(() => decide(info({ container: 'avi' }), caps, core), UnplayableError)
+  assert.throws(() => decide(info({ container: 'matroska', audio: [{ codec: 'truehd' }] }), caps, core), UnplayableError)
+  assert.throws(() => decide(info({ video: { codec: 'av1', bitDepth: 8, tag: '' } }), caps, { ...core, allowTranscode: true }), /no ffmpeg/)
 })
 
 test('WebM, silent video, and HEVC container tags', () => {
@@ -30,7 +42,7 @@ test('WebM, silent video, and HEVC container tags', () => {
 test('unsupported video transcodes only when the policy allows it', () => {
   const av1 = info({ video: { codec: 'av1', bitDepth: 8, tag: '' } })
   assert.throws(() => decide(av1, { aac: true }, policy), UnplayableError)
-  const allowed = decide(av1, { aac: true }, { allowTranscode: true, transcodeMaxHeight: 1080 })
+  const allowed = decide(av1, { aac: true }, { ...policy, allowTranscode: true, transcodeMaxHeight: 1080 })
   assert.equal(allowed.mode, 'transcode')
   assert.match(allowed.reason, /H\.264 1080p/)
 })
@@ -63,7 +75,8 @@ test('remux copies HEVC as hvc1, converts audio, maps only text subtitles and ke
   assert.equal(value('-tag:v'), 'hvc1')
   assert.equal(value('-c:a'), 'aac')
   assert.equal(Number(value('-output_ts_offset')), 30.15 + TIMELINE_OFFSET)
-  assert.match(value('-movflags') ?? '', /frag_keyframe.*frag_discont.*negative_cts_offsets/)
+  assert.match(value('-movflags') ?? '', /frag_keyframe.*frag_discont/)
+  assert.equal(value('-avoid_negative_ts'), 'disabled')
   assert.equal(args[args.indexOf('-use_editlist') + 2], 'pipe:3')
   assert.ok(args.includes('0:s:0'))
   assert.ok(!args.includes('0:s:1'))
@@ -79,31 +92,67 @@ test('transcode seeks exactly and forces keyframes on segment boundaries; a run 
   assert.equal(args[args.indexOf('-output_ts_offset') + 1], String(1.4 + TIMELINE_OFFSET))
 })
 
-test('sample aspect ratios: anamorphic, square and unknown', () => {
-  assert.equal(sampleAspect('4:3'), 4 / 3)
-  assert.equal(sampleAspect('1:1'), 1)
-  for (const value of [undefined, '', '0:1', 'N/A', '1:0']) assert.equal(sampleAspect(value), 1)
+test('HLS runs keep track start offsets in fragment timestamps, never in edit lists', () => {
+  const options = { input: '/raw/x/2', audio: 0, mode: 'remux' as const, dir: '/tmp/hls', transcodeMaxHeight: 720, info: { startTime: 0, video: { codec: 'h264' }, audio: [{ index: 0, codec: 'ac3', channels: 6, language: null, title: null, default: true }], subtitles: [] } }
+  const resumed = ffmpegArgs({ ...options, start: 36.5 })
+  const value = (args: string[], key: string) => args[args.indexOf(key) + 1]
+  // Converted audio must start where copied video does: the keyframe the seek lands on, not a later trim
+  assert.deepEqual(resumed.slice(resumed.indexOf('-noaccurate_seek'), resumed.indexOf('-i') + 1), ['-noaccurate_seek', '-ss', '36.5', '-i'])
+  // Edit lists are ignored by MSE: every start offset is in tfdt
+  assert.equal(value(resumed, '-use_editlist'), '0')
+  assert.match(value(resumed, '-movflags') ?? '', /frag_discont/)
+  // Copied video keeps the container's timebase, so millisecond MKV timestamps are not rounded into a codec-derived one
+  assert.deepEqual(resumed.slice(resumed.indexOf('-c:v'), resumed.indexOf('-c:v') + 4), ['-c:v', 'copy', '-copytb', '1'])
+  const fresh = ffmpegArgs({ ...options, start: 0 })
+  assert.ok(!fresh.includes('-ss'))
+  // Re-encoded video can begin on the requested frame, so it does not disable accurate seeking
+  const transcode = ffmpegArgs({ ...options, mode: 'transcode', start: 36 })
+  assert.equal(transcode.includes('-noaccurate_seek'), false)
+  assert.equal(transcode.includes('-copytb'), false)
+  assert.equal(value(transcode, '-ss'), '36')
+  // A resolved hardware encoder is written through; argument building does not run detection again
+  const vaapi = ffmpegArgs({ ...options, mode: 'transcode', start: 0, transcodeEncoder: 'h264_vaapi', vaapiDevice: '/dev/dri/renderD129' })
+  assert.equal(value(vaapi, '-c:v'), 'h264_vaapi')
+  assert.equal(value(vaapi, '-vaapi_device'), '/dev/dri/renderD129')
+  assert.equal(value(vaapi, '-force_key_frames'), 'expr:gte(t,n_forced*6)')
 })
 
-test('ffprobe JSON parses into tracks; junk is a media tool error', () => {
-  const parsed: MediaInfo = parseProbe({
-    format: { duration: '61.5', format_name: 'matroska,webm' },
-    streams: [
-      { codec_type: 'video', codec_name: 'mjpeg', disposition: { attached_pic: 1 } },
-      { codec_type: 'video', codec_name: 'hevc', codec_tag_string: 'hev1', profile: 'Main 10', width: 1920, height: 1080, pix_fmt: 'yuv420p10le', sample_aspect_ratio: '1:1' },
-      { codec_type: 'audio', codec_name: 'eac3', channels: 6, tags: { language: 'eng', title: 'Surround' }, disposition: { default: 1 } },
-      { codec_type: 'audio', codec_name: 'aac', channels: 2, tags: { language: 'und' } },
-      { codec_type: 'subtitle', codec_name: 'subrip', tags: { language: 'lav' } },
-      { codec_type: 'subtitle', codec_name: 'hdmv_pgs_subtitle' },
-    ],
-  }, 'Show.S01E01.mkv')
-  assert.equal(parsed.duration, 61.5)
-  assert.equal(parsed.startTime, 0)
-  assert.deepEqual(parsed.video, { codec: 'hevc', tag: 'hev1', profile: 'Main 10', width: 1920, height: 1080, sampleAspect: 1, bitDepth: 10 })
-  assert.deepEqual(parsed.audio.map(a => [a.index, a.codec, a.language, a.default]), [[0, 'eac3', 'eng', true], [1, 'aac', null, false]])
-  assert.deepEqual(parsed.subtitles.map(s => [s.index, s.text, s.language]), [[0, true, 'lav'], [1, false, null]])
-  assert.equal('video' in parseProbe({ streams: [] }, 'x.mp4'), false)
-  for (const junk of [null, [], 'x', { streams: {} }]) assert.throws(() => parseProbe(junk, 'x'), MediaToolError)
+const encoderList = (...encoders: string[]): string => encoders.map(encoder => ` V..... ${encoder} test encoder`).join('\n')
+
+test('hardware encoder detection requires a successful one-frame probe', async () => {
+  const { createLogging } = await import('@magplay/observability')
+  const logging = createLogging({ level: 'debug', sink: { write () {} } })
+  const commands: string[][] = []
+  const run: EncoderCommandRunner = (_command, args) => {
+    commands.push(args)
+    if (args.includes('-encoders')) return Promise.resolve({ stdout: encoderList('h264_vaapi', 'libx264') })
+    return Promise.reject(new Error('No VA display found'))
+  }
+  const available = await detectTranscodeEncoders('fake-ffmpeg', { vaapiDevice: '/dev/dri/custom', logger: logging.logger, run })
+  assert.deepEqual(available, ['libx264'])
+  assert.equal(resolveTranscodeEncoder('auto', available), 'libx264')
+  assert.equal(resolveTranscodeEncoder('h264_vaapi', available), 'libx264')
+  assert.deepEqual(commands[1], [
+    '-hide_banner', '-nostdin', '-loglevel', 'error',
+    '-f', 'lavfi', '-i', 'nullsrc=s=16x16:d=0.1', '-frames:v', '1',
+    '-vaapi_device', '/dev/dri/custom', '-vf', 'format=nv12,hwupload',
+    '-c:v', 'h264_vaapi', '-f', 'null', '-',
+  ])
+  assert.equal(logging.tail().filter(record => record.event === 'ffmpeg.encoder.probe.failed').length, 1)
+})
+
+test('a compiled hardware encoder is available only after its probe succeeds', async () => {
+  const run: EncoderCommandRunner = (_command, args) => Promise.resolve({
+    stdout: args.includes('-encoders') ? encoderList('h264_qsv', 'libx264') : '',
+  })
+  const available = await detectTranscodeEncoders('fake-ffmpeg', { run })
+  assert.deepEqual(available, ['h264_qsv', 'libx264'])
+  assert.equal(resolveTranscodeEncoder('auto', available), 'h264_qsv')
+})
+
+test('encoder-list failure still returns no available encoders', async () => {
+  const run: EncoderCommandRunner = () => Promise.reject(new Error('ffmpeg missing'))
+  assert.deepEqual(await detectTranscodeEncoders('fake-ffmpeg', { run }), [])
 })
 
 test('probe results are cached per input, keeping only the most recently used', async t => {
@@ -113,22 +162,30 @@ test('probe results are cached per input, keeping only the most recently used', 
   const { createMediaTools } = await import('./media.ts')
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-probe-'))
   t.after(() => fs.rm(dir, { recursive: true, force: true }))
-  // A stand-in ffprobe that counts its runs and reports one H.264 stream
-  const runs = path.join(dir, 'runs')
-  const ffprobe = path.join(dir, 'ffprobe')
-  await fs.writeFile(ffprobe, `#!/bin/sh\necho x >> "${runs}"\necho '{"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2","duration":"10"},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","codec_tag_string":"avc1","width":2,"height":2}]}'\n`, { mode: 0o755 })
-  const tools = createMediaTools({ live: () => ({ ffprobePath: ffprobe, ffmpegPath: 'ffmpeg', maxProbes: 2, maxSubtitleJobs: 1 }), probeCacheLimit: 2 })
-  const count = async (): Promise<number> => (await fs.readFile(runs, 'utf8')).split('\n').filter(Boolean).length
-  await tools.probe('a', 'a.mp4')
-  await tools.probe('b', 'b.mp4')
-  await tools.probe('a', 'a.mp4') // cached, and now the most recent
-  await tools.probe('c', 'c.mp4') // evicts b
-  assert.equal(await count(), 3)
+  const fixture = await fs.readFile(path.join(import.meta.dirname, '../test-fixtures/h264-aac.mp4'))
+  for (const name of ['a', 'b', 'c']) await fs.writeFile(path.join(dir, name), fixture)
+  const tools = createMediaTools({ live: () => ({ ffmpegPath: 'ffmpeg', maxProbes: 2, maxSubtitleJobs: 1 }), probeCacheLimit: 2 })
+  const file = (name: string): string => path.join(dir, name)
+  const a1 = await tools.probe(file('a'), 'a.mp4')
+  await tools.probe(file('b'), 'b.mp4')
+  assert.equal(await tools.probe(file('a'), 'a.mp4'), a1) // cached, and now the most recent
+  await tools.probe(file('c'), 'c.mp4') // evicts b
   assert.deepEqual(tools.stats().probeCache, { used: 2, limit: 2 })
-  await tools.probe('a', 'a.mp4')
-  assert.equal(await count(), 3)
-  await tools.probe('b', 'b.mp4')
-  assert.equal(await count(), 4)
+  assert.equal(await tools.probe(file('a'), 'a.mp4'), a1)
+  await fs.rm(file('b'))
+  await assert.rejects(tools.probe(file('b'), 'b.mp4')) // not cached any more: it reads the file again, which evicts c
+  assert.deepEqual(tools.stats().probeCache, { used: 1, limit: 2 }) // and a failure is not kept
+  assert.equal(await tools.probe(file('a'), 'a.mp4'), a1)
+})
+
+test('ffmpeg detection reports a missing binary as no server conversion', async () => {
+  const { createMediaTools } = await import('./media.ts')
+  const tools = createMediaTools({ live: () => ({ ffmpegPath: '/nonexistent/ffmpeg', maxProbes: 1, maxSubtitleJobs: 1 }) })
+  assert.equal(tools.ffmpeg(), null)
+  assert.equal(tools.serverConversion(), true) // assumed until checked
+  assert.deepEqual(await tools.refreshFfmpeg(), { path: '/nonexistent/ffmpeg', version: null, encoders: [] })
+  assert.equal(tools.serverConversion(), false)
+  assert.deepEqual(tools.detectedEncoders(), [])
 })
 
 test('keyframe indexes are cached per input; a failed read returns null and is retried next time', async () => {

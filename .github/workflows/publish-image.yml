@@ -1,14 +1,18 @@
 name: Publish container image
 
+# Two images from one Dockerfile: magplay (with ffmpeg, the default) and magplay-core (without).
 # Every push to main moves the `edge` tag; older edge builds are deleted.
 # Publishing a GitHub release tagged vX.Y.Z publishes `X.Y.Z`, `X.Y` and `X` (`X` is skipped for 0.x).
 # A prerelease (marked as such, or tagged like vX.Y.Z-rc.1) publishes only its exact version.
 # No `latest` tag: deployments pin a version or follow `edge` explicitly.
+# tag-release.yml dispatches this workflow on the tag, because a release it publishes
+# with GITHUB_TOKEN raises no `release` event. The tags come from github.ref either way.
 on:
   push:
     branches: [main]
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,15 +48,13 @@ jobs:
       #     username: ${{ secrets.DOCKERHUB_USERNAME }}
       #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Generate image tags
-        id: meta
+      - name: Generate core image tags
+        id: meta-core
         uses: docker/metadata-action@v5
         with:
-          # To also publish to Docker Hub, re-enable its login above and use:
-          # images: |
-          #   ghcr.io/${{ github.repository }}
-          #   kasparsd/magplay
-          images: ghcr.io/${{ github.repository }}
+          # To also publish to Docker Hub, re-enable its login above and add
+          # kasparsd/magplay-core (and kasparsd/magplay below) to the images.
+          images: ghcr.io/${{ github.repository }}-core
           flavor: latest=false
           # semver already skips {{major}}.{{minor}} and {{major}} for tags like v1.2.0-rc.1;
           # the enable check also covers releases marked as prerelease on GitHub.
@@ -62,14 +64,43 @@ jobs:
             type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
             type=edge
 
-      - uses: docker/build-push-action@v6
+      # No 32-bit ARM: node:24-alpine has no linux/arm/v7 manifest.
+      - name: Build and push magplay-core
+        uses: docker/build-push-action@v6
         with:
           context: .
+          target: core
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-core.outputs.tags }}
+          labels: ${{ steps.meta-core.outputs.labels }}
+          # Attestations are stored as extra untagged package versions.
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=edge
+
+      # The full stage builds on the core stage, so its layers come from the cache the previous step just filled.
+      - name: Build and push magplay
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: full
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Attestations are stored as extra untagged package versions.
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -80,6 +111,6 @@ jobs:
       - name: Delete untagged images
         uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
-          package: ${{ github.event.repository.name }}
+          packages: ${{ github.event.repository.name }},${{ github.event.repository.name }}-core
           delete-untagged: true
           older-than: 1 hour

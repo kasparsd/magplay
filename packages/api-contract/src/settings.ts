@@ -1,7 +1,7 @@
 // The settings schema: one declarative entry per setting, shared by the server (resolution,
 // validation, persistence) and the client (the /settings page renders one control per entry).
 
-export type SectionId = 'sources' | 'playback' | 'connection' | 'storage' | 'debug'
+export type SectionId = 'sources' | 'playback' | 'storage' | 'debug'
 /** Server settings apply to everyone and are saved on the server; browser settings live in one browser's localStorage. */
 export type SettingScope = 'server' | 'browser'
 
@@ -12,12 +12,27 @@ export interface SectionDef {
 }
 
 export const SECTIONS: readonly SectionDef[] = [
-  { id: 'sources', label: 'Sources', intro: 'Where search and Explore get their results.' },
-  { id: 'playback', label: 'Playback', intro: 'How files play, on the server and in this browser’s player.' },
-  { id: 'connection', label: 'Connection', intro: 'The link between this device and the server: the part of playback nothing else measures.' },
-  { id: 'storage', label: 'Storage', intro: 'How much of the server’s disk torrents and conversions may use.' },
-  { id: 'debug', label: 'Debug', intro: 'What the server is doing right now, for working out why something is slow or broken.' },
+  { id: 'sources', label: 'Sources', intro: 'Sources for search results and Explore.' },
+  { id: 'playback', label: 'Playback', intro: 'Convert videos this browser cannot play.' },
+  { id: 'storage', label: 'Storage', intro: 'Disk space for downloaded torrents and temporary video files.' },
+  { id: 'debug', label: 'Debug', intro: 'Server status, logs and troubleshooting details.' },
 ]
+
+export interface SettingPresentation {
+  hidden?: boolean
+  disabled?: boolean
+  help?: string
+  placeholder?: string
+}
+
+export interface SettingRule extends SettingPresentation {
+  /** A setting key, or SERVER_CONVERSION_KEY for whether the server has ffmpeg (from GET /api/debug). */
+  when: { key: string, equals: string | number | boolean }
+}
+
+/** Not a setting: rules reading it see whether the server converts media (has ffmpeg). */
+export const SERVER_CONVERSION_KEY = 'server.conversion'
+const NO_FFMPEG: SettingRule = { when: { key: SERVER_CONVERSION_KEY, equals: false }, disabled: true, help: 'This server has no ffmpeg, so video is never converted here.' }
 
 interface Common {
   /** Dotted, stable id: 'cache.maxGb'. Also the key in settings.json and localStorage. */
@@ -30,8 +45,10 @@ interface Common {
   env?: readonly string[]
   /** Cards within a section; settings with the same group render together. */
   group?: string
-  /** Stored and validated but not rendered (state the player remembers, like volume). */
+  /** Hidden unless a presentation rule overrides it; stored values remain validated. */
   hidden?: boolean
+  /** Presentation overrides based on another setting, or a sibling field inside a list item. */
+  rules?: readonly SettingRule[]
 }
 
 export interface TextDef extends Common {
@@ -46,6 +63,8 @@ export interface SecretDef extends Common {
   type: 'secret'
   default: string
   placeholder?: string
+  /** An empty value is allowed. */
+  optional?: boolean
 }
 
 export interface NumberDef extends Common {
@@ -72,8 +91,6 @@ export interface ChoiceDef extends Common {
   type: 'select' | 'segmented'
   default: string | number
   options: readonly SettingOption[]
-  /** Also accept a language code that isn't listed (the Player remembers track languages as files name them: "eng"). */
-  otherLanguages?: boolean
 }
 
 /** A field inside a list item. Its key is relative to the item: 'url'. */
@@ -111,18 +128,6 @@ export type SettingType = SettingDef['type']
 
 export const isValueDef = (def: SettingDef): def is ValueDef => def.type !== 'action' && def.type !== 'readout'
 
-const LANGUAGES: readonly SettingOption[] = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-  { value: 'it', label: 'Italian' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'ru', label: 'Russian' },
-  { value: 'lv', label: 'Latvian' },
-  { value: 'ja', label: 'Japanese' },
-]
-
 export const SETTINGS: readonly SettingDef[] = [
   // Sources
   {
@@ -130,24 +135,56 @@ export const SETTINGS: readonly SettingDef[] = [
     section: 'sources',
     scope: 'server',
     type: 'list',
-    label: 'Indexers',
-    help: 'Torznab feeds, Jackett or Prowlarr. Every search asks them all at once.',
+    label: 'Search sources',
+    help: 'Add Torznab, Jackett or Prowlarr sources. Each search checks all sources.',
     itemLabel: 'source',
-    titleField: 'name',
     env: ['TORZNAB_URL', 'JACKETT_URL', 'PROWLARR_URL'],
     default: [],
     item: [
       {
         key: 'type',
         type: 'select',
-        label: 'Type',
+        label: 'Source type',
         default: 'torznab',
         options: [{ value: 'torznab', label: 'Torznab' }, { value: 'jackett', label: 'Jackett' }, { value: 'prowlarr', label: 'Prowlarr' }],
       },
-      { key: 'name', type: 'text', label: 'Name', default: '', optional: true, placeholder: 'From the address' },
-      { key: 'url', type: 'url', label: 'Address', default: '', placeholder: 'http://bitmagnet:3333/torznab/api' },
-      { key: 'apiKey', type: 'secret', label: 'API key', default: '', placeholder: 'Paste the key' },
-      { key: 'indexer', type: 'text', label: 'Indexer filter', help: 'Jackett: an indexer id, all, or a filter. Prowlarr: comma-separated ids, -2 for all.', default: '', optional: true, placeholder: 'All' },
+      {
+        key: 'url',
+        type: 'url',
+        label: 'Source URL',
+        default: '',
+        placeholder: 'http://bitmagnet:3333/torznab/api',
+        rules: [
+          { when: { key: 'type', equals: 'jackett' }, placeholder: 'http://jackett:9117' },
+          { when: { key: 'type', equals: 'prowlarr' }, placeholder: 'http://prowlarr:9696' },
+        ]
+      },
+      {
+        key: 'apiKey',
+        type: 'secret',
+        label: 'API key',
+        default: '',
+        optional: true,
+        placeholder: 'Paste the key',
+        help: 'Leave blank if this feed does not require an API key.',
+        rules: [
+          { when: { key: 'type', equals: 'jackett' }, help: 'Use the API key from Jackett settings.' },
+          { when: { key: 'type', equals: 'prowlarr' }, help: 'Use the API key from Prowlarr settings.' },
+        ]
+      },
+      {
+        key: 'indexer',
+        type: 'text',
+        label: 'Indexer filter',
+        default: '',
+        optional: true,
+        placeholder: 'All',
+        hidden: true,
+        rules: [
+          { when: { key: 'type', equals: 'jackett' }, hidden: false, help: 'Enter an indexer ID or filter. Leave blank to search all indexers.' },
+          { when: { key: 'type', equals: 'prowlarr' }, hidden: false, help: 'Enter indexer IDs separated by commas. Leave blank to search all indexers.' },
+        ]
+      },
     ],
   },
   {
@@ -155,80 +192,86 @@ export const SETTINGS: readonly SettingDef[] = [
     section: 'sources',
     scope: 'server',
     type: 'url',
-    label: 'BitMagnet address',
-    help: 'For Explore. Found from a Torznab address when it uses BitMagnet’s path.',
+    label: 'BitMagnet URL',
+    help: 'Used by Explore. Detected automatically from a BitMagnet Torznab URL.',
     env: ['BITMAGNET_URL'],
     default: '',
     optional: true,
     placeholder: 'http://bitmagnet:3333',
   },
-  { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Slow sources are dropped from results after this.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
+  { key: 'content.showAdult', section: 'sources', scope: 'server', type: 'toggle', label: 'Show adult content in Explore', help: 'Show classified adult releases in Explore and its title pages. This does not filter search results from your sources.', env: ['SHOW_ADULT_CONTENT', 'ALLOW_ADULT'], default: false },
+  { key: 'search.timeoutS', section: 'sources', scope: 'server', type: 'number', label: 'Search timeout', help: 'Stop waiting for a source after this many seconds.', env: ['SEARCH_TIMEOUT_S'], default: 30, unit: 's', min: 1, max: 600 },
 
   // Playback, server
-  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Allow video transcoding', help: 'Converts video the browser can’t play. Uses a lot of server CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false },
+  { key: 'transcode.allow', section: 'playback', scope: 'server', type: 'toggle', label: 'Convert unsupported video', help: 'Convert unsupported video formats on the server. Uses more CPU.', env: ['ALLOW_VIDEO_TRANSCODE'], default: false, rules: [NO_FFMPEG] },
   {
     key: 'transcode.maxHeight',
     section: 'playback',
     scope: 'server',
     type: 'segmented',
-    label: 'Transcode resolution',
-    help: 'Higher looks better and needs a faster server.',
+    label: 'Conversion resolution',
+    help: 'Maximum resolution for converted video. Higher resolutions use more CPU.',
+    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to change the resolution.' }, NO_FFMPEG],
     env: ['TRANSCODE_MAX_HEIGHT'],
     default: 720,
     options: [{ value: 480, label: '480p' }, { value: 720, label: '720p' }, { value: 1080, label: '1080p' }],
   },
-
-  // Playback, this browser
   {
-    key: 'player.subtitleLanguage',
+    key: 'transcode.encoder',
     section: 'playback',
-    scope: 'browser',
-    type: 'select',
-    label: 'Preferred subtitles',
-    help: 'The Player also remembers the last subtitles you chose.',
-    default: 'off',
-    otherLanguages: true,
-    options: [{ value: 'off', label: 'Off' }, { value: 'any', label: 'Any available' }, ...LANGUAGES],
-  },
-  {
-    key: 'player.audioLanguage',
-    section: 'playback',
-    scope: 'browser',
-    type: 'select',
-    label: 'Preferred audio',
-    help: 'The Player also remembers the last audio language you chose.',
-    default: '',
-    otherLanguages: true,
-    options: [{ value: '', label: 'First track' }, ...LANGUAGES],
-  },
-  {
-    key: 'player.speed',
-    section: 'playback',
-    scope: 'browser',
+    scope: 'server',
     type: 'segmented',
-    label: 'Default speed',
-    default: 1,
-    options: [0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value, label: `${value}×` })),
+    label: 'Conversion encoder',
+    help: 'Uses the CPU unless a supported GPU encoder is available.',
+    rules: [{ when: { key: 'transcode.allow', equals: false }, disabled: true, help: 'Turn on video conversion to choose an encoder.' }, NO_FFMPEG],
+    env: ['TRANSCODE_ENCODER'],
+    default: 'auto',
+    options: [
+      { value: 'auto', label: 'Auto' },
+      { value: 'libx264', label: 'CPU' },
+      { value: 'h264_nvenc', label: 'NVENC' },
+      { value: 'h264_vaapi', label: 'VAAPI' },
+      { value: 'h264_videotoolbox', label: 'VideoToolbox' },
+      { value: 'h264_qsv', label: 'Quick Sync' },
+    ],
   },
+
+  // Playback, this browser: state the Player remembers (its own recall()/remember() keys), kept in the
+  // schema so stored values are validated and diagnostics can include them. Nothing here is on the page.
   { key: 'player.volume', section: 'playback', scope: 'browser', type: 'number', label: 'Volume', default: 1, min: 0, max: 1, step: 0.05, hidden: true },
   { key: 'player.muted', section: 'playback', scope: 'browser', type: 'toggle', label: 'Muted', default: false, hidden: true },
 
-  // Connection
-  { key: 'connection.result', section: 'connection', scope: 'browser', type: 'readout', label: 'Last test' },
-  { key: 'connection.test', section: 'connection', scope: 'browser', type: 'action', label: 'Speed test', help: 'Downloads from the server for about 5 seconds. The result stays in this browser.', button: 'Test now' },
-
   // Storage
-  { key: 'cache.usage', section: 'storage', scope: 'server', type: 'readout', label: 'Disk' },
-  { key: 'cache.maxGb', section: 'storage', scope: 'server', type: 'number', label: 'Torrent cache limit', help: 'Oldest torrents are removed past this.', env: ['CACHE_MAX_GB'], default: 50, unit: 'GB', min: 1 },
-  { key: 'cache.minFreeGb', section: 'storage', scope: 'server', type: 'number', label: 'Keep free on disk', help: 'Conversions stop below this.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05 },
-  { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion storage', help: 'Space for remux and transcode segments.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
+  { key: 'cache.usage', section: 'storage', scope: 'server', type: 'readout', label: 'Disk usage' },
+  { key: 'cache.maxGb', section: 'storage', scope: 'server', type: 'number', label: 'Torrent cache limit', help: 'Remove least recently used torrents when the cache exceeds this limit.', env: ['CACHE_MAX_GB'], default: 50, unit: 'GB', min: 1 },
+  { key: 'cache.minFreeGb', section: 'storage', scope: 'server', type: 'number', label: 'Minimum free disk space', help: 'Stop video conversions when free disk space falls below this amount.', env: ['MIN_FREE_GB'], default: 0.25, unit: 'GB', min: 0.01, step: 0.05 },
+  { key: 'cache.hlsMaxGb', section: 'storage', scope: 'server', type: 'number', label: 'Conversion cache limit', help: 'Maximum disk space for temporary video conversion files.', env: ['HLS_MAX_GB'], default: 8, unit: 'GB', min: 0.1 },
+
+  // Sharing completed downloads
+  { key: 'seeding.enabled', section: 'storage', scope: 'server', type: 'toggle', label: 'Share completed downloads', help: 'After a download finishes, keep sharing it until the selected ratio. Watching always comes first.', group: 'Sharing', env: ['SEEDING_ENABLED'], default: true },
+  {
+    key: 'seeding.ratio',
+    section: 'storage',
+    scope: 'server',
+    type: 'segmented',
+    label: 'Share ratio',
+    help: "Share this multiple of the torrent's size, then stop.",
+    group: 'Sharing',
+    rules: [{ when: { key: 'seeding.enabled', equals: false }, disabled: true }],
+    env: ['SEEDING_RATIO'],
+    default: 1,
+    options: [{ value: 0.5, label: '0.5×' }, { value: 1, label: '1×' }, { value: 2, label: '2×' }, { value: 5, label: '5×' }],
+  },
 
   // Debug
   { key: 'debug.server', section: 'debug', scope: 'server', type: 'readout', label: 'Server', group: 'Server' },
   { key: 'debug.resources', section: 'debug', scope: 'server', type: 'readout', label: 'In use', group: 'Server' },
-  { key: 'debug.diagnostics', section: 'debug', scope: 'server', type: 'action', label: 'Diagnostics', help: 'Versions, settings and status as JSON, with secrets removed.', button: 'Copy diagnostics', group: 'Server' },
+  { key: 'debug.diagnostics', section: 'debug', scope: 'server', type: 'action', label: 'Diagnostics', help: 'Copy server details, settings and logs as JSON. API keys are hidden.', button: 'Copy diagnostics', group: 'Server' },
+  { key: 'connection.result', section: 'debug', scope: 'browser', type: 'readout', label: 'Last test', group: 'Speed test' },
+  { key: 'connection.test', section: 'debug', scope: 'browser', type: 'action', label: 'Connection to server', group: 'Speed test', help: 'Download test data for about 5 seconds. Results are saved in this browser.', button: 'Run speed test' },
+
   { key: 'debug.log', section: 'debug', scope: 'server', type: 'readout', label: 'Log', group: 'Log' },
-  { key: 'debug.clearHls', section: 'debug', scope: 'server', type: 'action', label: 'Clear conversion cache', help: 'Stops conversions in progress and deletes their segments. Torrents stay.', button: 'Clear', confirm: true, danger: true, group: 'Maintenance' },
+  { key: 'debug.clearHls', section: 'debug', scope: 'server', type: 'action', label: 'Clear conversion cache', help: 'Stop active conversions and delete temporary video files. Downloaded torrents are kept.', button: 'Clear conversion cache', confirm: true, danger: true, group: 'Maintenance' },
 ]
 
 export const settingDef = (key: string): SettingDef | undefined => SETTINGS.find(d => d.key === key)
@@ -253,7 +296,6 @@ function validateScalar (def: Exclude<FieldDef, ListDef>, value: unknown): Valid
     case 'secret': {
       if (typeof value !== 'string') return fail('must be text')
       const text = value.trim()
-      if (def.type === 'secret') return pass(text)
       if (!text) return def.optional ? pass('') : fail('can’t be empty')
       if (def.type === 'url' && !isHttpUrl(text)) return fail('must be an http:// or https:// address')
       return pass(text)
@@ -275,7 +317,6 @@ function validateScalar (def: Exclude<FieldDef, ListDef>, value: unknown): Valid
     case 'segmented': {
       // Env values arrive as strings, so '720' matches the option 720
       const match = def.options.find(o => o.value === value || String(o.value) === String(value))
-      if (!match && 'otherLanguages' in def && def.otherLanguages && typeof value === 'string' && /^[a-z]{2,3}([-_][a-z0-9]+)?$/i.test(value)) return pass(value)
       return match ? pass(match.value) : fail(`must be one of ${def.options.map(o => o.label).join(', ')}`)
     }
   }

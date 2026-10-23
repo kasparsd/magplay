@@ -1,0 +1,165 @@
+<div id="mp-flow-study">
+  <div class="mp-preview">
+    <label>Preview state <select id="mp-scenario" aria-label="Preview state"></select></label>
+    <button id="mp-sample" type="button" class="cursor-interaction">Update values</button>
+    <span>Illustrative values</span>
+  </div>
+  <div class="viz-carousel viz-dotted-background" aria-label="Player debug overlay designs">
+    <section data-variant="Flow panel" aria-label="Flow panel design"><div class="mp-stage" data-layout="panel"></div></section>
+    <section data-variant="Pinned ribbon" aria-label="Pinned ribbon design" hidden><div class="mp-stage" data-layout="ribbon"></div></section>
+  </div>
+</div>
+<style>
+  #mp-flow-study { --mp-bg: light-dark(#fafaf9,#161412); --mp-fg: light-dark(#1c1917,#e7e5e4); --mp-muted: light-dark(#57534e,#b8b1ab); --mp-line: light-dark(#d6d3d1,#49413b); --mp-surface: light-dark(#f2f0ed,#211e1b); --mp-green: light-dark(#15803d,#71d69a); --mp-blue: light-dark(#2563eb,#82b8ff); --mp-amber: light-dark(#a04d0a,#f6bd75); --mp-red: light-dark(#b91c1c,#ff9a9a); font: 14px/1.45 system-ui,sans-serif; color: var(--mp-fg); }
+  #mp-flow-study * { box-sizing: border-box; }
+  #mp-flow-study [hidden] { display: none !important; }
+  #mp-flow-study button, #mp-flow-study select { font: inherit; color: var(--mp-fg); background: var(--mp-bg); border: 1px solid var(--mp-line); border-radius: 6px; padding: 7px 10px; }
+  #mp-flow-study button { cursor: inherit; }
+  #mp-flow-study button:focus-visible, #mp-flow-study select:focus-visible { outline: 2px solid var(--mp-blue); outline-offset: 3px; }
+  #mp-flow-study .mp-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+  #mp-flow-study .mp-preview label { display: flex; align-items: center; gap: 8px; }
+  #mp-flow-study .mp-preview span { font-size: 12px; color: var(--mp-muted); }
+  #mp-flow-study .mp-stage { padding: 22px 18px; min-height: 512px; background: var(--mp-bg); border: 1px solid var(--mp-line); border-radius: 10px; display: flex; flex-direction: column; gap: 20px; }
+  #mp-flow-study .mp-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--mp-muted); font-size: 12px; min-height: 24px; font-variant-numeric: tabular-nums; }
+  #mp-flow-study .mp-top strong { color: var(--mp-fg); font-weight: 500; }
+  #mp-flow-study .mp-mode { text-align: right; }
+  #mp-flow-study .mp-content { width: 100%; max-width: 660px; margin: 12px auto 0; }
+  #mp-flow-study .mp-head { min-height: 76px; }
+  #mp-flow-study h2 { font: 500 21px/1.3 system-ui,sans-serif; letter-spacing: -.3px; margin: 0 0 6px; }
+  #mp-flow-study .mp-head p { margin: 0; color: var(--mp-muted); font-size: 13px; max-width: 60ch; }
+  #mp-flow-study .mp-flow { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); padding: 12px 0 18px; }
+  #mp-flow-study .mp-step { position: relative; min-width: 0; padding: 0 4px; text-align: center; }
+  #mp-flow-study .mp-step:not(:last-child)::after { content: ""; position: absolute; top: 19px; left: calc(50% + 25px); width: calc(100% - 50px); height: 1px; background: var(--mp-line); }
+  #mp-flow-study .mp-node { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; margin: 0 auto 8px; border-radius: 50%; background: var(--mp-bg); border: 1px solid var(--mp-line); color: var(--mp-muted); }
+  #mp-flow-study .mp-node svg { width: 17px; height: 17px; }
+  #mp-flow-study .mp-node[data-state="ready"] { color: var(--mp-green); border-color: var(--mp-green); }
+  #mp-flow-study .mp-node[data-state="working"] { color: var(--mp-blue); border: 2px solid var(--mp-blue); background: color-mix(in srgb,var(--mp-blue) 9%,var(--mp-bg)); }
+  #mp-flow-study .mp-node[data-state="waiting"] { color: var(--mp-amber); border: 2px solid var(--mp-amber); background: color-mix(in srgb,var(--mp-amber) 8%,var(--mp-bg)); }
+  #mp-flow-study .mp-node[data-state="error"] { color: var(--mp-red); border-color: var(--mp-red); }
+  #mp-flow-study .mp-node[aria-pressed="true"] { outline: 2px solid var(--mp-fg); outline-offset: 4px; }
+  #mp-flow-study .mp-label { display: block; font-weight: 500; }
+  #mp-flow-study .mp-state { display: block; font-size: 12px; color: var(--mp-muted); margin-top: 2px; min-height: 18px; }
+  #mp-flow-study .mp-edge { position: absolute; top: -7px; left: 66%; width: 68%; font-size: 11px; color: var(--mp-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #mp-flow-study .mp-inspector { min-height: 150px; padding: 14px 16px; background: var(--mp-surface); border-radius: 7px; }
+  #mp-flow-study .mp-inspector-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+  #mp-flow-study .mp-inspector-top strong { font-weight: 500; }
+  #mp-flow-study .mp-follow { border: 0; padding: 0; background: none; color: var(--mp-muted); font-size: 12px; }
+  #mp-flow-study .mp-value { font-variant-numeric: tabular-nums; }
+  #mp-flow-study .mp-meter { height: 4px; border-radius: 2px; background: color-mix(in srgb,var(--mp-fg) 12%,transparent); margin: 10px 0; }
+  #mp-flow-study .mp-fill { height: 100%; background: var(--mp-blue); border-radius: inherit; }
+  #mp-flow-study .mp-meter.is-unknown .mp-fill { width: 100% !important; background: repeating-linear-gradient(90deg,var(--mp-blue) 0 2px,transparent 2px 6px); }
+  #mp-flow-study .mp-note { color: var(--mp-muted); font-size: 12px; margin: 6px 0 0; }
+  #mp-flow-study .mp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; min-height: 36px; align-items: start; }
+  #mp-flow-study .mp-actions button { font-size: 12px; }
+  #mp-flow-study .mp-actions button:last-child { margin-left: auto; }
+  #mp-flow-study .mp-details { padding: 12px 16px; margin-top: 12px; background: var(--mp-surface); border-radius: 6px; }
+  #mp-flow-study .mp-details dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 18px; margin: 0; font-size: 12px; }
+  #mp-flow-study .mp-details dt { color: var(--mp-muted); }
+  #mp-flow-study .mp-details dd { text-align: right; margin: 0; overflow-wrap: anywhere; }
+  #mp-flow-study .mp-transport { display: flex; align-items: center; gap: 12px; min-height: 24px; font-size: 12px; color: var(--mp-muted); font-variant-numeric: tabular-nums; }
+  #mp-flow-study .mp-transport .mp-track { flex: 1; }
+  #mp-flow-study [data-layout="ribbon"] .mp-content { display: flex; flex-direction: column; flex: 1; }
+  #mp-flow-study [data-layout="ribbon"] .mp-flow { order: -1; border-bottom: 1px solid var(--mp-line); margin-bottom: auto; }
+  #mp-flow-study [data-layout="ribbon"] .mp-head { margin-top: 30px; min-height: 72px; }
+  #mp-flow-study [data-layout="ribbon"] .mp-inspector { padding: 0; background: none; min-height: 140px; }
+  @media(max-width:520px) {
+    #mp-flow-study .mp-stage { min-height: 700px; padding: 16px 12px; }
+    #mp-flow-study .mp-preview label { width: 100%; justify-content: space-between; }
+    #mp-flow-study .mp-preview select { min-width: 0; max-width: 68%; }
+    #mp-flow-study h2 { font-size: 19px; }
+    #mp-flow-study .mp-head { min-height: 100px; }
+    #mp-flow-study .mp-flow { padding: 8px 0 16px; }
+    #mp-flow-study .mp-node { width: 36px; height: 36px; }
+    #mp-flow-study .mp-step:not(:last-child)::after { top: 17px; left: calc(50% + 23px); width: calc(100% - 46px); }
+    #mp-flow-study .mp-edge { display: none; }
+    #mp-flow-study .mp-label { font-size: 12px; }
+    #mp-flow-study .mp-state { font-size: 11px; min-height: 32px; }
+    #mp-flow-study .mp-inspector { min-height: 210px; padding: 12px; }
+    #mp-flow-study .mp-inspector-top { flex-wrap: wrap; }
+    #mp-flow-study .mp-actions { min-height: 88px; }
+    #mp-flow-study .mp-actions button { min-height: 40px; }
+    #mp-flow-study .mp-actions button:last-child { margin-left: 0; }
+    #mp-flow-study .mp-details dl { grid-template-columns: 1fr; gap: 2px; }
+    #mp-flow-study .mp-details dd { text-align: left; margin-bottom: 6px; }
+    #mp-flow-study [data-layout="ribbon"] .mp-inspector { min-height: 210px; }
+  }
+  @media(pointer:coarse) { #mp-flow-study button, #mp-flow-study select { min-height: 44px; } #mp-flow-study .mp-node { width: 44px; height: 44px; } }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('mp-flow-study');
+  const names = ['Torrent','Server','Prepare','Player'];
+  const icons = {ready:'check',working:'loader-circle',waiting:'clock-3',pending:'circle',bypass:'minus',unknown:'circle-help',error:'triangle-alert'};
+  // Each node: state, short label, metric, progress (null = unknown), explanation.
+  const node = (state,label,metric,progress,note) => ({state,label,metric,progress,note});
+  const scenarios = {
+    checking: {label:'Checking the file', title:'Checking local data', sub:'The server is loading the file and verifying cached pieces.', focus:1,mode:'Selecting playback',time:'Waiting 3 s',nodes:[node('pending','Discovering','Looking for torrent metadata',null,'Peer information is not available yet.'),node('working','Checking','Verifying cached pieces',null,'No measured verification percentage is available.'),node('pending','Pending','Waiting for format inspection',null,'Playback mode has not been selected.'),node('pending','Pending','0 s buffered',0,'Waiting for a playable source.')],edges:['—','—','—']},
+    peers: {label:'Waiting for peers',title:'Waiting for a source',sub:'The file is incomplete. No peers are connected yet.',focus:0,mode:'Selecting playback',time:'Waiting 18 s',nodes:[node('waiting','0 peers','0 KB/s · 0 connected peers',null,'Still discovering peers. This does not establish that the torrent is dead.'),node('pending','12% local','12% of this file on the server',12,'Downloaded bytes may not cover the next playback position.'),node('pending','Pending','Waiting for source data',null,'The file cannot be inspected yet.'),node('pending','Pending','0 s buffered',0,'Waiting for a playable source.')],edges:['0 KB/s','—','—'],action:'Choose another release'},
+    downloading: {label:'Downloading source data',title:'Waiting for source data',sub:'Peers are connected; the next required bytes may still be missing.',focus:0,mode:'Video conversion',time:'Waiting 12 s',nodes:[node('working','8 peers','2.4 MB/s · 8 connected peers',null,'Torrent-wide download speed; it can include other files in this torrent.'),node('pending','64% local','64% of this file on the server',64,'File completion is not a percentage of playback readiness.'),node('waiting','Needs input','0.8× conversion · 0 s ready ahead',null,'Missing source bytes may be limiting conversion.'),node('pending','Waiting','0.4 s buffered',null,'Not enough playable video to continue.')],edges:['2.4 MB/s','0.8×','—'],action:'Choose another release'},
+    converting: {label:'Conversion is slow',title:'Conversion is behind playback',sub:'The file is local. Conversion is running below the selected 1× speed.',focus:2,mode:'Video conversion',time:'Waiting 14 s',nodes:[node('ready','Local','No torrent transfer needed',null,'The selected file is fully downloaded.'),node('ready','100% local','100% of this file on the server',100,'Source bytes are available locally.'),node('working','Converting','0.6× conversion · 1 s ready ahead',null,'Waiting for playable segments. Playback needs sustained 1× conversion.'),node('waiting','Waiting','0.4 s buffered',null,'Browser playback is waiting for more playable video.')],edges:['Local','0.6×','—'],action:'Open in player'},
+    buffering: {label:'Browser is buffering',title:'Waiting for the browser',sub:'The server has playable video ready. The browser is still buffering.',focus:3,mode:'Video conversion',time:'Waiting 6 s',nodes:[node('ready','Local','No torrent transfer needed',null,'The selected file is fully downloaded.'),node('ready','100% local','100% of this file on the server',100,'Source bytes are available locally.'),node('ready','Ready','2.1× conversion · 42 s ready ahead',null,'Conversion continues in parallel; ready does not mean finished.'),node('working','Buffering','0.4 s buffered · delivery rate unmeasured',null,'Delivery or decoding may be responsible. The cause is not measured.')],edges:['Local','2.1×','—']},
+    playing: {label:'Healthy playback',title:'Playing smoothly',sub:'Every stage is supplying playback. Downloads and conversion can continue.',focus:3,mode:'Video conversion',time:'Playing',nodes:[node('ready','8 peers','2.4 MB/s · 8 connected peers',null,'Peers are connected and source data is arriving.'),node('ready','64% local','64% of this file on the server',64,'Available ranges currently support playback; the full file is still downloading.'),node('ready','Ready','2.1× conversion · 42 s ready ahead',null,'Ready for playback; conversion is still running.'),node('ready','Playing','24 s buffered · playback at 1×',null,'Playback is healthy. This view stays visible only when pinned.')],edges:['2.4 MB/s','2.1×','—']},
+    direct: {label:'Direct playback',title:'Playing the original file',sub:'This browser supports the source format. Conversion is bypassed.',focus:3,mode:'Direct playback',time:'Playing',nodes:[node('ready','Local','No torrent transfer needed',null,'The selected file is fully downloaded.'),node('ready','100% local','100% of this file on the server',100,'Source bytes are available locally.'),node('bypass','Bypassed','No conversion required',null,'This node stays in place so the flow does not change shape.'),node('ready','Playing','32 s buffered · playback at 1×',null,'Receiving the original file through HTTP range requests.')],edges:['Local','Direct','—']},
+    seek: {label:'Seeking beyond ready video',title:'Preparing video at 14:20',sub:'The requested position needs a new conversion session.',focus:2,mode:'Video conversion',time:'Seeking · 4 s',nodes:[node('ready','Local','No torrent transfer needed',null,'The file remains available; completed upstream work is retained.'),node('ready','100% local','100% of this file on the server',100,'Source bytes are available locally.'),node('working','Restarting','Waiting for first published segment',null,'Only conversion and player readiness reset for the new position.'),node('pending','Waiting','0 s buffered at 14:20',null,'The old buffer does not cover the requested position.')],edges:['Local','Starting','—']},
+    ahead: {label:'Conversion paused ahead',title:'Playing from prepared video',sub:'Conversion is resting because enough video is ready ahead.',focus:2,mode:'Video conversion',time:'Playing',nodes:[node('ready','Local','No torrent transfer needed',null,'The selected file is fully downloaded.'),node('ready','100% local','100% of this file on the server',100,'Source bytes are available locally.'),node('ready','Ahead · idle','240 s ready ahead · conversion paused',null,'Conversion resumes automatically when playback catches up.'),node('ready','Playing','28 s buffered · playback at 1×',null,'Playback continues normally while the server rests.')],edges:['Local','Idle','—']},
+    stale: {label:'Status is out of date',title:'Playback is waiting',sub:'Server status is out of date. The cause is not yet known.',focus:1,mode:'Video conversion',time:'Last update 9 s ago',nodes:[node('unknown','Unknown','Download speed unavailable',null,'Current readiness is unknown; previous values are out of date.'),node('unknown','Unknown','File availability unavailable',null,'Checking again automatically.'),node('unknown','Unknown','Conversion status unavailable',null,'Do not retain a green check from stale telemetry.'),node('waiting','Waiting','0 s buffered · browser measurement',null,'The browser is waiting, but the upstream cause is unknown.')],edges:['—','—','—']},
+    failure: {label:'Conversion failed',title:'Video conversion stopped',sub:'The server could not finish converting this file.',focus:2,mode:'Video conversion',time:'Playback stopped',nodes:[node('ready','Local','No torrent transfer needed',null,'The selected file is fully downloaded.'),node('ready','100% local','100% of this file on the server',100,'Source bytes remain available locally.'),node('error','Failed','Conversion process exited',null,'Retry conversion or open the original in another player.'),node('pending','Stopped','0 s buffered',null,'Waiting for a playable source.')],edges:['Local','Stopped','—'],action:'Try again'},
+    autoplay: {label:'Browser requires Play',title:'Press play to start',sub:'Your browser requires a gesture before it can play video.',focus:3,mode:'Direct playback',time:'Ready',nodes:[node('ready','Local','No torrent transfer needed',null,'The selected file is fully downloaded.'),node('ready','100% local','100% of this file on the server',100,'Source bytes are available locally.'),node('bypass','Bypassed','No conversion required',null,'The original format is supported.'),node('waiting','Press play','Playback blocked by browser policy',null,'Press Play to let the browser start playback.')],edges:['Local','Direct','—'],action:'Play'}
+  };
+  const saved = window.openai?.widgetState?.modelContent;
+  const state = {scenario:scenarios[saved?.scenario] ? saved.scenario : 'converting', sample:0};
+  const select = root.querySelector('#mp-scenario');
+  Object.entries(scenarios).forEach(([key,s]) => { const o=document.createElement('option'); o.value=key;o.textContent=s.label;select.append(o); });
+  const views = [...root.querySelectorAll('.mp-stage')].map(stage => {
+    stage.innerHTML = `<div class="mp-top"><strong>Playback flow</strong><span class="mp-mode"></span></div><div class="mp-content"><div class="mp-head"><h2></h2><p></p></div><div class="mp-flow" aria-label="Playback pipeline"></div><div class="mp-inspector"><div class="mp-inspector-top"><strong></strong><button type="button" class="mp-follow cursor-interaction">Following current wait</button></div><div class="mp-value"></div><div class="mp-meter"><div class="mp-fill"></div></div><p class="mp-note"></p></div><div class="mp-actions"><button type="button" class="mp-recovery cursor-interaction" hidden></button><button type="button" class="mp-debug cursor-interaction" aria-expanded="false">Diagnostics</button></div><div class="mp-details" hidden><dl></dl></div></div><div class="mp-transport"><span class="mp-clock"></span><span class="mp-track"><i></i></span><span>1×</span></div>`;
+    const flow=stage.querySelector('.mp-flow');
+    names.forEach((name,i) => {const step=document.createElement('div');step.className='mp-step';step.innerHTML=`<button type="button" class="mp-node cursor-interaction" aria-label="Inspect ${name}" aria-pressed="false"></button><span class="mp-label">${name}</span><span class="mp-state"></span>${i<3?'<span class="mp-edge"></span>':''}`;flow.append(step);});
+    const v={stage,selected:null,details:false};
+    stage.querySelectorAll('.mp-node').forEach((btn,i)=>btn.addEventListener('click',()=>{v.selected=i;render();}));
+    stage.querySelector('.mp-follow').addEventListener('click',()=>{v.selected=null;render();});
+    stage.querySelector('.mp-debug').addEventListener('click',()=>{v.details=!v.details;render();});
+    stage.querySelector('.mp-recovery').addEventListener('click',()=>{if(state.scenario==='autoplay'||state.scenario==='failure'){state.scenario=state.scenario==='autoplay'?'direct':'seek';v.selected=null;render();save();}else{stage.querySelector('.mp-note').textContent=scenarios[state.scenario].action==='Open in player'?'External player options: VLC · IINA · Copy stream link (preview)':'Return to release selection (preview)';}});
+    return v;
+  });
+  function render(){
+    const s=scenarios[state.scenario];select.value=state.scenario;
+    views.forEach(v=>{
+      const stage=v.stage;const selected=v.selected ?? s.focus;const n=s.nodes[selected];
+      stage.querySelector('h2').textContent=s.title;
+      stage.querySelector('.mp-head p').textContent=s.sub;
+      stage.querySelector('.mp-mode').textContent=s.mode;
+      stage.querySelector('.mp-clock').textContent=s.time+(state.sample?' · sample '+(state.sample+1):'');
+      stage.querySelectorAll('.mp-step').forEach((step,i)=>{
+        const item=s.nodes[i];const btn=step.querySelector('button');btn.dataset.state=item.state;btn.setAttribute('aria-pressed',String(selected===i));btn.setAttribute('aria-label',`${names[i]}: ${item.label}. Inspect step`);btn.innerHTML=`<i data-lucide="${icons[item.state]}" aria-hidden="true"></i>`;
+        step.querySelector('.mp-state').textContent=state.sample&&item.progress===64?(64+state.sample)+'% local':item.label;
+        if(i<3){let edge=s.edges[i];if(state.sample&&edge==='2.4 MB/s')edge=(2.4+state.sample*.13).toFixed(1)+' MB/s';if(state.sample&&edge==='0.6×')edge=(.6+state.sample*.02).toFixed(2)+'×';step.querySelector('.mp-edge').textContent=edge;}
+      });
+      stage.querySelector('.mp-inspector-top strong').textContent=names[selected]+' · '+n.label;
+      stage.querySelector('.mp-follow').textContent=v.selected===null?'Following current wait':'Follow current wait';
+      let metric=n.metric;
+      if(state.sample && metric.includes('2.4 MB/s'))metric=metric.replace('2.4 MB/s',(2.4+state.sample*.13).toFixed(1)+' MB/s');
+      if(state.sample && metric.includes('0.6×'))metric=metric.replace('0.6×',(0.6+state.sample*.02).toFixed(2)+'×');
+      if(state.sample && n.progress===64)metric=metric.replace('64%',(64+state.sample)+'%');
+      stage.querySelector('.mp-value').textContent=metric;
+      const meter=stage.querySelector('.mp-meter');const working=['working','waiting'].includes(n.state);
+      meter.style.visibility=n.progress!==null||working?'visible':'hidden';
+      meter.classList.toggle('is-unknown',n.progress===null);
+      if(n.progress!==null){meter.setAttribute('role','progressbar');meter.setAttribute('aria-label',names[selected]+' measured progress');meter.setAttribute('aria-valuenow',String(n.progress===64?64+state.sample:n.progress));meter.setAttribute('aria-valuemin','0');meter.setAttribute('aria-valuemax','100');}
+      else{meter.removeAttribute('role');meter.removeAttribute('aria-valuenow');meter.setAttribute('aria-label',working?'Working; completion unknown':'');}
+      stage.querySelector('.mp-fill').style.width=(n.progress===64?64+state.sample:n.progress||0)+'%';
+      stage.querySelector('.mp-note').textContent=n.note;
+      const action=stage.querySelector('.mp-recovery');action.hidden=!s.action;action.textContent=s.action||'';
+      const details=stage.querySelector('.mp-details');details.hidden=!v.details;stage.querySelector('.mp-debug').setAttribute('aria-expanded',String(v.details));
+      const facts=[['Playback mode',s.mode],['Playback speed','1×'],['Server → browser','Not measured'],['Status freshness',state.scenario==='stale'?'Last update 9 s ago':'Current'],['Source rate scope','Entire torrent']];
+      const dl=details.querySelector('dl');dl.replaceChildren();facts.forEach(([label,value])=>{const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');dd.textContent=value;dl.append(dt,dd);});
+    });
+    if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}});
+  }
+  function save(){window.openai?.setWidgetState?.({modelContent:{scenario:state.scenario},privateContent:null}).catch(()=>{});}
+  select.addEventListener('change',()=>{state.scenario=select.value;state.sample=0;views.forEach(v=>v.selected=null);render();save();});
+  root.querySelector('#mp-sample').addEventListener('click',()=>{state.sample=(state.sample+1)%6;render();});
+  window.addEventListener('openai:set_globals',event=>{const next=event.detail?.globals?.widgetState?.modelContent?.scenario;if(scenarios[next]){state.scenario=next;state.sample=0;views.forEach(v=>v.selected=null);render();}});
+  render();
+  if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:()=>{state.sample=0;views.forEach(v=>v.selected=null);render();save();}});tweak.addSelect(state,'scenario',{label:'Playback state',options:Object.entries(scenarios).map(([value,s])=>({label:s.label,value}))});}
+})();
+</script>

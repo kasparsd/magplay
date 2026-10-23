@@ -3,6 +3,10 @@ export type PlayerCommand = 'playPause' | 'back' | 'forward' | 'volumeUp' | 'vol
 
 const KEYS: Record<string, PlayerCommand> = {
   ' ': 'playPause',
+  Space: 'playPause',
+  Spacebar: 'playPause',
+  space: 'playPause',
+  spacebar: 'playPause',
   k: 'playPause',
   ArrowLeft: 'back',
   j: 'back',
@@ -18,8 +22,10 @@ const KEYS: Record<string, PlayerCommand> = {
   '>': 'faster',
 }
 
-/** The command for a KeyboardEvent.key; letters match in either case. */
+/** The command for a KeyboardEvent.key; letters and key names match in either case. */
 export function keyCommand (key: string): PlayerCommand | undefined {
-  const name = key.length === 1 ? key.toLowerCase() : key
-  return Object.hasOwn(KEYS, name) ? KEYS[name] : undefined
+  if (Object.hasOwn(KEYS, key)) return KEYS[key]
+  const lower = key.toLowerCase()
+  if (Object.hasOwn(KEYS, lower)) return KEYS[lower]
+  return undefined
 }

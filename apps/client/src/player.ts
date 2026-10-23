@@ -1,12 +1,13 @@
 import Hls from 'hls.js'
 // The player page, /play/<infohash>/<file index>. One chrome over the video for every playback mode:
-// direct files play from /raw, remux and transcode through an HLS playlist that covers the whole file, so
-// video.currentTime is always the position in the file and seeking is a normal seek; the server converts
-// whatever part is asked for.
+// direct files play from /raw, a browser remux repackages /raw in the page, and remux and transcode go through
+// an HLS playlist that covers the whole file. In every mode video.currentTime is the position in the file and
+// seeking is a normal seek; whatever converts (the page or the server) starts from where it is asked to.
 import type { PlaybackDecision, ProbeResult, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@magplay/api-contract'
 import { api } from './lib/api.ts'
 import type { ApiError } from './lib/api.ts'
-import { measureCaps } from './lib/capabilities.ts'
+import type { BrowserRemux } from './lib/browser-remux.ts'
+import { browserCanRemux, measureCaps } from './lib/capabilities.ts'
 import { icon } from './lib/icons.ts'
 import { pickByLanguage, releaseName } from './lib/naming.ts'
 import { performanceView, record } from './lib/performance.ts'
@@ -25,7 +26,7 @@ import type { Child } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 
 import { serialLatest, delay as sleep } from './lib/requests.ts'
-import { explainPlayback } from './lib/playback-status.ts'
+import { playbackPresentation } from './lib/playback-flow.ts'
 import type { PlaybackAction, PlaybackPhase, PlaybackProblem } from './lib/playback-status.ts'
 import { playbackStatusView } from './lib/playback-status-view.ts'
 import './lib/topbar.ts'
@@ -50,6 +51,7 @@ let lastProgressSave = 0
 let info: ProbeResult | null = null
 let cur: Current | null = null
 let hls: Hls | null = null
+let remux: BrowserRemux | null = null // the in-page conversion in browser-remux mode
 let audio = 0
 let generation = 0 // bumped on every (re)start so stale async work stops
 let pendingPosition = 0 // keep the intended position while a replacement request is in flight
@@ -59,6 +61,7 @@ let searchTitle = ''
 let file: TorrentFileInfo | undefined // this file's entry from the torrent's file list
 let next: TorrentFileInfo | null = null // the next video in the torrent, if any
 let lastStatus: TorrentStatus | null = null // the latest /status poll, for the details panel and the seek bar
+let sourceSnapshot: { status: Extract<TorrentStatus, { loaded: true }>, at: number } | null = null
 const history: PerfSample[] = [] // the last 3 minutes of status polls, for the Performance lanes
 let stalled = false // waiting for data right now
 let stallSeen = false // waited at some point since the last sample
@@ -67,6 +70,7 @@ let playbackProblem: PlaybackProblem | null = null
 let waitingAt = Date.now()
 let statusAt = 0
 let slowSamples = 0
+let flowPinned = false
 const subTrack = video.addTextTrack('subtitles', 'Subtitles')
 const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playback-announcement'), name => {
   if (name === 'retry') return button('Try again', () => { if (info) start(position()).catch(console.error); else retryInfo() }, true)
@@ -77,7 +81,17 @@ const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playbac
     ...playerApps(ih, idx, file.name).map(([text, href]) => el('a', { textContent: text, href })),
     copyButton('Copy stream link', streamUrl(ih, idx, file.name)),
   ], { className: 'button playback-external' })
-})
+}, toggleFlowPin)
+
+function toggleFlowPin (): void {
+  flowPinned = !flowPinned
+  renderPlaybackStatus()
+  renderMore()
+  wake()
+}
+
+/** Direct and browser-remux play the whole file's timeline locally: no server session, seeking inside the browser. */
+const isLocal = (decision: { mode: string } | null | undefined): boolean => decision?.mode === 'direct' || decision?.mode === 'browser-remux'
 
 /** The file's ranges on the server, from the latest poll. */
 const fileRanges = (): Array<[number, number]> | null => lastStatus?.loaded ? lastStatus.file?.ranges ?? null : null
@@ -98,7 +112,7 @@ function failPlayback (title: string, description: string, actions: PlaybackActi
 function renderPlaybackStatus (): void {
   if (pageLife.signal.aborted) return
   const now = Date.now()
-  const model = explainPlayback({
+  const model = playbackPresentation({
     phase: playbackPhase,
     decision: cur,
     status: lastStatus,
@@ -109,12 +123,14 @@ function renderPlaybackStatus (): void {
     rate: video.playbackRate,
     slowSamples,
     problem: playbackProblem,
-  })
+    ...(sourceSnapshot ? { source: { status: sourceSnapshot.status, age: now - sourceSnapshot.at } } : {}),
+    ...(remux ? { remux: remux.stats() } : {}),
+  }, flowPinned)
   if (model && !file) model.actions = model.actions.filter(name => name !== 'external' && name !== 'release')
   showPlaybackStatus(model, now - waitingAt, starting ? `${starting} · Waiting ${Math.floor((now - waitingAt) / 1000)} s` : '')
   renderPlayButton()
-  stage.classList.toggle('has-playback-wait', !!model && model.kind !== 'warning' && model.key !== 'brief')
-  if (model && model.kind !== 'warning') stage.classList.remove('idle')
+  stage.classList.toggle('has-playback-wait', !!model && model.kind !== 'warning' && model.kind !== 'debug' && model.key !== 'brief')
+  if (model && model.kind !== 'warning' && model.kind !== 'debug') stage.classList.remove('idle')
 }
 
 async function tickPlaybackStatus (signal = pageLife.signal): Promise<void> {
@@ -222,6 +238,7 @@ function renderFacts (): void {
 }
 
 const caps = measureCaps(video, window)
+const browserRemux = browserCanRemux(window)
 
 /** Before the media has loaded, the position playback was asked to start at. */
 const position = (): number => cur && video.readyState > 0 ? video.currentTime : pendingPosition
@@ -230,11 +247,11 @@ const position = (): number => cur && video.readyState > 0 ? video.currentTime :
  * files. The browser's seekable range lags the server and isn't kept for a live playlist that has since ended.
  */
 function growingEnd (): number | null {
-  if (cur?.mode === 'direct' || !cur?.growing) return null
+  if ((cur?.mode !== 'remux' && cur?.mode !== 'transcode') || !cur.growing) return null
   return Math.max(sessionStatus()?.ready.at(-1)?.[1] ?? 0, spans(video.seekable).at(-1)?.[1] ?? 0)
 }
 /** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
-const duration = (): number => cur?.duration || info?.duration || (cur?.mode === 'direct' && Number.isFinite(video.duration) ? video.duration : 0)
+const duration = (): number => cur?.duration || info?.duration || (isLocal(cur) && Number.isFinite(video.duration) ? video.duration : 0)
 /** Seconds the browser has buffered past the playhead. */
 function bufferedAhead (): number {
   const now = video.currentTime
@@ -247,7 +264,7 @@ function persistProgress (force = false, ended = false): void {
   const now = Date.now()
   if (!force && now - lastProgressSave < 5000) return
   // A growing HLS playlist's local duration is not the whole file duration.
-  const total = cur.duration ?? (cur.mode === 'direct' ? video.duration : null)
+  const total = cur.duration ?? (isLocal(cur) ? video.duration : null)
   const entry = progressEntry(position(), total, { ended, at: now })
   if (entry) {
     remember(progressKey(ih, idx), entry)
@@ -261,6 +278,8 @@ function teardown (): void {
   cancelNext()
   hls?.destroy()
   hls = null
+  remux?.dispose()
+  remux = null
   if (cur?.session) navigator.sendBeacon(`/api/play/${cur.session}`)
   video.removeAttribute('src')
   video.load()
@@ -293,7 +312,7 @@ async function start (at = 0, message = ''): Promise<void> {
   try {
     const result = await requestPlayback(async current => {
       if (gen !== generation) return null
-      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, tab: requestTab }, signal: pageSignal })
+      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, browserRemux, tab: requestTab }, signal: pageSignal })
       if (!current() || gen !== generation) {
         if (result.session) navigator.sendBeacon(`/api/play/${result.session}`)
         return null
@@ -315,8 +334,21 @@ async function start (at = 0, message = ''): Promise<void> {
   if (gen !== generation) return
   updateTimeline()
 
+  let startPlayback = true
   if (decision.mode === 'direct') {
     video.src = decision.url
+    if (at) video.currentTime = at
+  } else if (decision.mode === 'browser-remux') {
+    setPlaybackPhase('playlist')
+    try {
+      const { startBrowserRemux } = await import('./lib/browser-remux.ts')
+      const started = await startBrowserRemux(video, { url: decision.url, audio: decision.audio, duration: decision.duration, start: at, onError: (title, detail) => { if (current()) failPlayback(title, detail) } })
+      if (!current()) { started.dispose(); return }
+      remux = started
+    } catch (err) {
+      if (current()) failPlayback('This browser could not repackage the file', (err as Failure).message, ['external', 'release'])
+      return
+    }
     if (at) video.currentTime = at
   } else {
     // The playlist covers the whole file, except a growing one, which starts at the beginning
@@ -329,28 +361,36 @@ async function start (at = 0, message = ''): Promise<void> {
       video.src = decision.url
       if (from) video.addEventListener('loadedmetadata', () => { if (current()) video.currentTime = from }, { once: true, signal })
     } else {
+      // hls.js only attaches a media source after it has parsed the manifest, so
+      // calling play() synchronously here can be lost on slower or incomplete streams.
+      startPlayback = false
       // A segment the server hasn't converted yet answers once it has, which can take a while on a slow torrent
       const patient = { maxTimeToFirstByteMs: 120_000, maxLoadTimeMs: 300_000, timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 }, errorRetry: { maxNumRetry: 3, retryDelayMs: 1000, maxRetryDelayMs: 8000 } }
       const player = hls = new Hls({ startPosition: from, maxBufferLength: 60, fragLoadPolicy: { default: patient } })
       player.on(Hls.Events.ERROR, (_, data) => { if (current() && data.fatal) failPlayback('Playback stopped', `Playback error: ${data.details}`) })
+      player.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!current()) return
+        video.play().catch(handlePlayError)
+      })
       player.loadSource(decision.url)
       player.attachMedia(video)
     }
   }
   renderFacts()
-  // Browsers may block autoplay with sound until the page has been clicked; start muted then
-  video.play().catch((err: Failure) => {
+  const handlePlayError = (err: unknown): void => {
     if (!current()) return
-    if (err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err.message)
+    if (!(err instanceof Error) || err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
     video.muted = true
     autoMuted = true
     video.play().then(() => { if (current()) notify('Muted: autoplay with sound was blocked. Click the video or press M to unmute.') },
-      (err: Failure) => {
+      (err: unknown) => {
         if (!current()) return
-        if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
-        else failPlayback('Playback could not start', err.message)
+        if (err instanceof Error && err.name === 'NotAllowedError') setPlaybackPhase('blocked')
+        else failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
       })
-  })
+  }
+  // Browsers may block autoplay with sound until the page has been clicked; start muted then
+  if (startPlayback) video.play().catch(handlePlayError)
   loadSubtitles(gen).catch(console.error)
 }
 
@@ -358,6 +398,7 @@ async function start (at = 0, message = ''): Promise<void> {
 function seekTo (t: number): void {
   if (!cur) return
   deferredSeek = 0
+  // A browser remux restarts its own conversion when the target isn't buffered; the server does for HLS
   video.currentTime = seekTarget(Math.max(0, Math.min(t, (duration() || Infinity) - 1)), growingEnd())
 }
 
@@ -383,6 +424,8 @@ async function loadSubtitles (gen = generation): Promise<void> {
   } else if (session.mode === 'direct') {
     url = `/subs/${ih}/${idx}/${n}.vtt`
     notify('Extracting subtitles (needs the whole file downloaded)…', 'busy')
+  } else if (session.mode === 'browser-remux') {
+    return notify('Embedded subtitles need ffmpeg on the server; add an .srt file to the torrent folder.', 'warn')
   } else {
     url = session.subtitles.find(s => s.index === Number(n))?.url
   }
@@ -517,6 +560,7 @@ function renderMore (): void {
       : []),
     pip && el('button', { type: 'button', textContent: document.pictureInPictureElement ? 'Exit picture in picture' : 'Picture in picture', onclick: togglePip }),
     el('button', { type: 'button', textContent: 'Keyboard shortcuts', onclick: () => showKeys(true) }),
+    menuChoice('Playback flow', flowPinned, toggleFlowPin),
     narrow(menuSeparator()),
     narrow(menuHeading('Speed')),
     ...speedChoices().map(narrow),
@@ -528,7 +572,7 @@ function renderMore (): void {
 
 function togglePip (): void {
   const action = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture()
-  action.catch((err: Failure) => notify(`Picture in picture: ${err.message}`, 'warn'))
+  action.catch((err: unknown) => notify(`Picture in picture: ${err instanceof Error ? err.message : String(err)}`, 'warn'))
 }
 
 function retryInfo (): void {
@@ -580,6 +624,7 @@ async function pollStatus (signal = pageLife.signal): Promise<void> {
     if (gen === generation && cur?.session === session && st) {
       lastStatus = st
       statusAt = Date.now()
+      if (st.loaded) sourceSnapshot = { status: { ...st, session: null, preparation: null }, at: statusAt }
       const s = st.session
       slowSamples = st.loaded && st.file?.progress === 1 && s?.running && !s.paused && s.speed != null && s.speed < video.playbackRate ? slowSamples + 1 : 0
       if (s && cur) cur.complete = !s.running
@@ -709,10 +754,10 @@ const togglePlay = (): void => {
   if (nothingToPlay()) return
   if (video.paused) {
     if (playbackPhase === 'paused' || playbackPhase === 'blocked') setPlaybackPhase('buffering')
-    video.play().catch((err: Failure) => {
+    video.play().catch((err: unknown) => {
       if (pageLife.signal.aborted) return
-      if (err.name === 'NotAllowedError') setPlaybackPhase('blocked')
-      else failPlayback('Playback could not start', err.message)
+      if (err instanceof Error && err.name === 'NotAllowedError') setPlaybackPhase('blocked')
+      else failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
     })
   } else video.pause()
 }
@@ -885,7 +930,7 @@ video.addEventListener('playing', () => {
   // For "Continue" on the torrent page and the home page
   if (file) remember(`last:${ih}`, { idx, label: fileLabel(file), at: Date.now() })
 })
-video.addEventListener('error', () => { if (cur?.mode === 'direct') failPlayback('Playback stopped', video.error?.message || `Media error ${video.error?.code}`) })
+video.addEventListener('error', () => { if (isLocal(cur)) failPlayback('Playback stopped', video.error?.message || `Media error ${video.error?.code}`) })
 video.addEventListener('ended', () => { persistProgress(true, true); setPlaybackPhase('idle'); countdownToNext() })
 video.addEventListener('volumechange', () => {
   renderVolume()
@@ -906,7 +951,7 @@ disclosure($('#perf-toggle'), $('#performance'), renderPerformance)
 
 /** Redrawn on each poll, only while the disclosure is open. */
 function renderPerformance (): void {
-  fill($('#performance'), ...performanceView(history, { direct: cur?.mode === 'direct' }))
+  fill($('#performance'), ...performanceView(history, { direct: isLocal(cur) }))
 }
 
 // Theater layout: the stage takes the largest box that fits the band's width and the viewport height

@@ -1,6 +1,6 @@
 // BitMagnet's GraphQL API, for browsing: it classifies torrents against TMDB, so it can filter by type, genre, year and
 // resolution and return titles with metadata. Search still goes through Torznab (torznab.ts).
-import { badges } from '@magplay/release-info'
+import { badges, playbackRank } from '@magplay/release-info'
 import type { TitleBadges } from '@magplay/release-info'
 import { SearchTimeout, SourceError } from './errors.ts'
 import { asArray, asNumber, asRecord, asString, readJson, request } from './release.ts'
@@ -20,7 +20,7 @@ const SEARCH = `query($input: TorrentContentSearchQueryInput!) { torrentContent 
 const FACETS = `query($input: TorrentContentSearchQueryInput!) { torrentContent { search(input: $input) {
   aggregations { genre { value label count isEstimate } releaseYear { value count isEstimate } videoResolution { value count isEstimate } } } } }`
 
-export const TYPES = ['movie', 'tv_show'] as const
+export const TYPES = ['movie', 'tv_show', 'music', 'audiobook', 'ebook', 'comic', 'game', 'software', 'xxx', 'unknown'] as const
 export type ContentType = typeof TYPES[number]
 export const isContentType = (v: unknown): v is ContentType => TYPES.includes(v as ContentType)
 export const TITLE_SEARCH_LIMIT = 100
@@ -210,13 +210,13 @@ export function toTitle (content: BitmagnetContent): ExploreTitleInfo {
 }
 
 // Adult content goes by BitMagnet's own classification
-const shown = (item: BitmagnetItem): boolean => item.contentType !== 'xxx' && !item.content?.adult
+const shown = (item: BitmagnetItem, showAdult = false): boolean => !(item.contentType === 'xxx' && !showAdult) && !(item.content?.adult === true && !showAdult)
 
 /** One entry per film or show, in the order BitMagnet returned them, skipping unmatched and adult releases. */
-export function groupTitles (items: BitmagnetItem[]): ExploreTitle[] {
+export function groupTitles (items: BitmagnetItem[], showAdult = false): ExploreTitle[] {
   const groups = new Map<string, { title: ExploreTitleInfo, releases: ExploreRelease[] }>()
   for (const item of items) {
-    if (!item.content || !shown(item)) continue
+    if (!item.content || !shown(item, showAdult)) continue
     const key = `${item.content.source}:${item.content.id}`
     let group = groups.get(key)
     if (!group) groups.set(key, group = { title: toTitle(item.content), releases: [] })
@@ -225,9 +225,9 @@ export function groupTitles (items: BitmagnetItem[]): ExploreTitle[] {
   return [...groups.values()].map(({ title, releases }) => {
     const bySeeders = [...releases].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
     const top = bySeeders[0]!
-    const best = bySeeders.find(r => r.likelyDirect) ?? top
+    const best = [...releases].sort((a, b) => playbackRank(a.playbackEffort) - playbackRank(b.playbackEffort) || (b.seeders ?? 0) - (a.seeders ?? 0))[0] ?? top
     // Only this page's releases are grouped here, so there's no release count: the title page has the full list
-    return { ...title, seeders: top.seeders, playable: releases.some(r => r.likelyDirect), best: best.infoHash }
+    return { ...title, seeders: top.seeders, playable: releases.some(r => r.playbackEffort === 'direct' || r.playbackEffort === 'remux'), best: best.infoHash }
   })
 }
 
@@ -280,7 +280,8 @@ export interface BitmagnetBrowser {
 }
 
 /** `url` is BitMagnet's address, e.g. http://bitmagnet:3333. */
-export function createBitmagnetBrowser ({ url }: { url: string }, { fetch: fetchImpl = globalThis.fetch }: { fetch?: Fetch } = {}): BitmagnetBrowser {
+export function createBitmagnetBrowser ({ url, showAdult }: { url: string, showAdult?: () => boolean }, { fetch: fetchImpl = globalThis.fetch }: { fetch?: Fetch } = {}): BitmagnetBrowser {
+  const showAdultFn = showAdult ?? (() => false)
   const endpoint = new URL('/graphql', url).href
   const post = (body: unknown, signal: AbortSignal | undefined): Promise<Response> => request(fetchImpl, endpoint, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), ...(signal && { signal }),
@@ -312,7 +313,7 @@ export function createBitmagnetBrowser ({ url }: { url: string }, { fetch: fetch
           hasNextPage: true,
         }
       }, signal)
-      return { titles: groupTitles(r.items), hasMore: r.hasNextPage }
+      return { titles: groupTitles(r.items, showAdultFn()), hasMore: r.hasNextPage }
     },
 
     async facets ({ type = 'movie', genre, year, resolution } = {}, { signal } = {}) {
@@ -330,7 +331,7 @@ export function createBitmagnetBrowser ({ url }: { url: string }, { fetch: fetch
 
     async latest ({ type = 'movie', limit = 20 } = {}, { signal } = {}) {
       const r = await search({ input: { facets: { contentType: { filter: [type] } }, orderBy: [{ field: 'published_at', descending: true }], limit } }, signal)
-      return r.items.filter(shown).map(item => ({ ...toRelease(item), title: item.content ? toTitle(item.content) : null }))
+      return r.items.filter(item => shown(item, showAdultFn())).map(item => ({ ...toRelease(item), title: item.content ? toTitle(item.content) : null }))
     },
 
     async title ({ type, source, id, title, year }, { signal } = {}) {
@@ -343,7 +344,7 @@ export function createBitmagnetBrowser ({ url }: { url: string }, { fetch: fetch
           hasNextPage: true,
         }
       }, signal)
-      const matches = r.items.filter(i => shown(i) && i.content?.source === source && i.content.id === String(id))
+      const matches = r.items.filter(i => shown(i, showAdultFn()) && i.content?.source === source && i.content.id === id)
       const first = matches[0]?.content
       if (!first) return null
       return { ...toTitle(first), releases: matches.map(toRelease), truncated: r.hasNextPage }

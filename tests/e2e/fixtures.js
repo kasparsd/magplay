@@ -22,7 +22,7 @@ async function freePort () {
   return port
 }
 
-async function startApp () {
+async function startApp (serverEnv = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'magplay-browser-'))
   let proc
   let indexer
@@ -39,7 +39,7 @@ async function startApp () {
     await fs.rm(dir, { recursive: true, force: true })
   }
   try {
-    await exec('ffprobe', ['-version'])
+    await exec('ffmpeg', ['-version'])
     const { ih, cache, files, length } = await prepareCachedMedia(dir)
     indexer = http.createServer((req, res) => {
       if (new URL(req.url, 'http://x').searchParams.get('t') === 'caps') { // the status check
@@ -67,7 +67,8 @@ async function startApp () {
         ALLOW_VIDEO_TRANSCODE: 'false',
         DHT_ENABLED: 'false',
         LSD_ENABLED: 'false',
-        METADATA_TIMEOUT_S: '5'
+        METADATA_TIMEOUT_S: '5',
+        ...serverEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -97,8 +98,10 @@ async function startApp () {
 }
 
 export const test = base.extend({
-  app: [async ({}, use) => { // eslint-disable-line no-empty-pattern -- Playwright requires a destructured first argument
-    const app = await startApp()
+  // Extra server environment for a test file: `test.use({ serverEnv: { FFMPEG_PATH: '/nonexistent' } })`
+  serverEnv: [{}, { scope: 'worker', option: true }],
+  app: [async ({ serverEnv }, use) => {
+    const app = await startApp(serverEnv)
     try { await use(app) } finally { await app.close() }
   }, { scope: 'worker' }],
   page: async ({ page, app }, use, testInfo) => {

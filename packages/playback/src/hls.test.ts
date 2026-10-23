@@ -154,6 +154,17 @@ test('a segment already published is served without ffmpeg, and seeking back to 
   await assert.rejects(hls.segment(s.id, 10), HlsNotFoundError)
 })
 
+test('a constant start-time skew from audio priming is learned from the first fragment and taken off every one', async t => {
+  const { hls, start } = await setup(t)
+  const { s, proc } = start()
+  // 40 ms early: without the correction, each segment's opening keyframe would land in the segment before
+  proc.send(...[0, 2, 4, 6, 8, 10, 12].map(t => t - 0.04))
+  await tick()
+  assert.equal((await hls.segment(s.id, 0)).length, 3)
+  assert.equal((await hls.segment(s.id, 1)).length, 3)
+  assert.deepEqual(hls.stats(s).ready, [[0, 12]])
+})
+
 test('a keyframe the index got wrong is covered by the fragment that spans it', async t => {
   const { hls, start } = await setup(t)
   const { s, proc } = start()
@@ -247,6 +258,20 @@ test('a low disk reserve rejects admission without killing another player', asyn
   assert.throws(() => start({ replaces: first.s.id }), PlaybackBusyError)
   assert.deepEqual(first.proc.signals, [])
   assert.equal(hls.get(first.s.id), first.s)
+})
+
+test('an unavailable configured encoder falls back to libx264 and warns once', async t => {
+  const { createLogging } = await import('@magplay/observability')
+  const logging = createLogging({ level: 'debug', sink: { write () {} } })
+  const { hls, live, start, procs } = await setup(t, { logger: logging.logger })
+  live.transcodeEncoder = 'h264_vaapi'
+  live.detectedEncoders = ['libx264']
+  const first = start({ mode: 'transcode' }).s
+  const second = start({ mode: 'transcode' }).s
+  assert.equal(hls.stats(first).encoder, 'libx264')
+  assert.equal(hls.stats(second).encoder, 'libx264')
+  assert.equal(procs.at(-1)!.args[procs.at(-1)!.args.indexOf('-c:v') + 1], 'libx264')
+  assert.equal(logging.tail().filter(record => record.event === 'hls.encoder.fallback').length, 1)
 })
 
 test('the disk budget evicts segments far from the player first, then stops the producer with a useful failure', async t => {

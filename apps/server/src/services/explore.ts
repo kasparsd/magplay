@@ -16,6 +16,8 @@ export interface ExploreOptions {
   /** BitMagnet's origin, read when the service is (re)built; null turns Explore off. */
   url: () => string | null
   timeoutMs: () => number
+  /** Whether adult content may be browsed. */
+  showAdult?: () => boolean
   /** Replaceable for tests. */
   createBrowser?: (url: string) => BitmagnetBrowser
 }
@@ -39,7 +41,8 @@ export interface Explore {
 
 const unavailable = (): HttpError => new HttpError(404, 'Explore needs BitMagnet. Set its address in Settings → Sources.')
 
-export function createExplore ({ url, timeoutMs, logger = noopLogger, metrics = noopMetrics, createBrowser = u => createBitmagnetBrowser({ url: u }) }: ExploreOptions): Explore {
+export function createExplore ({ url, timeoutMs, logger = noopLogger, metrics = noopMetrics, showAdult, createBrowser = u => createBitmagnetBrowser({ url: u, showAdult: showAdult ?? (() => false) }) }: ExploreOptions): Explore {
+  const showAdultFn = showAdult ?? (() => false)
   let browser: BitmagnetBrowser | null = null
   // Explore answers are cached briefly: browsing goes back and forth over the same filters
   const cache = new Map<string, { at: number, value: Promise<unknown> }>()
@@ -86,7 +89,8 @@ export function createExplore ({ url, timeoutMs, logger = noopLogger, metrics = 
     params (query) {
       ready()
       const type = query.get('type') || 'movie'
-      if (!isContentType(type)) throw new HttpError(400, 'type must be movie or tv_show')
+      if (!isContentType(type)) throw new HttpError(400, 'type must be a known content type')
+      if (type === 'xxx' && !showAdultFn()) throw new HttpError(403, 'Adult content is disabled in Settings')
       const genre = query.get('genre') || undefined
       const year = query.get('year') ? Number(query.get('year')) : undefined
       const resolution = query.get('res') || undefined
@@ -106,7 +110,8 @@ export function createExplore ({ url, timeoutMs, logger = noopLogger, metrics = 
     },
     async title (type, source, id, query) {
       const b = ready()
-      if (!isContentType(type)) throw new HttpError(400, 'type must be movie or tv_show')
+      if (!isContentType(type)) throw new HttpError(400, 'type must be a known content type')
+      if (type === 'xxx' && !showAdultFn()) throw new HttpError(403, 'Adult content is disabled in Settings')
       const t = await cached(`title:${type}:${source}:${id}`, () =>
         b.title({ type, source, id, title: query.get('title'), year: query.get('year') }, signal()))
       if (!t) throw new HttpError(404, 'No releases of this title found any more.')

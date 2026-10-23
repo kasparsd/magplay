@@ -1,5 +1,7 @@
 # VOD HLS playback: validation (2026-10-18 to 2026-10-23)
 
+The recipe changed when `main` (Mediabunny probing, browser and Node remux, hardware encoders) was merged on 2026-10-23; see [After merging main](#after-merging-main). The sections before it record the first version.
+
 Evidence for [HLS streaming](../architecture.md#hls-streaming). Linux x86-64 cloud container, Node 22.22, ffmpeg 6.1.1 (Ubuntu).
 
 ## ffmpeg recipe
@@ -35,7 +37,37 @@ The app on the e2e fixture media plus a 20-minute 160×90 MKV (B-frames, AC-3, 1
 - Fast suite: 255 tests, including fragment splitting across arbitrary chunk boundaries, Matroska and MP4 indexes from synthetic files, segment plans, and sessions driven by a fake ffmpeg that streams real init and fragment boxes (restart and warm-up, waiting, published segments, coverage when the index is wrong, end of file, failures, pausing on player position and requested segments, eviction before stopping, growing playlists, merged subtitles).
 - Chromium suite: the container's Chromium (141, `/opt/pw-browsers`) has no H.264 or AAC decoder (`MediaSource.isTypeSupported` false), so on unmodified `main` 37 of 54 tests fail there, all those that decode video. Browser playback was verified by the CI playback job, which installs Playwright's own Chromium: [run 39970101719](https://github.com/kasparsd/magplay/actions/runs/39970101719) on 2026-10-23 passed all 55 tests, including a seek 8 minutes into a 10-minute MKV after conversion had paused (no new play request, ffmpeg restarted, earlier converted range kept), the seek tooltip's "Converts from here", an MPEG-TS from a growing playlist, audio switching, subtitles on the file timeline and resume. Its first run failed two tests: a test that read the position before the new source loaded, and seeks in a growing playlist being clamped by `video.seekable`, which the player now combines with the server's converted ranges.
 
+## After merging main
+
+`main`'s A/V sync test (`tests/e2e/hls-sync.test.ts`, a flash and a tone measured with edit lists ignored) found that the first recipe showed video 83 ms after audio when the source has three B-frames: `negative_cts_offsets` made the muxer shift the video track by the B-frame delay. The `tfdt` comparisons above were all decode times, so they missed it.
+
+| Flags (with `frag_discont`, `-use_editlist 0`) | Keyframe presentation time (source 10.000 s, +10.005 expected) | tfdt |
+| --- | --- | --- |
+| `+negative_cts_offsets` | 20.088 | absolute |
+| none | 0.083 | from 0 |
+| `+negative_cts_offsets`, `-avoid_negative_ts disabled` | 20.088 | absolute |
+| `-avoid_negative_ts disabled` | 20.005 | absolute (decode time 19.922) |
+
+The last is the recipe now. `tfdt` is then a decode time, so the session reads a fragment's start as `tfdt` plus the first sample's composition offset. With it:
+
+- `hls-sync.test.ts` passes locally (this container needs no browser for it): audio and video within 50 ms from the start and after a resume, the flash at the file-timeline time (+10 s) in both, an open-GOP remux presenting every source frame at its own time, and a run restarted at 12 s presenting the same frames at the same times as the run from the start.
+- The init segment is still byte-identical between a run from 0 and one from 8.15 s; fragment starts are 2 s apart on the file timeline in both.
+- The probe's start time now comes from Mediabunny (the earliest first timestamp of the tracks) and is 0 where ffprobe said −0.005 or −0.021 s (ffmpeg counts the audio codec's priming). Every fragment then sits the same few milliseconds from its keyframe; the session learns that skew from the first fragment and takes it off. A unit test with a 40 ms early skew fails without that correction and passes with it.
+
+The Node producer (Mediabunny in the server, for a server without ffmpeg) feeds the same sessions. Mediabunny rebases a trimmed run to the keyframe it starts on (a trim at 14.4 s or at exactly 20 s both started at 14.25 s, the keyframe strictly before; a trim at 0 keeps the source's timestamps), so the producer shifts every `tfdt` by the difference between the first video fragment and the keyframe the plan expects.
+
+Server checks on the merged code, the 20-minute MKV, ffmpeg as the HLS client:
+
+| Producer | Paused at | Jump to 896 s answered in | Whole stream decoded |
+| --- | --- | --- | --- |
+| ffmpeg | 244 s | 0.55 s | 28,800 frames, no warnings, 3 runs |
+| Node (Mediabunny, no ffmpeg) | 244 s | 1.39 s | 28,800 frames, 3 runs; one warning at the 240 s join: the restarted run's audio begins 140 ms before the boundary (an overlap the browser replaces) |
+
+ffprobe shows Node-produced keyframes 42 ms late; that is ffmpeg's own shift for version 1 `trun` boxes with negative composition offsets on later frames. The `trun` gives the keyframe offset 0, which is what browsers use.
+
+Fast suite 314 tests; Chromium suite 80 tests, verified in CI.
+
 ## Not verified
 
-- Safari's native HLS with these segments (negative composition offsets, timestamps from 10 s); real devices are roadmap item 1.
+- Safari's native HLS with these segments (B-frame composition offsets, timestamps from 10 s, Node remux's version 1 `trun`); real devices are roadmap item 1.
 - A seek into a part of a torrent that isn't downloaded, and the keyframe index read on such a torrent, on the real server; roadmap item 2.

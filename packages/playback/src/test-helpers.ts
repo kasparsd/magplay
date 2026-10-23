@@ -19,8 +19,13 @@ export function initSegment (): Buffer {
   return Buffer.from([...box('ftyp', u32(0)), ...box('moov', full('mvhd', 0, u32(0), u32(0), u32(1000), u32(0)), trak(1, 1000, 'vide'), trak(2, 48_000, 'soun'))])
 }
 
-/** A fragment (moof + mdat) whose video track starts at `seconds` (timescale 1000) and carries `size` bytes. */
-export function fragment (seconds: number, size = 16): Buffer {
-  const traf = (id: number, time: number): number[] => box('traf', full('tfhd', 0, u32(id)), full('tfdt', 1, u64(time)))
-  return Buffer.from([...box('moof', full('mfhd', 0, u32(1)), traf(2, Math.round(seconds * 48_000)), traf(1, Math.round(seconds * 1000))), ...box('mdat', new Array<number>(size).fill(7))])
+/**
+ * A fragment (moof + mdat) whose video track's first sample is shown at `seconds` (timescale 1000) and carries `size`
+ * bytes. `delay` is the B-frame delay: the sample is decoded that much earlier and has it as its composition offset.
+ */
+export function fragment (seconds: number, size = 16, delay = 0): Buffer {
+  const traf = (id: number, time: number, offset: number): number[] => box('traf', full('tfhd', 0, u32(id)), full('tfdt', 1, u64(time)),
+    // one sample with a duration and a composition offset (flags 0x100 | 0x800)
+    box('trun', [0, 0, 0x09, 0x00], u32(1), u32(40), u32(offset)))
+  return Buffer.from([...box('moof', full('mfhd', 0, u32(1)), traf(2, Math.round(seconds * 48_000), 0), traf(1, Math.round((seconds - delay) * 1000), Math.round(delay * 1000))), ...box('mdat', new Array<number>(size).fill(7))])
 }

@@ -106,6 +106,22 @@ try {
   }
   await compose('search.png', await shoot(desktopView, search), await shoot(mobileView, search))
 
+  const settings = async page => {
+    await page.goto(`${origin}/settings`)
+    await page.waitForSelector('#settings-body .settings-section')
+    await page.waitForTimeout(500)
+  }
+  await compose('settings.png', await shoot(desktopView, settings), await shoot(mobileView, settings))
+
+  const status = async page => {
+    await page.goto(`${origin}/?q=${encodeURIComponent('free films')}`)
+    await page.getByText('Big.Buck.Bunny', { exact: false }).first().waitFor()
+    await page.locator('.status-button').click()
+    await page.waitForSelector('.status-panel')
+    await page.waitForTimeout(500)
+  }
+  await compose('status.png', await shoot(desktopView, status), await shoot(mobileView, status))
+
   const player = async page => {
     await page.goto(`${origin}/play/${parsed.infoHash}/0`)
     const video = page.locator('#video')
@@ -116,7 +132,7 @@ try {
       await new Promise(resolve => v.addEventListener('seeked', resolve, { once: true }))
       v.pause()
     })
-    await video.hover()
+    await video.hover({ force: true })
     await page.waitForTimeout(500)
   }
   await compose('player.png', await shoot(desktopView, player), await shoot(mobileView, player))

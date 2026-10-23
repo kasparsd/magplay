@@ -35,6 +35,13 @@ test('a growing playlist can only be seeked as far as it has been converted', ()
   assert.equal(seekTarget(10, 0.5), 0)
 })
 
+test('a browser remux converts from any point outside its buffer that is on the server', () => {
+  const browser = hls({ mode: 'browser-remux', ready: null })
+  assert.equal(seekOutcome(70, browser), 'buffered')
+  assert.equal(seekOutcome(200, browser), 'convert')
+  assert.equal(seekOutcome(500, browser), 'missing')
+})
+
 test('direct outcomes depend only on the buffer and the server', () => {
   const direct = hls({ mode: 'direct', ready: null, buffered: [[0, 30]] })
   assert.equal(seekOutcome(10, direct), 'buffered')

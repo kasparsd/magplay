@@ -54,9 +54,9 @@ export interface SubtitleTrack {
 export interface ProbeResult {
   /** Seconds, or unknown. */
   duration: number | null
-  /** The file's first timestamp in seconds (ffprobe's start_time); 0 when unknown. */
+  /** The file's first timestamp in seconds, over every track (it can be negative or past zero); 0 when unknown. */
   startTime: number
-  /** ffprobe format names, e.g. "matroska,webm". */
+  /** Container id: mp4, mov, matroska, webm, mpegts, or the demuxer's lower-case name. */
   container: string
   isWebm: boolean
   video?: VideoTrack
@@ -67,9 +67,9 @@ export interface ProbeResult {
 }
 
 /**
- * POST /api/play. The server chooses direct/remux/transcode from the probe and reported browser
- * capabilities. `start` (seconds on the file's timeline) is where conversion begins for HLS; seeking
- * later needs no new request.
+ * POST /api/play. The server chooses direct, browser-remux, remux or transcode from the probe, the reported
+ * browser capabilities and whether it has ffmpeg. Every mode plays on the file's own timeline. `start` (seconds
+ * in the file) is where server conversion begins for HLS; seeking later needs no new request.
  */
 export interface PlayRequest {
   /** Torrent infohash. */
@@ -83,6 +83,11 @@ export interface PlayRequest {
   /** Per-page identifier for replacing the tab's old session. */
   tab?: string
   caps?: Partial<BrowserCapabilities>
+  /**
+   * Whether this page can repackage a file itself (it has Media Source Extensions).
+   * Absent means it can. When it can't and the server has no ffmpeg, the server repackages and answers `remux`.
+   */
+  browserRemux?: boolean
 }
 
 /** Direct playback has no ffmpeg session or HLS subtitle URLs. */
@@ -92,6 +97,24 @@ export interface DirectDecision {
   duration: number | null
   /** Same-origin /raw URL. */
   url: string
+  audio?: never
+  session?: never
+  subtitles?: never
+}
+
+/**
+ * The browser reads /raw itself and repackages the file (copying video, converting audio to AAC) for Media Source
+ * Extensions. No server session; the timeline is the whole file, like direct playback. Embedded subtitles are not
+ * available in this mode; external subtitle files are.
+ */
+export interface BrowserRemuxDecision {
+  mode: 'browser-remux'
+  reason: string
+  duration: number | null
+  /** Same-origin /raw URL. */
+  url: string
+  /** The audio track to include. */
+  audio: number
   session?: never
   subtitles?: never
 }
@@ -103,6 +126,8 @@ export interface DirectDecision {
  */
 export interface HlsDecision {
   mode: 'remux' | 'transcode'
+  /** Encoder used for this session. */
+  encoder?: string
   reason: string
   /** Whole media duration. */
   duration: number | null
@@ -113,15 +138,18 @@ export interface HlsDecision {
   growing: boolean
   /** Embedded text-track indexes and session URLs; cues are on the file's timeline. */
   subtitles: Array<{ index: number, url: string }>
+  audio?: never
 }
 
 /** POST /api/play success. Client-only `complete` is not part of this response. */
-export type PlaybackDecision = DirectDecision | HlsDecision
+export type PlaybackDecision = DirectDecision | BrowserRemuxDecision | HlsDecision
 
 /** ffmpeg session snapshot included by GET /api/torrents/:ih/status. */
 export interface SessionStats {
   id: string
   mode: 'remux' | 'transcode'
+  /** Encoder used for this session. */
+  encoder?: string
   /** Conversion speed relative to real time. */
   speed: number | null
   /** Frames per second ffmpeg is producing, from its -progress output. */

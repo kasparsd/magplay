@@ -6,9 +6,17 @@ export type Child = Node | string | null | undefined | false
 
 /**
  * querySelector that assumes the element exists: pages query their own static markup.
- * Phase 5 replaces this with a checked requireElement(selector, ctor).
+ * Pages adopt the checked requireElement(selector, ctor) below as they convert.
  */
 export const $ = <E extends Element = HTMLElement>(selector: string, root: ParentNode = document): E => root.querySelector(selector) as E
+
+/** Query owned static markup and check its runtime element type before using it. */
+export function requireElement<E extends Element> (selector: string, ctor: new () => E, root: ParentNode = document): E {
+  const node = root.querySelector(selector)
+  if (!(node instanceof ctor)) throw new Error(`Expected ${selector} to be a ${ctor.name}`)
+  return node
+}
+
 export const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 const present = (c: Child): c is Node | string => c != null && c !== false
@@ -151,7 +159,7 @@ export function timeAgo (ms: number): string {
 /** One of six tile colours, picked from the text so a title always gets the same one. */
 export function tint (text: string): string {
   let h = 0
-  for (const ch of String(text)) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
+  for (const ch of text) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
   return `tint-${(h % 6) + 1}`
 }
 
@@ -169,6 +177,7 @@ export interface ReleaseRowItem {
   warning?: string | null | undefined
   badges?: string[] | undefined
   likelyDirect?: boolean | undefined
+  playbackEffort?: 'direct' | 'remux' | 'transcode' | null | undefined
   size?: number | null | undefined
   seeders?: number | null | undefined
 }
@@ -190,7 +199,9 @@ export function releaseRow (r: ReleaseRowItem, href: string, { extra = [], meta 
         r.warning && el('span', { className: 'badge note', textContent: r.warning }),
         r.episode && el('span', { className: 'badge note', textContent: r.episode }),
         ...(r.badges ?? []).map(b => el('span', { className: 'badge', textContent: b })),
-        r.likelyDirect && el('span', { className: 'badge good', textContent: 'plays in browser', title: 'H.264 with AAC or unknown audio: likely plays in any browser' }),
+        r.playbackEffort === 'direct' && el('span', { className: 'badge good', textContent: 'likely direct', title: 'The title looks like 8-bit H.264 with AAC. Native playback still depends on the container and this browser; otherwise the server remuxes.' }),
+        r.playbackEffort === 'remux' && el('span', { className: 'badge good', textContent: 'likely remux', title: 'H.264 video. A cheap pass can repackage the file or convert the audio. The video is not re-encoded.' }),
+        r.playbackEffort === 'transcode' && el('span', { className: 'badge', textContent: 'needs transcode', title: 'The title\'s video codec has to be re-encoded. That stays off unless Convert unsupported video is enabled.' }),
         ...extra),
       note && el('div', { className: 'meta', textContent: note })),
     el('span', { className: 'size' }, [...meta, formatBytes(r.size), r.seeders != null && count(r.seeders, 'seeder')].filter(Boolean).join(' · ')))

@@ -7,7 +7,7 @@ import type { Logger, LogLevel } from '@magplay/observability'
 import { noopLogger } from '@magplay/observability'
 import { SOURCE_TYPES } from '@magplay/indexers'
 import type { SourceConfig, SourceType } from '@magplay/indexers'
-import type { ListItem, ValueDef } from '@magplay/api-contract'
+import type { ListItem, NumberDef, TextDef, ToggleDef, ValueDef } from '@magplay/api-contract'
 import { createSettingsStore, resolve } from './settings-store.ts'
 import type { Env, EnvReaders, SettingsStore } from './settings-store.ts'
 
@@ -21,9 +21,9 @@ export interface Config {
   /** BitMagnet's origin for Explore, or null when there's none. */
   bitmagnetUrl: string | null
   searchTimeoutMs: number
+  showAdult: boolean
   cacheDir: string
   ffmpegPath: string
-  ffprobePath: string
   cacheMaxBytes: number
   maxHlsSessions: number
   maxTorrentLoads: number
@@ -38,8 +38,12 @@ export interface Config {
   metadataTimeoutMs: number
   checkingTimeoutMs: number
   idleTorrentMs: number
+  seedingEnabled: boolean
+  seedingRatio: number
   allowTranscode: boolean
   transcodeMaxHeight: number
+  transcodeEncoder: string
+  vaapiDevice: string
 }
 
 /** The first label of an http(s) URL's host, as a default source name; anything else throws. */
@@ -49,14 +53,14 @@ export function hostName (url: string): string {
     u = new URL(url)
   } catch {}
   if (!u || !/^https?:$/.test(u.protocol)) throw new Error('Not an http(s) URL; check source address settings')
-  return u.hostname.split('.')[0] ?? u.hostname
+  return u.hostname
 }
 
 const splitList = (s: string): string[] => s.split(',').map(x => x.trim()).filter(Boolean)
 
 /**
  * Source configs from env vars:
- * - TORZNAB_URL / TORZNAB_APIKEY / TORZNAB_NAME, and _2 … _9 for more Torznab feeds
+ * - TORZNAB_URL / TORZNAB_APIKEY, and _2 … _9 for more Torznab feeds
  * - JACKETT_URL / JACKETT_APIKEY / JACKETT_INDEXER (default `all`)
  * - PROWLARR_URL / PROWLARR_APIKEY / PROWLARR_INDEXERS (comma-separated ids, default -2 = all torrent indexers)
  * With none set, no sources are configured (search returns nothing); the server logs a warning at startup.
@@ -66,15 +70,16 @@ export function sourcesFromEnv (env: Env): SourceConfig[] {
   for (const n of ['', '_2', '_3', '_4', '_5', '_6', '_7', '_8', '_9']) {
     const url = env[`TORZNAB_URL${n}`]
     if (!url) continue
-    out.push({ type: 'torznab', name: env[`TORZNAB_NAME${n}`] || hostName(url), url, apiKey: env[`TORZNAB_APIKEY${n}`] || '' })
+    hostName(url)
+    out.push({ id: `env-${out.length}`, type: 'torznab', url, apiKey: env[`TORZNAB_APIKEY${n}`] || '' })
   }
   if (env.JACKETT_URL) {
     hostName(env.JACKETT_URL)
-    out.push({ type: 'jackett', name: env.JACKETT_NAME || 'Jackett', url: env.JACKETT_URL, apiKey: env.JACKETT_APIKEY || '', indexer: env.JACKETT_INDEXER || 'all' })
+    out.push({ id: `env-${out.length}`, type: 'jackett', url: env.JACKETT_URL, apiKey: env.JACKETT_APIKEY || '', indexer: env.JACKETT_INDEXER || 'all' })
   }
   if (env.PROWLARR_URL) {
     hostName(env.PROWLARR_URL)
-    out.push({ type: 'prowlarr', name: env.PROWLARR_NAME || 'Prowlarr', url: env.PROWLARR_URL, apiKey: env.PROWLARR_APIKEY || '', indexerIds: splitList(env.PROWLARR_INDEXERS || '-2') })
+    out.push({ id: `env-${out.length}`, type: 'prowlarr', url: env.PROWLARR_URL, apiKey: env.PROWLARR_APIKEY || '', indexerIds: splitList(env.PROWLARR_INDEXERS || '-2') })
   }
   return out
 }
@@ -86,7 +91,6 @@ export function sourceItemsFromEnv (env: Env): ListItem[] | null {
   return list.map((s, i) => ({
     id: `env-${i}`,
     type: s.type,
-    name: s.name,
     url: s.url,
     apiKey: s.apiKey ?? '',
     indexer: s.type === 'jackett' ? s.indexer ?? '' : s.type === 'prowlarr' ? s.indexerIds?.join(',') ?? '' : '',
@@ -106,11 +110,11 @@ export function sourceConfigs (items: readonly ListItem[]): SourceConfig[] {
   return items.map(item => {
     const type = field(item, 'type')
     if (!SOURCE_TYPES.includes(type as SourceType)) throw new Error('Unknown source type')
-    const [name, url, indexer] = [field(item, 'name'), field(item, 'url'), field(item, 'indexer')]
+    const [url, indexer] = [field(item, 'url'), field(item, 'indexer')]
     const base = { id: item.id, url, apiKey: field(item, 'apiKey') }
-    if (type === 'jackett') return { ...base, type, name: name || 'Jackett', indexer: indexer || 'all' }
-    if (type === 'prowlarr') return { ...base, type, name: name || 'Prowlarr', indexerIds: splitList(indexer || '-2') }
-    return { ...base, type: 'torznab', name: name || hostName(url) }
+    if (type === 'jackett') return { ...base, type, indexer: indexer || 'all' }
+    if (type === 'prowlarr') return { ...base, type, indexerIds: splitList(indexer || '-2') }
+    return { ...base, type: 'torznab' }
   })
 }
 
@@ -136,14 +140,14 @@ const DEFAULT_TRACKERS = [
 
 const count = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max, integer: true })
 const seconds = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max })
-type EnvOnlyDef = Pick<ValueDef, 'key' | 'env' | 'type' | 'default'> & { min?: number, max?: number, integer?: boolean }
+type EnvOnlyDef = Omit<NumberDef, 'section' | 'scope' | 'label'> | Omit<TextDef, 'section' | 'scope' | 'label'> | Omit<ToggleDef, 'section' | 'scope' | 'label'>
 /** Env-only knobs, in the settings schema's shape so they validate (and fail at startup) like page settings. */
 const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'port', env: ['PORT'], type: 'number', default: 8080, min: 1, max: 65535, integer: true },
   { key: 'torrentPort', env: ['TORRENT_PORT'], type: 'number', default: 6881, min: 0, max: 65535, integer: true },
   { key: 'cacheDir', env: ['CACHE_DIR'], type: 'text', default: 'data' },
   { key: 'ffmpegPath', env: ['FFMPEG_PATH'], type: 'text', default: 'ffmpeg' },
-  { key: 'ffprobePath', env: ['FFPROBE_PATH'], type: 'text', default: 'ffprobe' },
+  { key: 'vaapiDevice', env: ['VAAPI_DEVICE'], type: 'text', default: '/dev/dri/renderD128' },
   { key: 'dhtEnabled', env: ['DHT_ENABLED'], type: 'toggle', default: true },
   { key: 'lsdEnabled', env: ['LSD_ENABLED'], type: 'toggle', default: true },
   count('maxHlsSessions', 'MAX_HLS_SESSIONS', 2, 16),
@@ -155,7 +159,7 @@ const ENV_ONLY: EnvOnlyDef[] = [
   { key: 'idleTorrentMin', env: ['IDLE_TORRENT_MIN'], type: 'number', default: 30, min: 1, max: 10_080 },
 ]
 
-type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'ffprobePath' | 'dhtEnabled' | 'lsdEnabled' |
+type EnvOnlyConfig = Pick<Config, 'logLevel' | 'metricsEnabled' | 'metricsHost' | 'metricsPort' | 'port' | 'torrentPort' | 'cacheDir' | 'ffmpegPath' | 'vaapiDevice' | 'dhtEnabled' | 'lsdEnabled' |
   'maxHlsSessions' | 'maxTorrentLoads' | 'maxProbes' | 'maxSubtitleJobs' | 'extraTrackers' | 'metadataTimeoutMs' | 'checkingTimeoutMs' | 'idleTorrentMs'>
 
 type Values = Readonly<Record<string, unknown>>
@@ -178,14 +182,14 @@ export function trackersFromEnv (value: string | undefined): string[] {
 
 /** The env-only part of the configuration; an invalid value throws, naming the variable. */
 export function envOnlyConfig (env: Env): EnvOnlyConfig {
-  const v = resolve(env, {}, {}, ENV_ONLY as unknown as ValueDef[]).effective
+  const v = resolve(env, {}, {}, ENV_ONLY.map((def): ValueDef => ({ ...def, section: 'debug', scope: 'server', label: def.key }))).effective
   return {
     ...loggingConfig(env),
     port: num(v, 'port'),
     torrentPort: num(v, 'torrentPort'),
     cacheDir: path.resolve(str(v, 'cacheDir')),
     ffmpegPath: str(v, 'ffmpegPath'),
-    ffprobePath: str(v, 'ffprobePath'),
+    vaapiDevice: str(v, 'vaapiDevice'),
     dhtEnabled: bool(v, 'dhtEnabled'),
     lsdEnabled: bool(v, 'lsdEnabled'),
     maxHlsSessions: num(v, 'maxHlsSessions'),
@@ -206,11 +210,15 @@ export function deriveSettings (v: Values): Omit<Config, keyof EnvOnlyConfig> {
     sources,
     bitmagnetUrl: bitmagnetUrl(str(v, 'explore.bitmagnetUrl'), sources),
     searchTimeoutMs: num(v, 'search.timeoutS') * 1000,
+    showAdult: bool(v, 'content.showAdult'),
     cacheMaxBytes: num(v, 'cache.maxGb') * GB,
+    seedingEnabled: bool(v, 'seeding.enabled'),
+    seedingRatio: num(v, 'seeding.ratio'),
     hlsMaxBytes: num(v, 'cache.hlsMaxGb') * GB,
     minFreeBytes: num(v, 'cache.minFreeGb') * GB,
     allowTranscode: bool(v, 'transcode.allow'),
     transcodeMaxHeight: num(v, 'transcode.maxHeight'),
+    transcodeEncoder: str(v, 'transcode.encoder'),
   }
 }
 

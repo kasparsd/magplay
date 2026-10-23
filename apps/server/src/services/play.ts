@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { noopLogger, noopMetrics, outcome } from '@magplay/observability'
 import type { Logger, Metrics, OperationContext } from '@magplay/observability'
-// Playback: probe → decide → a direct /raw URL, or an HLS session for the player's tab whose playlist covers the
-// whole file (segments cut on the keyframes from the file's index when the video is copied).
+// Playback: probe → decide → a direct or browser-remux /raw URL, or an HLS session for the player's tab whose playlist
+// covers the whole file (segments cut on the keyframes from the file's index when the video is copied).
 import { decide } from '@magplay/playback'
 import type { MediaTools, PlaybackPolicy } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
@@ -17,7 +17,7 @@ export interface PlayOptions {
   media: MediaTools
   tabs: Tabs
   policy: () => PlaybackPolicy
-  /** The /raw loopback URL ffmpeg and ffprobe read a torrent file from. */
+  /** The /raw loopback URL the probe and ffmpeg read a torrent file from. */
   input: (ih: string, idx: number) => string
 }
 
@@ -27,6 +27,52 @@ export interface Play {
   /** GET /api/probe: the file's tracks and the torrent's external subtitle files. */
   probe: (ih: string, idx: number, context?: OperationContext) => Promise<ProbeResult>
   preparation: (ih: string, idx: number) => PlaybackPreparation | null
+}
+
+/** Whether an MP4 stores its `moov` (index) box before `mdat` (media data) — a "faststart"/web-optimized file.
+ *  Files without it can't start playing until the trailing metadata arrives, which on a torrent may take
+ *  the whole download. Reads only the leading bytes and never throws. */
+async function isFaststart (file: { read?: (start: number, end: number, signal: AbortSignal) => AsyncIterable<Uint8Array> }, signal: AbortSignal): Promise<boolean> {
+  if (typeof file.read !== 'function') return true
+  const LIMIT = 8 * 1024 * 1024
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for await (const c of file.read(0, LIMIT - 1, signal)) {
+      chunks.push(c)
+      total += c.length
+      if (total >= LIMIT) break
+    }
+  } catch {
+    return true
+  }
+  const buf = new Uint8Array(Math.min(total, LIMIT))
+  let off = 0
+  for (const c of chunks) {
+    const n = Math.min(c.length, buf.length - off)
+    buf.set(c.subarray(0, n), off)
+    off += n
+    if (off >= buf.length) break
+  }
+  let pos = 0
+  while (pos + 8 <= buf.length) {
+    let size = (buf[pos]! << 24) >>> 0 | (buf[pos + 1]! << 16) | (buf[pos + 2]! << 8) | buf[pos + 3]!
+    const type = String.fromCharCode(buf[pos + 4]!, buf[pos + 5]!, buf[pos + 6]!, buf[pos + 7]!)
+    if (size === 1) {
+      if (pos + 16 > buf.length) break
+      size = 0
+      for (let i = 0; i < 8; i++) size = size * 256 + buf[pos + 8 + i]!
+      /* header = 16 */
+    } else if (size === 0) {
+      size = buf.length - pos
+    }
+    if (size < 8) break
+    if (type === 'moov') return true
+    if (type === 'mdat') return false
+    if (pos + size > buf.length) break
+    pos += size
+  }
+  return true
 }
 
 export function createPlay ({ engine, media, tabs, policy, input, logger = noopLogger, metrics = noopMetrics }: PlayOptions): Play {
@@ -51,7 +97,7 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
       const counts = pending.get(`${ih}/${idx}`)
       return counts?.probing ? 'probing' : counts?.['loading-file'] ? 'loading-file' : null
     },
-    async play ({ ih, idx, audio = 0, start = 0, tab, caps = {} }, cancelled, context) {
+    async play ({ ih, idx, audio = 0, start = 0, tab, caps = {}, browserRemux }, cancelled, context) {
       const started = performance.now()
       const log = (context?.logger ?? logger).child({ component: 'playback', operationId: randomUUID(), torrentId: ih, fileIndex: idx, startSeconds: start, audioIndex: audio })
       log.info('playback.requested')
@@ -67,44 +113,61 @@ export function createPlay ({ engine, media, tabs, policy, input, logger = noopL
         check()
         let decision
         try {
-          decision = decide(info, caps, policy(), audio)
+          decision = decide(info, caps, policy(), audio, browserRemux !== false)
         } catch (err) {
           log.warn('playback.refused', { reason: err instanceof Error ? err.name : 'unknown' })
           throw err
         }
-        mode = decision.mode
-        log.info('playback.decided', { mode, reason: decision.reason })
+        // Non-faststart MP4s can't begin decoding until their trailing `moov` atom arrives, which on a
+        // torrent may mean waiting for the whole file. Remux instead so playback starts from the head.
+        // (The browser's demuxer has the same need for the index, so without ffmpeg the file stays direct.)
+        if (decision.mode === 'direct' && !info.isWebm && /mp4|mov/.test(info.container) && policy().serverConversion) {
+          const fast = await isFaststart(file, new AbortController().signal)
+          if (!fast) {
+            decision = { mode: 'remux' as const, reason: 'MP4 index is at the end of the file; remuxing so playback can start before the file is fully downloaded' }
+          }
+        }
+        const node = decision.mode === 'node-remux'
+        mode = node ? 'remux' : decision.mode
+        log.info('playback.decided', { mode, ...(node && { producer: 'node' }), reason: decision.reason })
         const { reason } = decision
         if (decision.mode === 'direct') {
           tabs.stop(tab)
           return { mode: 'direct', reason, duration: info.duration, url: `/raw/${ih}/${idx}` }
         }
-        const keyframes = decision.mode === 'remux' ? await during(ih, idx, 'probing', () => media.keyframes(input(ih, idx), file.length, { logger: log }), log) : null
+        if (decision.mode === 'browser-remux') {
+          tabs.stop(tab)
+          return { mode: 'browser-remux', reason, duration: info.duration, url: `/raw/${ih}/${idx}`, audio }
+        }
+        // Copied video is cut into segments on the keyframes from the file's own index; without one the playlist grows
+        const keyframes = decision.mode === 'transcode' ? null : await during(ih, idx, 'probing', () => media.keyframes(input(ih, idx), file.length, { logger: log }), log)
         check()
+        const wireMode = decision.mode === 'transcode' ? 'transcode' : 'remux'
         const s = tabs.start(tab, {
           input: input(ih, idx),
           info,
           audio,
           start,
-          mode: decision.mode,
           keyframes,
+          mode: node ? 'node-remux' : wireMode,
           context: { logger: log },
           onReady: () => {
             const durationMs = performance.now() - started
-            metrics.ready(decision.mode, durationMs / 1000)
-            log.info('playback.ready', { mode: decision.mode, sessionId, durationMs })
+            metrics.ready(mode, durationMs / 1000)
+            log.info('playback.ready', { mode, sessionId, durationMs })
           }
         })
         sessionId = s.id
         return {
-          mode: decision.mode,
+          mode: wireMode,
           reason,
           duration: info.duration,
           url: `/hls/${s.id}/index.m3u8`,
           session: s.id,
           growing: s.growing,
-          // Text subtitles are written by the same ffmpeg runs, on the file's timeline
-          subtitles: info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
+          // ffmpeg writes text subtitles on the file's timeline beside the segments; a Node remux doesn't, so external
+          // subtitle files are the way
+          subtitles: node ? [] : info.subtitles.filter(t => t.text).map(t => ({ index: t.index, url: `/hls/${s.id}/sub_${t.index}.vtt` })),
         }
       } catch (err) {
         result = outcome(err)

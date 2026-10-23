@@ -1,0 +1,13 @@
+{
+  "name": "@magplay/release",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Release notes, the application version and the changelog",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "magplay-release": "./src/cli.ts"
+  }
+}

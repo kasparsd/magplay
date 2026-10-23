@@ -5,7 +5,7 @@ import { byLevel, overallLevel, problems } from '@magplay/api-contract'
 import type { StatusCheck, StatusLevel, StatusResponse } from '@magplay/api-contract'
 import { api } from './api.ts'
 import { STORAGE_KEYS } from './preferences.ts'
-import { connectionLevel, readConnection } from './speedtest.ts'
+import { connectionLevel, connectionWarning, readConnection } from './speedtest.ts'
 import { el, fill, formatSpeed, menu } from './ui.ts'
 
 const POLL_MS = 30_000
@@ -14,14 +14,14 @@ const POLL_MS = 30_000
 export function connectionCheck (now = Date.now()): StatusCheck {
   const result = readConnection()
   const level = connectionLevel(result, now)
-  const href = '/settings#connection'
+  const href = '/settings#debug'
   return {
     id: 'connection',
     label: 'Your connection',
     required: false,
     level,
     ...(result && level !== 'unknown' && { value: `${formatSpeed(result.downBytesPerSec)} · ${Math.round(result.latencyMs)} ms`, at: result.at }),
-    ...(level === 'warn' && { message: 'May struggle with high-bitrate video. Weak Wi-Fi?', action: { label: 'Test again', href } }),
+    ...(level === 'warn' && result && { message: connectionWarning(result), action: { label: 'Test again', href } }),
     ...(level === 'unknown' && { value: 'Not tested', action: { label: 'Test it', href } }),
   }
 }

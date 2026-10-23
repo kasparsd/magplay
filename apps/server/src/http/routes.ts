@@ -80,7 +80,7 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       logger.info('hls.cache.cleared', { count: stopped })
       json(res, 200, { stopped })
     }),
-    route('GET', '/api/speedtest', ({ req, res }) => serveSpeedtest(req, res)),
+    route('GET', '/api/speedtest', ({ res }) => serveSpeedtest(res)),
 
     // Search and Explore
     route('GET', '/api/search', async ({ req, res, query }) => json<SearchResponse>(res, 200, await search.search(query.get('q'), query.get('cat'), { logger: requestLogger(req) }))),
@@ -93,7 +93,7 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
 
     // Torrents and playback
     route('POST', '/api/torrents', async ({ req, res }) => json<TorrentInfo>(res, 200, await addTorrent(engine, search, parseAddRequest(await readJson(req))))),
-    route('GET', '/api/torrents/:ih', async ({ res, params }) => json<TorrentInfo>(res, 200, engine.describe(await engine.get(params.ih)))),
+    route('GET', '/api/torrents/:ih', async ({ res, params }) => json<TorrentInfo>(res, 200, await engine.info(params.ih))),
     /** Torrent activity; the player adds idx (its file) and session/pos (its ffmpeg session, kept alive by this poll). */
     route('GET', '/api/torrents/:ih/status', ({ res, params, query }) => {
       const out = engine.status(params.ih, { idx: query.has('idx') ? Number(query.get('idx')) : undefined })

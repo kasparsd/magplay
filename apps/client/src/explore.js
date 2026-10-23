@@ -14,7 +14,7 @@ const status = $('#status')
 function filtersFrom (search) {
   const params = new URLSearchParams(search)
   return {
-    type: params.get('type') === 'tv_show' ? 'tv_show' : 'movie', // anything else falls back to films
+    type: params.get('type') || 'movie', // anything unknown falls back to the server's validation
     sort: params.get('sort') === 'added' ? 'added' : 'seeders',
     genre: params.get('genre') || '',
     year: params.get('year') || '',
@@ -161,7 +161,7 @@ function showFilters () {
 addEventListener('popstate', () => apply(filtersFrom(location.search), { push: false }))
 
 showFilters()
-for (const radio of form.elements.type) radio.addEventListener('change', () => apply({ type: radio.value }))
+form.type.addEventListener('change', () => apply({ type: form.type.value }))
 for (const radio of form.elements.sort) radio.addEventListener('change', () => apply({ sort: radio.value }))
 form.year.addEventListener('change', () => apply({ year: form.year.value }))
 form.res.addEventListener('change', () => apply({ res: form.res.value }))

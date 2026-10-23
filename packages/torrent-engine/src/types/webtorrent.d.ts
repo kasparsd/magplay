@@ -50,16 +50,21 @@ declare module 'webtorrent' {
     infoHash: string
     name?: string
     ready: boolean
+    done?: boolean
     metadata?: unknown
+    numPeers: number
     files: TorrentFile[]
     torrentFile: Uint8Array
     created?: Date
     pieces: unknown[]
     bitfield: BitField
+    getFileModtimes: (cb: (err: Error | null, modtimes?: number[]) => void) => void
     wires: Wire[]
     length: number
     downloaded: number
     downloadSpeed: number
+    /** Bytes sent to peers since this torrent was added; starts at 0 on every add. */
+    uploaded: number
     uploadSpeed: number
     progress: number
     destroy: (cb?: (err?: Error | null) => void) => void
@@ -69,7 +74,9 @@ declare module 'webtorrent' {
     constructor (opts?: ClientOptions)
     torrents: Torrent[]
     destroyed: boolean
-    add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean }) => Torrent
+    /** Bytes/s for every torrent together; -1 turns the throttle off, 0 stops uploads. */
+    throttleUpload: (rate: number) => void
+    add: (torrentId: ParsedTorrent | string | Uint8Array, opts?: { path?: string, deselect?: boolean, fileModtimes?: number[] }) => Torrent
     destroy: (cb?: (err?: Error | null) => void) => void
   }
 }
