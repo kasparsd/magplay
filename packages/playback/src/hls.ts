@@ -280,7 +280,8 @@ export function createHlsSessions ({
   function unlink (s: Session, file: string): void {
     if ((s.refs.get(file) ?? 0) > 0) return
     s.sizes.delete(file)
-    fs.rm(file, { force: true }, () => {})
+    // Synchronous like the writes, so the folder never holds more than the byte count says
+    try { fs.rmSync(file, { force: true }) } catch {}
   }
 
   // ---- Waiting for output ----
