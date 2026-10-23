@@ -38,16 +38,30 @@ Keep `HLS_MAX_GB` large enough for expected remux output: HLS retains past segme
 
 ## Container memory
 
-A memory limit on the container does not make Node stay inside it. On Node 24 (`node:24-alpine`), every limit from 96 MiB through 512 MiB left the V8 heap ceiling at 259 MiB. The ceiling starts to follow the limit only above that (768 MiB → 432 MiB, 1 GiB → 560 MiB). Below the ceiling V8 keeps allocating, and the kernel kills the process before a collection. In any container of 512 MiB or less, set the heap explicitly, under the limit:
+A memory limit on the container does not make Node stay inside it. On Node 24 (`node:24-alpine`), every limit from 96 MiB through 512 MiB left the V8 heap ceiling at 259 MiB. The ceiling starts to follow the limit only above that (768 MiB → 432 MiB, 1 GiB → 560 MiB). Below the ceiling V8 keeps allocating, and the kernel kills the process before a collection. The images therefore set the heap explicitly:
 
 ```sh
 NODE_OPTIONS=--max-old-space-size=128
 ```
 
-128 MiB of heap is enough for this server. A Node remux used about 14–20 MiB of it. `--max-semi-space-size` only shrinks the young generation, which is already small here, and does not move the spike below.
+In a 384 MiB container that gives a 131 MiB heap ceiling instead of 259 MiB. Setting `NODE_OPTIONS` replaces it, for example on a large host that keeps more in memory. Run outside the images, Node needs the same option in any container of 512 MiB or less. 128 MiB of heap is enough for this server. `--max-semi-space-size` only shrinks the young generation, which is already small here, and does not move the spike below.
 
-The spike is memory Node does not count as heap. On linux/arm64, one Node remux of a 20-second 11 MB H.264/AC-3 file reached 130 MiB anonymous (189 MiB resident, the rest being the mapped Node binary). About 63 MiB of that peak was byte buffers: the remux's `/raw` read may hold 48 MiB, and the unpublished output buffer doubles as it grows. The AAC, AC-3 and DTS codec workers live in the same process. After the session and a collection, anonymous use fell to 67 MiB, and a second pass did not climb. The idle core image, with no peers, was 51 MiB in `docker stats` and 47 MiB anonymous. Resident was 112 MiB; most of the difference is the Node binary, which the kernel can drop. Virtual size is about 9 GB and is not RAM.
+The rest is memory Node does not count as heap: byte buffers, the codec workers, and freed pages the allocator keeps instead of returning. Measured in the core image in a 384 MiB container on linux/arm64, with one torrent of a 120 s 1080p H.264/AC-3 file (89 MiB) streamed from a local peer ([checkpoint](checkpoints/2026-10-24-memory-caps.md)):
 
-For one such remux, give the container 384 MiB and no extra swap (`mem_limit` and `memswap_limit`, or `docker run --memory=384m --memory-swap=384m`). The 384 MiB is headroom for that anonymous peak plus WebTorrent's own piece cache. It is not a budget for an ffmpeg transcode, which runs in another process and was not part of this measurement. 256 MiB is tight once the 48 MiB input cache fills. A 160 MiB limit survived the short file only because part of its resident set was reclaimable file pages.
+| | Anonymous | Of which array buffers |
+| --- | --- | --- |
+| Idle, no peers | 46 MiB | 1 MiB |
+| Streaming the file over `/raw`, peak | 141–160 MiB | up to 92 MiB |
+| Settled after streaming | 134–140 MiB | 89 MiB |
+| A Node remux of 60 s, peak | 175–186 MiB | 70 MiB at the end |
 
-Deleting unused files from `node_modules`, which the image build does, changes the image size and not this resident set. Node does not map a file until it imports it. The measurement, including what it does not cover, is in [the checkpoint](checkpoints/2026-10-19-node-container-memory.md); it was taken on `node:24-alpine`, and the image has since switched to Alpine's `nodejs` package ([image size](checkpoints/2026-10-19-docker-image-size.md)). A host with real peer counts, including MikroTik, is still an open check ([roadmap](roadmap.md)).
+The V8 heap stayed below 30 MiB used throughout. Resident adds about 60 MiB of mapped files, mostly the Node binary, which the kernel can drop. Virtual size is about 9 GB and is not RAM.
+
+What holds the bytes:
+
+- **Node remux:** its `/raw` read cache is 16 MiB, and the output keeps only the unsent part of the box being written. Before those limits (48 MiB, and a buffer that kept every size it had grown to) the same remux peaked at 271–299 MiB.
+- **Torrent pieces:** each torrent keeps 2 whole pieces in memory after a read (WebTorrent's default is 20). In the measurement this made no measurable difference. About 89 MiB of buffers, roughly the whole file, stays held after streaming either way, for a reason not yet found.
+
+For one Node remux, give the container 384 MiB and no extra swap (`mem_limit` and `memswap_limit`, or `docker run --memory=384m --memory-swap=384m`). That leaves about 200 MiB above the remux peak for real swarms, seeking and several torrents, none of which were measured. It is not a budget for an ffmpeg transcode, which runs in another process. `tools/scripts/measure-memory.mjs --image=<image>` repeats the measurement.
+
+Deleting unused files from `node_modules`, which the image build does, changes the image size and not this resident set. Node does not map a file until it imports it. The heap-ceiling measurements are in [the 2026-10-19 checkpoint](checkpoints/2026-10-19-node-container-memory.md), taken on `node:24-alpine`. The image has since switched to Alpine's `nodejs` package ([image size](checkpoints/2026-10-19-docker-image-size.md)). A host with real peer counts, including MikroTik, is still an open check ([roadmap](roadmap.md)). A host with real peer counts, including MikroTik, is still an open check ([roadmap](roadmap.md)).

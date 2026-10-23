@@ -100,7 +100,7 @@ Both build for `linux/arm64` and `linux/amd64`, run as `node`, and have a
 healthcheck on `GET /health`. From a checkout, `docker build .` builds the full
 image and `docker build --target core .` the core one.
 
-A small host needs an explicit heap cap. Node 24 keeps a 259 MiB heap ceiling in a container of 512 MiB or less, while a Node remux's memory sits outside that heap. Give the container 384 MiB, no extra swap, and `NODE_OPTIONS=--max-old-space-size=128`. The measurement is in [Container memory](docs/resources.md#container-memory).
+Both images cap the Node heap at 128 MiB (`NODE_OPTIONS=--max-old-space-size=128`), because Node 24 would otherwise keep a 259 MiB heap ceiling in a container of 512 MiB or less. Give a small host's container 384 MiB and no extra swap. The measurement is in [Container memory](docs/resources.md#container-memory).
 
 Publishing a GitHub release `vX.Y.Z` tags both images `X.Y.Z`, `X.Y` and `X`;
 a prerelease (such as `vX.Y.Z-rc.1`) gets only its exact version. Every push to

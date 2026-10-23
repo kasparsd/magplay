@@ -45,6 +45,11 @@ export const DEFAULT_LIVE: LiveOptions = {
   seeding: { enabled: true, ratio: 1 },
 }
 
+/**
+ * Whole pieces each torrent keeps in memory after a read. WebTorrent's default is 20, up to 320 MiB for 16 MiB pieces;
+ * the files on disk and the OS page cache already serve re-reads, so a few slots only spare repeated small reads.
+ */
+const STORE_CACHE_SLOTS = 2
 /** Seeded torrents kept loaded at once; extras being watched may exceed it until they finish. */
 const MAX_SEEDED = 3
 /** Upload cap while anything is streaming, so playback wins but the swarm still gets some bytes. */
@@ -254,7 +259,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
     const { extraTrackers, metadataTimeoutMs, checkingTimeoutMs } = live()
     parsed.announce = [...new Set([...(parsed.announce ?? []), ...extraTrackers])]
     const addNew = (): WtTorrent => {
-      const added = client.add(parsed, { path: folder, deselect: true, ...(savedModtimes ? { fileModtimes: savedModtimes } : {}) })
+      const added = client.add(parsed, { path: folder, deselect: true, storeCacheSlots: STORE_CACHE_SLOTS, ...(savedModtimes ? { fileModtimes: savedModtimes } : {}) })
       const before = typeof savedUploaded === 'number' && Number.isFinite(savedUploaded) && savedUploaded > 0 ? savedUploaded : 0
       uploadedBefore.set(ih, before)
       uploadedSaved.set(ih, before)
