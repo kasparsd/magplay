@@ -77,10 +77,11 @@ Both columns include the PR #33 review fixes.
 - Settings drafts still use the `errorSlots`/`readouts` partial-update maps. The next step would be a per-section `parts()`, so inputs stay mounted.
 - Title still parses its params by hand. It would move to `urlState` and `createCache` like Search.
 - No lint rule yet bans module-level `let` in page files or reading UI state back from the DOM. Both would be cheap to add and would steer agents.
-- No devices, Docker or BFCache checks were run beyond the browser suite. `tools/scripts/check-docker.mjs` was updated for the esbuild entries but not run.
+- No devices, Safari or BFCache checks were run beyond the browser suite and the local Docker check.
 
 ## Log
 
 - 2026-10-23: Sketched on `2220994`. Typecheck and lint pass; `npm run test:all` passed (334 Node, 4 peer, 80 Chromium tests, browser suite 3.1 min).
 - 2026-10-23: Ported PR #33's review regressions and fixes; `npm run test:all` passed (336 Node, 4 peer, 92 Chromium tests).
 - 2026-10-23: Replaced Vite with one esbuild command and stable entry names, so no build script or link rewriting is needed. `npm run test:all` passed (336 Node, 4 peer, 92 Chromium tests). Docker check not run.
+- 2026-10-23: `tools/scripts/check-docker.mjs magplay:vanilla-check` passed on the esbuild build (local linux/arm64, full image with ffmpeg). Health and non-root runtime, revalidated entries and immutable hashed chunks, test-free image, cached torrent probe and byte ranges, direct MP4, AC3 remux with HLS from 0 and 30 s, session cleanup, metrics, logging and graceful shutdown. First remux segment 220 ms, from 30 s 186 ms; 112.5 MiB resident. Local Docker host only, not the server.
