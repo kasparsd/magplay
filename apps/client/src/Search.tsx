@@ -59,13 +59,13 @@ export function Search (): ReactNode {
           ))}
         </div>
         <Status
-          busy={search.isPending}
+          busy={search.isFetching}
           error={search.error}
           retry={() => {
             search.refetch().catch(console.error)
           }}
         >
-          {search.isPending
+          {search.isFetching
             ? 'Searching…'
             : data?.results.length
               ? `${data.results.length} result${data.results.length === 1 ? '' : 's'}`

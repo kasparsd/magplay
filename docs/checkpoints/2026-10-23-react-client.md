@@ -28,3 +28,11 @@ Inspected generated fixture playback at 1100×800 and 375×812; controls, title 
 ## Remaining acceptance
 
 Safari/native HLS, real phones/TVs and the owner's server were not available in this local run. Those post-merge checks stay in roadmap items 1–2. Chromium viewport tests and local Docker are not substitutes. Cross-tab/server-restart discovery-cache revision tracking is a separate roadmap follow-up; local Settings saves are covered here.
+
+## PR #33 review follow-up
+
+Catalog retries show their pending state immediately, Explore retains facet choices during refresh, and the header search input stays mounted without automatic focus. Router history state is the only source of catalog return context; unrelated document referrers no longer influence the search field or back links. The obsolete raw HTML module declaration is removed.
+
+Fullscreen transitions reveal the Player controls and reset their idle timeout. PiP availability comes from the controller snapshot and respects the video restriction; the controller also guards the command. Release-selection links and external-player menu triggers carry their action attributes.
+
+Eight added browser regressions cover delayed facets, retries on all four catalog pages, search node/focus/referrer behavior, fullscreen wake and PiP restrictions. Follow-up validation passed: typecheck, lint and `npm run test:all` (321 Node tests, 4 peer entries and 99 Chromium tests; browser suite 4.1 minutes). The earlier local Docker acceptance is unchanged; it was not repeated for these UI fixes. Published commits are retained; the review fixes use a sentence-style follow-up commit on the existing PR.

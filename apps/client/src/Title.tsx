@@ -17,7 +17,7 @@ export function Title (): ReactNode {
   const returnTo = useRouterState({ select: (state) => state.location.state.catalogReturn })
   const params = titleRoute.useParams()
   const search = titleRoute.useSearch()
-  const back = backTarget(returnTo ? location.origin + returnTo : document.referrer, location.origin, {
+  const back = backTarget(returnTo ? location.origin + returnTo : '', location.origin, {
     label: '← Explore', href: urls.explore({ type: params.type === 'tv_show' ? params.type : '' }),
   })!
   const query = useQuery({
@@ -98,13 +98,13 @@ export function Title (): ReactNode {
         </div>
       </div>
       <Status
-        busy={query.isPending}
+        busy={query.isFetching}
         error={query.error}
         retry={() => {
           query.refetch().catch(console.error)
         }}
       >
-        {query.isPending ? 'Finding releases…' : ''}
+        {query.isFetching ? 'Finding releases…' : ''}
       </Status>
       <section id='releases' hidden={!t}>
         <h2>{count(releases.length, 'release')}</h2>

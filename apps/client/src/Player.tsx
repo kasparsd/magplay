@@ -197,6 +197,9 @@ export function Player (): ReactNode {
   useEffect(() => {
     const update = (): void => {
       setFullscreen(!!document.fullscreenElement)
+      setIdle(false)
+      clearTimeout(idleTimer.current)
+      idleTimer.current = setTimeout(() => latestSleep.current(), 2500)
     }
     document.addEventListener('fullscreenchange', update)
     return () => document.removeEventListener('fullscreenchange', update)
@@ -346,13 +349,13 @@ export function Player (): ReactNode {
           )
         : name === 'release'
           ? (
-              <CatalogLink className='button' href={urls.search(s?.torrent ? releaseName(s.torrent.name) : '')}>
+              <CatalogLink data-action={name} className='button' href={urls.search(s?.torrent ? releaseName(s.torrent.name) : '')}>
                 Choose another release
               </CatalogLink>
             )
           : s?.file
             ? (
-                <Menu label='Open in player' className='button playback-external'>
+                <Menu data-action={name} label='Open in player' className='button playback-external'>
                   {external}
                   {copyStream}
                 </Menu>
@@ -731,7 +734,7 @@ export function Player (): ReactNode {
                         <hr />
                       </>
                     )}
-                    {document.pictureInPictureEnabled && (
+                    {s?.media.pipAllowed && (
                       <button type='button' onClick={() => player?.togglePip()}>
                         {s?.media.pip ? 'Exit picture in picture' : 'Picture in picture'}
                       </button>

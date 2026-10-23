@@ -15,6 +15,7 @@ export function CatalogLink ({
   title?: string
   id?: string
   back?: boolean
+  'data-action'?: string
 }): ReactNode {
   const router = useRouter()
   return (
@@ -52,8 +53,8 @@ export function Status ({
   retry?: () => void
 }): ReactNode {
   return (
-    <p id='status' className={`status ${error ? 'error' : busy ? 'busy' : ''}`}>
-      {error
+    <p id='status' className={`status ${busy ? 'busy' : error ? 'error' : ''}`}>
+      {error && !busy
         ? (
             <>
               {error.message}{' '}

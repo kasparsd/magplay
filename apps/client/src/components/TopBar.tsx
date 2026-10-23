@@ -1,4 +1,5 @@
 // The bar on every page: the name, Explore, the search box, and the status menu with the Settings gear.
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useRouterState, useNavigate } from '@tanstack/react-router'
 import { queryClient } from '../lib/query.ts'
@@ -7,11 +8,15 @@ import { StatusMenu } from './StatusMenu.tsx'
 export function TopBar (): ReactNode {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const navigate = useNavigate()
-  const referrer = document.referrer ? new URL(document.referrer) : null
-  const previousQuery = referrer?.origin === location.origin ? (referrer.searchParams.get('q') ?? '') : ''
   const q = useRouterState({ select: (state) => (state.location.search as { q?: string }).q ?? state.location.state.catalogQuery ?? '' })
   const cat = useRouterState({ select: state => (state.location.search as { cat?: string }).cat ?? '' })
   const home = pathname === '/'
+  const [previousQuery, setPreviousQuery] = useState(q)
+  const [draft, setDraft] = useState(q)
+  if (previousQuery !== q) {
+    setPreviousQuery(q)
+    setDraft(q)
+  }
   return (
     <header className='topbar'>
       <Link className='brand' to='/' search={{ q: '', cat: '' }} activeOptions={{ exact: true }}>
@@ -27,7 +32,6 @@ export function TopBar (): ReactNode {
       </Link>
       {/* On the search page it is that page's form (its category filter belongs to it, form="search"), filled from the URL */}
       <form
-        key={`${home}:${q}`}
         id={home ? 'search' : undefined}
         className='topsearch'
         action='/'
@@ -51,8 +55,8 @@ export function TopBar (): ReactNode {
           type='search'
           placeholder={home ? 'Search or paste a magnet link…' : 'Search'}
           aria-label='Search'
-          defaultValue={q || (!home ? previousQuery : '')}
-          autoFocus={home}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
           required={home}
         />
         {home && <button>Search</button>}

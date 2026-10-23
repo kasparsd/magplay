@@ -54,6 +54,7 @@ export interface MediaState {
   volume: number
   muted: boolean
   pip: boolean
+  pipAllowed: boolean
 }
 
 export interface PlayerSnapshot {
@@ -299,6 +300,7 @@ export class PlaybackController {
         volume: v.volume,
         muted: v.muted,
         pip: typeof document !== 'undefined' && !!document.pictureInPictureElement,
+        pipAllowed: typeof document !== 'undefined' && document.pictureInPictureEnabled && !v.disablePictureInPicture,
       },
     }
   }
@@ -890,6 +892,7 @@ export class PlaybackController {
   }
 
   togglePip (): void {
+    if (this.video.disablePictureInPicture && !document.pictureInPictureElement) return
     const action = document.pictureInPictureElement ? document.exitPictureInPicture() : this.video.requestPictureInPicture()
     action.catch((err: unknown) => { this.setOverlay({ kind: 'warn', text: `Picture in picture: ${errorMessage(err)}` }) })
   }

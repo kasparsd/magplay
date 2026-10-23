@@ -285,7 +285,7 @@ export function Torrent (): ReactNode {
     }).catch(console.error)
   }, [t, discovery, search.title, navigate, state])
   const back = backTarget(
-    state.catalogReturn ? location.origin + state.catalogReturn : document.referrer,
+    state.catalogReturn ? location.origin + state.catalogReturn : '',
     location.origin
   )
   return (
@@ -299,13 +299,13 @@ export function Torrent (): ReactNode {
       </p>
       <h1 id='name'>{name}</h1>
       <Status
-        busy={metadata.isPending}
+        busy={metadata.isFetching}
         error={metadata.error}
         retry={() => {
           metadata.refetch().catch(console.error)
         }}
       >
-        {metadata.isPending && <CountingWait />}
+        {metadata.isFetching && <CountingWait />}
       </Status>
       {t ? <TorrentBody torrent={t} /> : <div id='torrent' />}
     </main>

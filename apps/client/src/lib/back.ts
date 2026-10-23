@@ -3,12 +3,12 @@
 export interface BackTarget {
   label: string
   href: string
-  /** The referrer is the previous history entry: go Back, which keeps its scroll position and results. */
+  /** The Router return target is the previous history entry: go Back, which keeps its scroll position and results. */
   history: boolean
 }
 
 /**
- * The back link for a page reached from `referrer` (document.referrer). Only pages of this app count, and only ones
+ * The back link for a page reached from a Router history return URL. Only pages of this app count, and only ones
  * worth going back to: search results, Explore, a title, the recently opened list. Otherwise `fallback`, which may be
  * null for no back link at all.
  */

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { ExploreResponse, ExploreFacets, LatestRelease, FacetCount } from '@magplay/api-contract'
 import { exploreRoute } from './router.tsx'
 import { api } from './lib/api.ts'
@@ -41,6 +41,7 @@ export function Explore (): ReactNode {
   })
   const facets = useQuery({
     queryKey: ['facets', filters],
+    placeholderData: keepPreviousData,
     queryFn: ({ signal }) => api<ExploreFacets>(`/api/explore/facets?${params}`, { signal }),
     staleTime: 180_000,
   })
@@ -168,7 +169,7 @@ export function Explore (): ReactNode {
         )}
       </form>
       <div id='genres' className='chips' role='group' aria-label='Genre'>
-        {facets.isPending
+        {facets.isFetching && !facets.data
           ? (
               <span className='chip'>Counting genres…</span>
             )
