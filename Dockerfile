@@ -28,16 +28,15 @@ RUN npm ci --omit=dev \
  && rm -rf node_modules/webtorrent/dist node_modules/xml2js/lib/xml2js.bc.js node_modules/node-datachannel/src \
       node_modules/@opentelemetry/api/build/esm node_modules/@opentelemetry/api/build/esnext
 
-# Full install (dev dependencies: esbuild) to bundle the browser client.
+# Full install (dev dependencies: Vite) to build the browser client into dist/client.
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=manifests /app ./
 RUN npm ci
-# esbuild reads each package's tsconfig.json, which extends this one.
-COPY tsconfig.base.json ./
+# Vite reads each package's tsconfig.json, which extends this one.
+COPY tsconfig.base.json vite.config.js ./
 COPY apps ./apps
 COPY packages ./packages
-COPY public ./public
 RUN npm run build
 
 # magplay-core (`--target core`): the server without ffmpeg. Files stream as they are, the browser repackages what
@@ -54,7 +53,6 @@ COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY packages ./packages
 COPY apps/server ./apps/server
-COPY public ./public
 
 RUN mkdir -p /data && chown node:node /data
 USER node

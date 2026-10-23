@@ -447,7 +447,7 @@ policy:** [docs/http-caching.md](docs/http-caching.md).
 ```bash
 npm install
 npm start                 # builds the client, then serves; cache lands in ./data
-npm run dev               # rebuilds the client and restarts the server on change
+npm run dev               # Vite dev server with hot reload on :5173, proxying a restarting server on :8080
 npm run typecheck         # tsc -b over every workspace
 npm run lint              # ESLint (neostandard + type-aware rules), no warnings allowed
 npm run release -- note --patch -m "..."   # add a release note (see docs/releases.md)
@@ -468,8 +468,7 @@ Node 24+, ES modules, npm workspaces. The server and packages use strict
 TypeScript. Architecture: [docs/architecture.md](docs/architecture.md).
 
 - `apps/server/src/`: the Node service.
-- `apps/client/src/`: one script per page plus `lib/`.
-- `public/`: HTML and CSS.
+- `apps/client/`: the HTML pages; `src/` has one script per page, the stylesheet and `lib/`.
 - `packages/`: api-contract, release-info, indexers, torrent-engine, playback,
   seekable-tar, http-kit, observability.
 

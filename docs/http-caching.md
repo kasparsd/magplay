@@ -50,8 +50,8 @@ revalidate the pages (`no-cache`) and may keep `/assets/…` indefinitely. Never
 give the pages themselves a fresh TTL, or a release keeps serving old pages that
 link the previous release's assets.
 
-Node links the hashed asset names into the pages as it serves them, so let Node
-serve the pages. A frontend may serve `dist/client/assets/` itself with
+The built pages already link the hashed asset names, but the page routes
+(`/play/…`, `/t/…`) live in Node, so let Node serve the pages. A frontend may serve `dist/client/assets/` itself with
 `Cache-Control: public, max-age=31536000, immutable` and proxy everything else
 to Node. Deploy the frontend and backend together. No Node/proxy speedup has been
 benchmarked.

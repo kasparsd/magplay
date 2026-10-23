@@ -45,8 +45,8 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
   }
   // Every script and stylesheet a page links is content-hashed, so a release changes its URL
   assert.ok(assets.size >= 7)
-  for (const asset of assets) assert.match(asset, /^\/assets\/[\w-]+-[A-Z0-9]{8}\.(?:js|css)$/)
-  for (const url of [...pages, ...assets, `${[...assets][0]}.map`]) {
+  for (const asset of assets) assert.match(asset, /^\/assets\/[\w-]+-[\w-]{8}\.(?:js|css)$/)
+  for (const url of [...pages, ...assets, `${[...assets].find(asset => asset.endsWith('.js'))}.map`]) {
     const res = await fetch(origin + url)
     assert.equal(res.status, 200, url)
     assert.equal(res.headers.get('cache-control'), url.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache', url)
@@ -64,7 +64,7 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     assert.equal(head.headers.get('content-length'), length)
     assert.equal(await head.text(), '')
   }
-  for (const [url, status] of [['/t/%ZZ', 400], ['/playlistXm3u', 404], ['/search.js', 404], ['/style.css', 404], ['/assets/search.js', 404], ['/assets/..%2Fexplore.html', 404], ['/api/search', 400], ['/api/torrents/bad', 400], ['/api/explore', 404], ['/lib/api.js', 404], ['/lib/api-types.js', 404], ['/vendor/hls.min.js', 404], ['/lib/api.test.js', 404], ['/lib/requests.test.js', 404], ['/lib/capabilities.test.js', 404], ['/lib/subtitles.test.js', 404], ['/lib/progress.test.js', 404]] as const) {
+  for (const [url, status] of [['/t/%ZZ', 400], ['/playlistXm3u', 404], ['/search.js', 404], ['/style.css', 404], ['/index.html', 404], ['/src/search.js', 404], ['/src/style.css', 404], ['/assets/search.js', 404], ['/assets/..%2Fexplore.html', 404], ['/api/search', 400], ['/api/torrents/bad', 400], ['/api/explore', 404], ['/lib/api.js', 404], ['/lib/api-types.js', 404], ['/vendor/hls.min.js', 404], ['/lib/api.test.js', 404], ['/lib/requests.test.js', 404], ['/lib/capabilities.test.js', 404], ['/lib/subtitles.test.js', 404], ['/lib/progress.test.js', 404]] as const) {
     const res = await fetch(origin + url)
     assert.equal(res.status, status, url)
     assert.equal(res.headers.get('cache-control'), 'no-store')

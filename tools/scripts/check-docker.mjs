@@ -32,7 +32,7 @@ try {
   assert.equal(await docker('inspect', name, '--format', '{{.Config.User}}'), 'node')
   const page = await get('/')
   assert.equal(page.headers.get('cache-control'), 'no-cache')
-  const script = /src="(\/assets\/search-[A-Z0-9]{8}\.js)"/.exec(await page.text())?.[1]
+  const script = /src="(\/assets\/index-[\w-]{8}\.js)"/.exec(await page.text())?.[1]
   assert.ok(script, 'pages link content-hashed bundles')
   const bundle = await get(script)
   assert.equal(bundle.status, 200)
@@ -40,7 +40,7 @@ try {
   assert.equal((await get('/player.js')).status, 404)
   assert.equal((await get('/lib/progress.js')).status, 404)
   assert.equal((await get('/vendor/hls.min.js')).status, 404)
-  const tests = await docker('exec', name, 'find', '/app/apps', '/app/packages', '/app/public', '/app/dist', '(', '-name', '*.test.js', '-o', '-name', '*.test.ts', ')')
+  const tests = await docker('exec', name, 'find', '/app/apps', '/app/packages', '/app/dist', '(', '-name', '*.test.js', '-o', '-name', '*.test.ts', ')')
   assert.equal(tests, '', 'production image must exclude colocated tests')
   report.checks.push('health, non-root runtime, content-hashed client bundles and test-free image')
   await docker('cp', path.join(cache, 'torrents'), `${name}:/data/`)

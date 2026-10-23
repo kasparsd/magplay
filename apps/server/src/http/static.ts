@@ -1,43 +1,25 @@
-// Pages from public/, linked to the content-hashed bundles and stylesheet esbuild builds into dist/client/assets (see `npm run build`).
+// The client's pages and assets as Vite builds them into dist/client (see `npm run build`): pages link content-hashed
+// bundles and the stylesheet under /assets/.
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { FileNotFoundError, route, sendCached, serveFile } from '@magplay/http-kit'
 import type { Handler, Route } from '@magplay/http-kit'
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = { '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json' }
-/** Bundles, the stylesheet and their source maps, named by esbuild's `[name]-[hash]`; never client sources or tests. */
-const ASSET = /^[\w-]+-[A-Z0-9]{8}\.(?:js|css)(?:\.map)?$/
+/** Bundles, the stylesheet and their source maps, named `[name]-[hash]` with an 8-character base64url hash. */
+const ASSET = /^[\w-]+-[\w-]{8}\.(?:js|css)(?:\.map)?$/
 /** A hashed URL never changes content, so any cache may keep it for good. */
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
-interface Metafile { outputs: Record<string, { entryPoint?: string }> }
-
-/** '/search.js' (as the pages link it) → '/assets/search-HASH.js', from esbuild's metafile; re-read after a rebuild. */
-function assetLinks (metafilePath: string): () => Promise<Map<string, string>> {
-  return async () => {
-    const { outputs } = JSON.parse(await fs.readFile(metafilePath, 'utf8')) as Metafile
-    const links = new Map<string, string>()
-    for (const [output, { entryPoint }] of Object.entries(outputs)) {
-      if (entryPoint) links.set('/' + path.basename(entryPoint).replace(/\.ts$/, '.js'), '/assets/' + path.basename(output))
-    }
-    return links
-  }
-}
-
-export function staticRoutes ({ publicDir, distDir }: { publicDir: string, distDir: string }): Route[] {
-  const links = assetLinks(path.join(distDir, 'meta.json'))
+export function staticRoutes ({ distDir }: { distDir: string }): Route[] {
   /**
-   * Pages revalidate on every load, so a deploy shows up on reload. The ETag hashes the linked page (not file
-   * metadata), so a cache revalidating through a reverse proxy gets the new page and with it the new asset URLs.
+   * Pages revalidate on every load, so a deploy shows up on reload. The ETag hashes the page (not file metadata),
+   * so a cache revalidating through a reverse proxy gets the new page and with it the new asset URLs. Read on every
+   * request, so a rebuild needs no restart.
    */
   const page = (name: string): Handler<unknown> => async ({ req, res }) => {
-    const [html, urls] = await Promise.all([fs.readFile(path.join(publicDir, name), 'utf8'), links()])
-    const linked = html.replace(/(src|href)="(\/[\w-]+\.(?:js|css))"/g, (_, attribute: string, url: string) => {
-      const hashed = urls.get(url)
-      if (!hashed) throw new Error(`${name} links ${url}, which the client build does not produce`)
-      return `${attribute}="${hashed}"`
-    })
-    sendCached(req, res, linked, { 'Content-Type': 'text/html; charset=utf-8' }, 'no-cache')
+    const html = await fs.readFile(path.join(distDir, name), 'utf8')
+    sendCached(req, res, html, { 'Content-Type': 'text/html; charset=utf-8' }, 'no-cache')
   }
   return [
     route('GET', '/', page('index.html')),
