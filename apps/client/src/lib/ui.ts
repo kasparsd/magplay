@@ -225,11 +225,3 @@ export function setError (node: HTMLElement, message: string, retry?: () => void
 
 /** "dd8255ec…" for a heading or label that would otherwise be a 40-character infohash. */
 export const shortHash = (infoHash: string): string => `${infoHash.slice(0, 8)}…`
-
-// The last search, so the header search box keeps it on every page (sessionStorage: per tab, like Back)
-export function lastSearch (): string {
-  try { return sessionStorage.getItem('magplay:q') ?? '' } catch { return '' }
-}
-export function rememberSearch (q: string): void {
-  try { sessionStorage.setItem('magplay:q', q) } catch {}
-}
