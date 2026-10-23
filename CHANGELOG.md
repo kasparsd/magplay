@@ -1,5 +1,18 @@
 # magplay
 
+## 0.4.1
+
+### Patch
+
+- Seeking works again in a file that plays from a growing playlist when its duration can't be read in advance.
+- `@magplay/playback` 0.2.1: Videos with 5.1 or other multichannel audio play on iPhones and other browsers without Media Source Extensions when the server has no ffmpeg, instead of never starting. If that conversion ever stops producing video, playback now fails with an error instead of waiting forever.
+- Videos with 5.1 audio start sooner (about 5 seconds less video to download first) when the browser repackages them itself (a server without ffmpeg).
+- `@magplay/torrent-engine` 0.0.1: Each torrent keeps 2 pieces in memory after a read instead of 20, so a watched torrent no longer holds 70–300 MiB of its pieces afterwards.
+- If a reverse proxy serves dist/client/assets itself, give files without a hash in their name (search.js, style.css) no-cache instead of immutable; see docs/http-caching.md. Hashed chunks stay immutable.
+- The Docker images cap the Node heap at 128 MiB, so the server stays inside a small container's memory limit without extra settings. Set NODE_OPTIONS to change it.
+- Returning to a torrent or title after playback keeps the link back to your results or Explore filters. Settings locks editing while a save is in progress and picks up changes made elsewhere when you return to the tab, keeping unsaved edits. Picture in picture is hidden for videos that forbid it, and the search box no longer takes focus when Back returns to results.
+- `@magplay/playback` 0.2.1: A server without ffmpeg uses about 100 MiB less memory while it converts a video for playback.
+
 ## 0.4.0
 
 ### Minor
