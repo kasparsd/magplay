@@ -1,6 +1,6 @@
 # Vanilla client alternative to the React migration
 
-Status: sketch for comparison, 2026-10-23. Not approved. Branch `claude/vanilla-client`, cut from `2220994` (the Vite build, before any React). The React version to compare against is `codex/react-phase4` (`460b095`). The [React plan](react-client.md) is still the approved one; this branch exists so the owner can choose with both in hand.
+Status: sketch for comparison, 2026-10-23. Not approved. Branch `claude/vanilla-client` ([PR #34](https://github.com/kasparsd/magplay/pull/34)), cut from `2220994` (the Vite build, before any React); Vite has since been replaced by one esbuild command. The React version to compare against is `codex/react-phase4` ([PR #33](https://github.com/kasparsd/magplay/pull/33), `0418ac9`). The [React plan](react-client.md) is still the approved one; this branch exists so the owner can choose with both in hand.
 
 ## Question
 
@@ -24,20 +24,39 @@ The React plan's diagnosis was correct: the Player kept state in module variable
 - **Settings**: `setInterval` plus an on-screen check is now `poll(loadDebug, { when: () => onScreen.size > 0 })`.
 - **Player**: uses `parts()`. Whether Details, Performance and the keys sheet are open now lives in a `ui` object that is written to the DOM and never read back from it.
 
+## Build: esbuild, no Vite
+
+Vite came in for React: the JSX plugin, one shell and a dev server for in-app navigation. Separate pages need none of that, and esbuild already split the lazy hls.js and mediabunny imports. `npm run build` is one esbuild command again. Page scripts and the stylesheet keep their names (`/assets/search.js`, `/assets/style.css`), so the HTML in `apps/client` links them as written and the server serves it unchanged. Neither the build nor the server rewrites links, as the server did before Vite. The chunks they import keep content hashes and stay immutable; entries revalidate with a content ETag, usually a 304. Page routes live only in the server, with no dev-server route list mirroring them. `package-lock.json` is identical to the one from before Vite.
+
+## Review fixes from PR #33
+
+PR #33's review regressions are ported unchanged as `tests/e2e/review.test.js`, so both branches are held to the same behaviour. Six already passed here, because separate pages never had those bugs: facets stay during refresh, retry shows progress on four pages, and fullscreen wakes the controls. The other six needed fixes:
+
+- **Return context after playback and Next**: `returnTarget()` in `lib/back.ts` remembers, per tab, the catalog page that Torrent and Title were opened from. Coming back from the Player still links to Results, the title or the filtered Explore, by URL rather than Back.
+- **Settings during a save**: every control and Discard are locked until the PATCH answers, and a read in flight is cancelled.
+- **Settings on return to the tab**: changes made elsewhere show in unedited fields. Drafts and the focused field are left alone, and Discard returns to the new values.
+- **Cached searches**: saving sources or the search timeout clears them, because private download-link ids change.
+- **Picture in picture**: the controller reports `pipAllowed`, and the menu follows it.
+- **Search focus**: only the empty home page focuses the search box.
+
+Not ported, because they fix problems separate pages don't have: the router-state return context, a mounted search input that keeps its node, recovery from a failed Player chunk load, and StrictMode double activation.
+
 ## Side by side
 
 Line counts of page and view code. Shared pure modules are the same on both branches and left out: the controller, playback-flow, seek, naming, urls and the like.
 
-| Area | Vanilla (this branch) | React (`codex/react-phase4`) |
+| Area | Vanilla (this branch) | React (`codex/react-phase4`, `0418ac9`) |
 | --- | --- | --- |
 | Player view: `player.ts` + status view + performance + `player.html` / `Player.tsx` + `PlaybackFlow` + `Performance` | 769 | 1,276 |
-| Settings: page + controls + HTML / page + `controls.tsx` + `SettingsReadout` | 785 | 990 |
-| Catalog pages: Search, Explore, Torrent, Title (+ HTML) / the same + `Catalog.tsx` | 733 | 1,024 |
-| Shell and shared UI: `ui`, status menu, resource, url-state, view / router, main, TopBar, StatusMenu, ui, query, Menu, CopyButton, Icon, shell | 641 | 550 |
-| **Total** | **2,928** | **3,840** |
+| Settings: page + controls + HTML / page + `controls.tsx` + `SettingsReadout` | 831 | 1,006 |
+| Catalog pages: Search, Explore, Torrent, Title (+ HTML) / the same + `Catalog.tsx` | 739 | 1,048 |
+| Shell and shared UI: `ui`, status menu, back, resource, url-state, view / router, main, TopBar, StatusMenu, ui, status menu, back, query, Menu, CopyButton, Icon, shell | 706 | 577 |
+| **Total** | **3,045** | **3,907** |
+| Build config | the `build` script in `package.json` | `vite.config.js` (35 lines) and the plugin |
+| `package-lock.json` | 5,095 lines | 6,190 lines |
 | Runtime dependencies added | none | react, react-dom, @tanstack/react-router, @tanstack/react-query |
 
-The React branch also includes fixes and features from its PR review: an unsaved-draft navigation guard, catalog retry states, facets that stay visible while refreshing, and PiP restrictions. Some of its extra lines pay for those, not for React itself.
+Both columns include the PR #33 review fixes.
 
 ## What each approach gives
 
@@ -49,6 +68,7 @@ The React branch also includes fixes and features from its PR review: an unsaved
 | URL state | `urlState(schema)` | `validateSearch`, `navigate` |
 | Teardown | a page unload ends everything | each component's effect cleanup, plus `pagehide` for the Player |
 | Preserving focus and open menus | redraw only the parts whose values changed (`parts()`) | DOM diffing |
+| Build and dev loop | one esbuild command; `--watch` plus `node --watch`, reload by hand | Vite build; dev server with hot reload and a proxy to Node |
 | Agent feedback loop | the primitives and view models are tested in Node, in milliseconds | hooks and components have only Playwright (about 4 min) |
 | Familiarity to agents | repo-specific helpers; this doc and their comments explain them | the most common idiom there is, but on library versions newer than most training data |
 
@@ -57,8 +77,10 @@ The React branch also includes fixes and features from its PR review: an unsaved
 - Settings drafts still use the `errorSlots`/`readouts` partial-update maps. The next step would be a per-section `parts()`, so inputs stay mounted.
 - Title still parses its params by hand. It would move to `urlState` and `createCache` like Search.
 - No lint rule yet bans module-level `let` in page files or reading UI state back from the DOM. Both would be cheap to add and would steer agents.
-- No devices, Docker or BFCache checks were run beyond the existing browser suite.
+- No devices, Docker or BFCache checks were run beyond the browser suite. `tools/scripts/check-docker.mjs` was updated for the esbuild entries but not run.
 
 ## Log
 
 - 2026-10-23: Sketched on `2220994`. Typecheck and lint pass; `npm run test:all` passed (334 Node, 4 peer, 80 Chromium tests, browser suite 3.1 min).
+- 2026-10-23: Ported PR #33's review regressions and fixes; `npm run test:all` passed (336 Node, 4 peer, 92 Chromium tests).
+- 2026-10-23: Replaced Vite with one esbuild command and stable entry names, so no build script or link rewriting is needed. `npm run test:all` passed (336 Node, 4 peer, 92 Chromium tests). Docker check not run.

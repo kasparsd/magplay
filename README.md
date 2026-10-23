@@ -447,7 +447,7 @@ policy:** [docs/http-caching.md](docs/http-caching.md).
 ```bash
 npm install
 npm start                 # builds the client, then serves; cache lands in ./data
-npm run dev               # Vite dev server with hot reload on :5173, proxying a restarting server on :8080
+npm run dev               # rebuilds the client and restarts the server on change (reload the page)
 npm run typecheck         # tsc -b over every workspace
 npm run lint              # ESLint (neostandard + type-aware rules), no warnings allowed
 npm run release -- note --patch -m "..."   # add a release note (see docs/releases.md)

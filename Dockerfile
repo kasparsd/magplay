@@ -28,13 +28,13 @@ RUN npm ci --omit=dev \
  && rm -rf node_modules/webtorrent/dist node_modules/xml2js/lib/xml2js.bc.js node_modules/node-datachannel/src \
       node_modules/@opentelemetry/api/build/esm node_modules/@opentelemetry/api/build/esnext
 
-# Full install (dev dependencies: Vite) to build the browser client into dist/client.
+# Full install (dev dependencies: esbuild) to build the browser client into dist/client.
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=manifests /app ./
 RUN npm ci
-# Vite reads each package's tsconfig.json, which extends this one.
-COPY tsconfig.base.json vite.config.js ./
+# esbuild reads each package's tsconfig.json, which extends this one.
+COPY tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN npm run build
@@ -53,6 +53,7 @@ COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY packages ./packages
 COPY apps/server ./apps/server
+COPY apps/client/*.html ./apps/client/
 
 RUN mkdir -p /data && chown node:node /data
 USER node

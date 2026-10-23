@@ -7,7 +7,8 @@ too.
 | Response class | Cache-Control | Validators / reason |
 |---|---|---|
 | HTML pages | `no-cache` | Content ETag; store, but revalidate on each use, so a release shows up on reload. |
-| `/assets/…` bundles (including `hls.js`), stylesheet and source maps | `public, max-age=31536000, immutable` | Content-hashed file names: a release links new URLs, so any cache may keep these for good. Weak metadata ETag and Last-Modified. |
+| Page scripts and the stylesheet (`/assets/search.js`, `/assets/style.css`) and their source maps | `no-cache` | Content ETag. The pages link them by name, so they revalidate like pages; usually a 304. |
+| Shared chunks (`/assets/chunk-…`, `hls.js`, mediabunny) and their source maps | `public, max-age=31536000, immutable` | Content-hashed file names: a release's entry scripts import new URLs, so any cache may keep these for good. Weak metadata ETag and Last-Modified. |
 | Probe API summary | `private, no-cache` | Content ETag; stable media metadata, revalidated for software changes. |
 | Raw torrent files and tar downloads | `private, max-age=3600, must-revalidate` | Strong content-identity ETag; one hour of browser reuse, then revalidate. Range/If-Range retained. |
 | Completed `/subs/…` conversions | `private, no-cache` | Content ETag; revalidate generated output across releases. |
@@ -46,14 +47,14 @@ buffer media streams. This example intentionally does not enable shared caching
 of any API/media.
 
 A caching proxy in front of Node can follow these headers as sent: it must
-revalidate the pages (`no-cache`) and may keep `/assets/…` indefinitely. Never
-give the pages themselves a fresh TTL, or a release keeps serving old pages that
-link the previous release's assets.
+revalidate the pages and entry files (`no-cache`) and may keep hashed chunks
+indefinitely. Never give the pages or entry files a fresh TTL, or a release keeps
+serving old code that imports the previous release's chunks.
 
-The built pages already link the hashed asset names, but the page routes
-(`/play/…`, `/t/…`) live in Node, so let Node serve the pages. A frontend may serve `dist/client/assets/` itself with
-`Cache-Control: public, max-age=31536000, immutable` and proxy everything else
-to Node. Deploy the frontend and backend together. No Node/proxy speedup has been
+The page routes (`/play/…`, `/t/…`) live in Node, so let Node serve the pages. A
+frontend may serve `dist/client/assets/` itself, with `no-cache` for files without a
+hash (`search.js`, `style.css`) and `public, max-age=31536000, immutable` for
+`[name]-[HASH]` files, and proxy everything else to Node. Deploy the frontend and backend together. No Node/proxy speedup has been
 benchmarked.
 
 See also the README's [reverse proxy notes](../README.md#troubleshooting) and
