@@ -39,12 +39,18 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
   const { origin } = await start(t)
   const pages = ['/', '/t/', '/play/ih/0', '/explore', '/title/movie/tmdb/1', '/settings']
   const assets = new Set<string>()
+  let shell: string | undefined
   for (const url of pages) {
     const html = await (await fetch(origin + url)).text()
+    shell ??= html
+    assert.equal(html, shell, 'Every page serves the same shell')
     for (const [, asset] of html.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)) assets.add(asset!)
   }
   // Every page is the one shell; every script and stylesheet it links is content-hashed, so a release changes its URL
-  assert.equal(assets.size, 2)
+  assert.equal([...assets].filter(asset => asset.endsWith('.css')).length, 1)
+  assert.ok([...assets].some(asset => asset.endsWith('.js')))
+  assert.equal([...shell!.matchAll(/<script[^>]+type="module"/g)].length, 1)
+  assert.doesNotMatch(shell!, /modulepreload[^>]+(?:Player-|hls-)/)
   for (const asset of assets) assert.match(asset, /^\/assets\/[\w-]+-[\w-]{8}\.(?:js|css)$/)
   for (const url of [...pages, ...assets, `${[...assets].find(asset => asset.endsWith('.js'))}.map`]) {
     const res = await fetch(origin + url)

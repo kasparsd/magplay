@@ -2,4 +2,4 @@
 "@magplay/server": minor
 ---
 
-Search, Explore and title pages now navigate in-app, keeping cached results and filters when you go Back.
+All pages now navigate in-app, keeping cached search results and filters on Back and closing playback when leaving the Player.

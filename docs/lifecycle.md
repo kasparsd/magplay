@@ -1,14 +1,16 @@
-# Targeted player lifecycle handling
+# Player and browser-view lifetimes
 
-The player stays imperative in `apps/client/src/player.ts`; no controller/framework migration is required for these fixes.
+`apps/client/src/lib/playback-controller.ts` owns playback imperatively. The lazy React `Player.tsx` view creates a controller only after its video element mounts, subscribes with `useSyncExternalStore`, and disposes it on unmount. The route keys the view by infohash and file index, so Next disposes the previous controller before activating the replacement. React StrictMode can mount, dispose and mount again safely; the Vite development browser regression exercises this flow.
 
-- Each page activation owns an AbortController for title/probe requests, playback requests and status polling. `pagehide` aborts them. A restored document starts one new polling loop with a fresh activation/tab ID.
+- Each page activation owns an AbortController for title/probe requests, playback requests and status polling. `suspend()` on `pagehide` aborts them. `dispose()` also removes controller listeners and media-session handlers; `pageshow` with `persisted` calls `activate()` on a suspended controller. A restored document starts one new polling loop with a fresh activation/tab ID.
 - Each playback attempt (the first one, an audio switch or a retry; seeking is not one) owns its HLS callbacks and autoplay results. Superseded attempts cannot update the replacement UI. Playback POSTs remain serialized while the page is active, rather than cancelling them on every audio change and creating out-of-order server mutations.
 - Each subtitle selection owns its request and delay. Switching tracks or leaving cancels both; aborts while reading the response body are handled too.
 - Countdown ownership is explicit: restarting, resuming playback, cancelling or leaving clears its timer and listener.
 - A segment request waits while the server converts it; the browser leaving the request (hls.js aborts it on a seek) cancels only that wait, never the conversion.
 - `POST /api/play/tab/:tab` closes a page activation even if the browser never received its session ID. A bounded, three-minute closed-tab fence rejects a late POST for that activation. A restored activation uses a new ID. The server also checks for a disconnected request before expensive probing/session creation.
 - Known sessions are explicitly stopped on teardown. Server-side idle cleanup remains the fallback for browser crashes, dropped beacons or forced context disposal.
+
+Catalog, torrent metadata/activity, status and Settings queries forward Query cancellation signals and unsubscribe on route departure. Query owns refetch intervals and background-tab suspension. Menu listeners, observers, idle/copy/save timers and keyboard handlers are installed by the owning mounted component and cleaned up with it.
 
 A cancelled HTTP consumer does not destroy a torrent/probe job shared with other consumers. Those jobs remain bounded by concurrency and discovery/checking/process deadlines. Raw/tar readers separately release their piece selection on cancellation.
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useBlocker } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   SECTIONS,
@@ -26,8 +27,7 @@ import { presentSetting } from './lib/setting-rules.ts'
 import { readPreferences, setPreference } from './lib/preferences.ts'
 import type { PreferenceKey } from './lib/preferences.ts'
 import { measureConnection, saveConnection } from './lib/speedtest.ts'
-import { updateBrowserChecks } from './lib/status-menu.ts'
-import { queryClient, statusQuery } from './lib/query.ts'
+import { queryClient, statusQuery, refreshBrowserChecks } from './lib/query.ts'
 import { copy } from './lib/ui.ts'
 import { SettingsReadout } from './components/SettingsReadout.tsx'
 
@@ -46,10 +46,11 @@ function SourceExtras ({
   onResult: (c: StatusCheck) => void
 }): ReactNode {
   const test = useMutation({
-    mutationFn: () => api<StatusCheck>('/api/settings/test', { json: { key: 'sources', item } }),
-    onSuccess: onResult,
+    mutationFn: (candidate: ListItem) => api<StatusCheck>('/api/settings/test', { json: { key: 'sources', item: candidate } }),
+    onSuccess: (result, candidate) => { if (same(candidate, item)) onResult(result) },
   })
-  const current = test.isPending ? { level: 'unknown' as const } : (test.data ?? check)
+  const matches = same(test.variables, item)
+  const current = matches && test.isPending ? { level: 'unknown' as const } : matches && test.error ? { level: 'error' as const, message: test.error.message } : (matches ? test.data ?? check : check)
   const word = current?.level === 'ok' ? 'Working' : current?.level === 'unknown' ? 'Checking' : 'Failed'
   return (
     <>
@@ -67,13 +68,13 @@ function SourceExtras ({
         className='button'
         aria-label={`Test ${host(item.url) || 'source'}`}
         disabled={test.isPending}
-        onClick={() => test.mutate()}
+        onClick={() => test.mutate(item)}
       >
         Test
       </button>
       <span className='sr-only' role='status'>
-        {test.error?.message ??
-          (test.data ? (test.data.level === 'ok' ? 'Working' : (test.data.message ?? 'Failed')) : '')}
+        {(matches ? test.error?.message : undefined) ??
+          (matches && test.data ? (test.data.level === 'ok' ? 'Working' : (test.data.message ?? 'Failed')) : '')}
       </span>
     </>
   )
@@ -131,12 +132,11 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
       removeEventListener('pageshow', expire)
     }
   }, [savedNote])
-  useEffect(() => {
-    if (!dirty) return
-    const before = (e: BeforeUnloadEvent): void => e.preventDefault()
-    addEventListener('beforeunload', before)
-    return () => removeEventListener('beforeunload', before)
-  }, [dirty])
+  useBlocker({
+    disabled: !dirty,
+    enableBeforeUnload: dirty > 0,
+    shouldBlockFn: ({ current, next }) => current.pathname !== next.pathname && !window.confirm('Discard unsaved settings changes?'),
+  })
   const read = (key: string): unknown => (key in draft ? draft[key] : saved.values[key])
   const save = useMutation({
     mutationFn: async (changes: Record<string, unknown>) => {
@@ -155,6 +155,15 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
       return out as SettingsResponse
     },
     onSuccess: (out, changes) => {
+      // These writes rebuild server discovery state, including private download-link ids.
+      const keys = Object.keys(changes)
+      if (keys.some(key => key === 'sources' || key === 'search.timeoutS')) {
+        queryClient.removeQueries({ queryKey: ['search'] })
+        queryClient.removeQueries({ queryKey: ['torrent-discovery'] })
+      }
+      if (keys.some(key => ['sources', 'explore.bitmagnetUrl', 'content.showAdult'].includes(key))) {
+        for (const key of ['explore', 'facets', 'latest', 'title']) queryClient.removeQueries({ queryKey: [key] })
+      }
       queryClient.setQueryData(['settings'], out)
       setSaved(out)
       setDraft({})
@@ -191,8 +200,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
   const action = async (key: string): Promise<string | undefined> => {
     if (key === 'connection.test') {
       saveConnection(await measureConnection())
-      updateBrowserChecks()
-      setEpoch((e) => e + 1)
+      refreshBrowserChecks()
       return undefined
     }
     if (key === 'debug.clearHls') {
@@ -297,6 +305,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
               : def.type === 'list'
                 ? (
                     <ListControl
+                      key={`${id}:${epoch}`}
                       def={def}
                       id={id}
                       value={value}
@@ -305,7 +314,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
                       extras={(item) => (
                         <SourceExtras
                           item={item}
-                          check={status?.checks.find((c) => c.id === `source:${item.id}`)}
+                          check={same(item, ((saved.values.sources as ListItem[] | undefined) ?? []).find(source => source.id === item.id) ?? saved.meta.sources?.locked?.find(source => source.id === item.id)) ? status?.checks.find(c => c.id === `source:${item.id}`) : undefined}
                           onResult={(c) => {
                             setErrors((e) => ({ ...e, sources: c.level === 'ok' ? '' : (c.message ?? '') }))
                             queryClient.invalidateQueries({ queryKey: ['status'] }).catch(console.error)
@@ -347,7 +356,7 @@ function SettingsEditor ({ saved: initialSaved }: { saved: SettingsResponse }): 
           const stored = defs.filter(isValueDef)
           return (
             <section
-              key={`${section.id}:${epoch}`}
+              key={section.id}
               id={section.id}
               className='settings-section'
               aria-labelledby={`${section.id}-title`}

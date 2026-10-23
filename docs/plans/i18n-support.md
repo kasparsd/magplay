@@ -38,7 +38,7 @@ Example catalog entry:
     "message": "{count, plural, =0 {Nothing found.} one {1 result} other {# results}}",
     "description": "Status text showing total torrent search results",
     "origin": [
-      "apps/client/src/search.js:38"
+      "apps/client/src/Search.tsx"
     ],
     "maxLength": 30
   },
@@ -77,7 +77,7 @@ Metadata (`description`, `origin`, `maxLength`) is strictly preserved in version
 - This ensures maximum context during translation with zero payload penalty on low-power servers and mobile browsers.
 
 ### 5. Runtime & Bundle Footprint
-- `magplay` client uses vanilla JS + esbuild with no bulky UI framework (React/Vue).
+- `magplay` client uses strict TypeScript/TSX, React, TanStack Router/Query and Vite. Localization must cover component text and the shared settings schema; no additional UI or state framework is needed.
 - A lightweight client translator module (< 2KB gzip) in `apps/client/src/lib/i18n.js`:
   - Uses `Intl.PluralRules` and `Intl.NumberFormat` natively.
   - Dynamically loads only the active locale JSON or falls back gracefully to embedded English.

@@ -170,7 +170,7 @@ function TorrentBody ({ torrent: t }: { torrent: TorrentInfo }): ReactNode {
           title={`Copy the infohash ${t.infoHash}`}
         />
       </p>
-      <p className='actions'>
+      <div className='actions'>
         {first && (
           <CatalogLink className='button primary' href={urls.player(t.infoHash, first.idx)}>
             ▶ {saved ? 'Resume' : 'Play'}
@@ -202,7 +202,7 @@ function TorrentBody ({ torrent: t }: { torrent: TorrentInfo }): ReactNode {
           <a href={magnet}>Open in your torrent client</a>
           <CopyButton label='Copy magnet link' text={magnet} title='Copy the magnet link' />
         </Menu>
-      </p>
+      </div>
       <Activity status={activity.data} />
       {!t.files.length
         ? (

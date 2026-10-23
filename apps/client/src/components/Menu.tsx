@@ -1,4 +1,4 @@
-// A dropdown menu on <details>, with the same markup and behaviour as ui.ts menu(): see attachMenu().
+// A dropdown on <details>; mounted geometry and document interactions live in attachMenu().
 import { useEffect, useRef } from 'react'
 import type { ReactNode, SyntheticEvent } from 'react'
 import { attachMenu } from '../lib/ui.ts'

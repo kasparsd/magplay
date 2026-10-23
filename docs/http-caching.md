@@ -50,12 +50,11 @@ revalidate the pages (`no-cache`) and may keep `/assets/…` indefinitely. Never
 give the pages themselves a fresh TTL, or a release keeps serving old pages that
 link the previous release's assets.
 
-The built pages already link the hashed asset names, but the page routes
-(`/play/…`, `/t/…`) live in Node, so let Node serve the pages. A frontend may serve `dist/client/assets/` itself with
+Every page route serves the same Vite-built shell, which links hashed scripts, optional shared-runtime module preloads and one stylesheet. Player, hls.js and codec chunks remain lazy. The public page route allowlist (`/`, `/explore`, `/title/…`, `/t/…`, `/play/…`, `/settings`) lives in Node; unrelated paths still return 404, and `/player.html` retains its 301. Let Node serve the shell. A frontend may serve `dist/client/assets/` itself with
 `Cache-Control: public, max-age=31536000, immutable` and proxy everything else
 to Node. Deploy the frontend and backend together. No Node/proxy speedup has been
 benchmarked.
 
-See also the README's [reverse proxy notes](../README.md#troubleshooting) and
-[Configuration](../README.md#configuration).<|end|><|start|>Assistant to=bash<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="path">
-/Users/kaspars/Projects/madplay/docs/dependencies.md
+TanStack Query caching is in-memory browser state, separate from HTTP caching: Search, Explore and Title are fresh for three minutes, torrent metadata stays cached for the tab, and live status/activity/debug data refetches. No Query cache is persisted in sessionStorage or localStorage.
+
+See also the README's [reverse proxy notes](../README.md#troubleshooting) and [Configuration](../README.md#configuration).

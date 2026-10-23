@@ -1,6 +1,6 @@
 # React catalog validation — 2026-10-23
 
-Phase 4 of [the React client plan](../plans/react-client.md), on `codex/react-phase4` from `claude/react-client` at `7eb3531`.
+Phase 4 of [the React client migration](../architecture.md#framework-and-browser-media-triggers), on `codex/react-phase4` from `claude/react-client` at `7eb3531`.
 
 ## Automated evidence
 

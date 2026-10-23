@@ -7,8 +7,8 @@ import { Link } from '@tanstack/react-router'
 import { problems } from '@magplay/api-contract'
 import type { StatusCheck, StatusLevel } from '@magplay/api-contract'
 import { STORAGE_KEYS } from '../lib/preferences.ts'
-import { statusQuery } from '../lib/query.ts'
-import { buttonLabel, HEADLINES, LEVEL_NAMES, summary, updateBrowserChecks } from '../lib/status-menu.ts'
+import { statusQuery, refreshBrowserChecks } from '../lib/query.ts'
+import { buttonLabel, HEADLINES, LEVEL_NAMES, summary } from '../lib/status-menu.ts'
 import type { MergedStatus } from '../lib/status-menu.ts'
 import { Menu } from './Menu.tsx'
 
@@ -17,7 +17,7 @@ const Dot = ({ level, large = false }: { level: StatusLevel, large?: boolean }):
 
 function CheckRow ({ check: c }: { check: StatusCheck }): ReactNode {
   const problem = c.level === 'warn' || c.level === 'error'
-  const action = c.action && <a href={c.action.href}>{`${c.action.label} →`}</a>
+  const action = c.action && <Link to={c.action.href.split('#')[0]!} hash={c.action.href.split('#')[1] ?? ''}>{`${c.action.label} →`}</Link>
   return (
     <li className={`status-check lvl-${c.level}`}>
       <Dot level={c.level} />
@@ -48,7 +48,7 @@ function Panel ({ status }: { status: MergedStatus | null }): ReactNode {
         <div className='menu-heading'>Status</div>
         <ul className='status-checks'>{status.checks.map(c => <CheckRow key={c.id} check={c} />)}</ul>
       </div>
-      <div className='status-foot'><a href='/settings#debug'>Debug details</a></div>
+      <div className='status-foot'><Link to='/settings' hash='debug'>Debug details</Link></div>
     </div>
   )
 }
@@ -57,7 +57,7 @@ export function StatusMenu (): ReactNode {
   const { data: status = null, refetch } = useQuery(statusQuery)
   // A connection test on the settings page (another tab) updates this one
   useEffect(() => {
-    const storage = (e: StorageEvent): void => { if (e.key === STORAGE_KEYS.connection) updateBrowserChecks() }
+    const storage = (e: StorageEvent): void => { if (e.key === STORAGE_KEYS.connection) refreshBrowserChecks() }
     addEventListener('storage', storage)
     return () => { removeEventListener('storage', storage) }
   }, [])

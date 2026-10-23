@@ -464,11 +464,12 @@ Playback tests need `ffmpeg` on `PATH`, with libx264, AAC and AC3 encoders
 `FFMPEG_PATH` pointing nowhere to cover the core image). See [tests/e2e/README.md](tests/e2e/README.md) for coverage,
 debugging and limitations.
 
-Node 24+, ES modules, npm workspaces. The server and packages use strict
-TypeScript. Architecture: [docs/architecture.md](docs/architecture.md).
+The React client uses TanStack Router for in-app URLs and scroll restoration, and TanStack Query for cached server data, polling and mutations. Vite loads the Player view on navigation; hls.js and browser-remux codecs load only when playback needs them. `npm run dev` enables React StrictMode and hot reload, with same-origin API/media proxying to Node.
+
+Node 24+, ES modules, npm workspaces. The server, client and packages use strict TypeScript. Architecture: [docs/architecture.md](docs/architecture.md).
 
 - `apps/server/src/`: the Node service.
-- `apps/client/`: the HTML shell; `src/` has the React entry and router, `components/`, one script per page not yet a component, the stylesheet and `lib/`.
+- `apps/client/`: one HTML shell; `src/` contains TSX page components, the React entry and TanStack Router, shared `components/`, the global stylesheet and `lib/`. The Player is a lazy route over the imperative `PlaybackController`.
 - `packages/`: api-contract, release-info, indexers, torrent-engine, playback,
   seekable-tar, http-kit, observability.
 

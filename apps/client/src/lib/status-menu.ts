@@ -2,7 +2,6 @@
 // GET /api/status, with the browser's own checks (the connection test) merged in. The ['status'] query polls it.
 import { byLevel, overallLevel, problems } from '@magplay/api-contract'
 import type { StatusCheck, StatusLevel, StatusResponse } from '@magplay/api-contract'
-import { api } from './api.ts'
 import { connectionLevel, connectionWarning, readConnection } from './speedtest.ts'
 import { formatSpeed } from './format.ts'
 
@@ -27,40 +26,11 @@ export interface MergedStatus extends StatusResponse {
   reachable: boolean
 }
 
-let current: MergedStatus | null = null
-let lastServer: StatusResponse | null = null
-const listeners = new Set<(status: MergedStatus) => void>()
-
-function merge (server: StatusResponse | null): MergedStatus {
-  const checks = [...(server?.checks ?? []), connectionCheck()]
+/** Merge server checks with the current browser-local connection check. */
+export function mergeStatus (server: StatusResponse | null): MergedStatus {
+  const checks = [...(server?.checks.filter(c => c.id !== 'connection') ?? []), connectionCheck()]
   if (!server) checks.unshift({ id: 'server', label: 'magplay server', required: true, level: 'error', message: 'The server didn’t answer. Is it running?' })
   return { level: overallLevel(checks), checks: checks.sort(byLevel), reachable: !!server }
-}
-
-let inflight: Promise<MergedStatus> | null = null
-/** Fetches /api/status now (sharing a request already in flight) and tells every listener. */
-export function refreshStatus (): Promise<MergedStatus> {
-  inflight ??= api<StatusResponse>('/api/status', { cache: 'no-store' })
-    .then(server => { lastServer = server }, () => { lastServer = null })
-    .then(publish)
-    .finally(() => { inflight = null })
-  return inflight
-}
-
-function publish (): MergedStatus {
-  const status = merge(lastServer)
-  current = status
-  for (const listener of listeners) listener(status)
-  return status
-}
-
-/** Re-merges browser checks without asking the server: after a connection test. */
-export const updateBrowserChecks = (): void => { if (current) publish() }
-
-/** Calls `listener` with every status update (and now, if one is known). The settings page uses this for its nav dots. */
-export function onStatus (listener: (status: MergedStatus) => void): void {
-  listeners.add(listener)
-  if (current) listener(current)
 }
 
 export const HEADLINES: Record<StatusLevel, string> = { ok: 'All good', warn: 'Needs attention', error: 'Something isn’t working', unknown: 'Not checked yet' }

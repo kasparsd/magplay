@@ -1,6 +1,6 @@
 // The Player's icons: inline SVG on a 24 × 24 grid, filled with currentColor. No emoji, no icon font.
 
-const PATHS = {
+export const PATHS = {
   play: 'M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z',
   pause: 'M6 5h4v14H6zM14 5h4v14h-4z',
   back: 'M12 5V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z',
@@ -18,23 +18,3 @@ const PATHS = {
 } as const
 
 export type IconName = keyof typeof PATHS
-
-const SVG = 'http://www.w3.org/2000/svg'
-
-/** An icon for a button. It is decorative: the button carries the accessible name. ±10 s icons include the "10". */
-export function icon (name: IconName): SVGSVGElement {
-  const svg = document.createElementNS(SVG, 'svg')
-  svg.setAttribute('viewBox', '0 0 24 24')
-  svg.setAttribute('aria-hidden', 'true')
-  svg.setAttribute('class', `icon icon-${name}`)
-  const path = document.createElementNS(SVG, 'path')
-  path.setAttribute('d', PATHS[name])
-  svg.append(path)
-  if (name === 'back' || name === 'forward') {
-    const text = document.createElementNS(SVG, 'text')
-    for (const [k, v] of Object.entries({ x: '12', y: '16.6', 'text-anchor': 'middle', 'font-size': '7.5', 'font-weight': '700' })) text.setAttribute(k, v)
-    text.textContent = '10'
-    svg.append(text)
-  }
-  return svg
-}

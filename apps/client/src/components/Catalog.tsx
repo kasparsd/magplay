@@ -20,8 +20,6 @@ export function CatalogLink ({
   return (
     <Link
       to={href}
-      // Player still uses a document-scoped vanilla script until phase 7.
-      reloadDocument={href.startsWith('/play/')}
       onClick={e => {
         if (back && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
           e.preventDefault()

@@ -6,9 +6,7 @@
       "dom",
       "dom.iterable"
     ],
-    "jsx": "react-jsx",
-    "allowJs": true,
-    "checkJs": false
+    "jsx": "react-jsx"
   },
   "exclude": [
     "${configDir}/src/**/*.test.ts"
