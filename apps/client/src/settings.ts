@@ -5,6 +5,7 @@ import type { DebugInfo, ListItem, SectionId, SettingDef, SettingMeta, SettingsE
 import { api, ApiError } from './lib/api.ts'
 import { fillReadout, optionalNote, renderControl } from './lib/controls.ts'
 import type { ControlContext, ReadoutValue } from './lib/controls.ts'
+import { createCache, poll, sessionStore, takeLatest } from './lib/resource.ts'
 import { presentSetting } from './lib/setting-rules.ts'
 import { readPreferences, setPreference } from './lib/preferences.ts'
 import type { PreferenceKey, Preferences } from './lib/preferences.ts'
@@ -29,6 +30,11 @@ const errorSlots = new Map<string, HTMLElement>()
 const readouts = new Map<string, HTMLElement>()
 /** Results of Test buttons, by source item id, until the next status poll. */
 const tested = new Map<string, StatusCheck>()
+
+/** True from PATCH to its answer: editing is locked, and refreshes wait so they can't overwrite the save. */
+let saving = false
+/** Settings reads; a save or a newer read cancels the one in flight. */
+const beginRead = takeLatest()
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
 
@@ -377,9 +383,20 @@ function scrollToHash (): void {
   if (target) target.scrollIntoView()
 }
 
+/** Disables every enabled control in the page and the Discard button; the returned function undoes it. */
+function lockEditing (): () => void {
+  const controls = [...body.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>('input, select, textarea, button'), $<HTMLButtonElement>('#savebar-discard')]
+    .filter(control => !control.disabled)
+  for (const control of controls) control.disabled = true
+  return () => { for (const control of controls) if (control.isConnected) control.disabled = false }
+}
+
 async function save (): Promise<void> {
   const button = $<HTMLButtonElement>('#savebar-save')
   button.disabled = true
+  saving = true
+  beginRead() // a read that started before the PATCH would show the old values
+  const unlock = lockEditing()
   setStatus($('#savebar-status'), 'Saving…', 'busy')
   try {
     const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) })
@@ -397,6 +414,8 @@ async function save (): Promise<void> {
       return
     }
     saved = out as SettingsResponse
+    // These rebuild the server's discovery state, including private download-link ids that cached results point at
+    if ('sources' in draft || 'search.timeoutS' in draft) createCache(sessionStore()).invalidate('search:')
     noteSaved(Object.keys(draft))
     draft = {}
     tested.clear()
@@ -407,8 +426,31 @@ async function save (): Promise<void> {
   } catch (err) {
     setStatus($('#savebar-status'), err instanceof Error ? err.message : 'Saving failed', 'error')
   } finally {
+    saving = false
+    unlock()
     button.disabled = false
   }
+}
+
+/**
+ * Reads the settings again when the tab comes back, in case another tab or the API changed them. Unedited fields show
+ * the new values; drafts stay as typed and Discard returns to the new values. A field being edited keeps its node.
+ */
+async function refresh (): Promise<void> {
+  if (!saved || saving) return
+  const signal = beginRead()
+  const next = await api<SettingsResponse>('/api/settings', { cache: 'no-store', signal }).catch(() => null)
+  if (!next || signal.aborted || saving) return
+  const before = saved
+  saved = next
+  for (const def of SETTINGS) {
+    if (def.scope !== 'server' || !isValueDef(def) || def.key in draft) continue
+    if (same(before.values[def.key], next.values[def.key]) && same(before.meta[def.key], next.meta[def.key])) continue
+    const old = document.getElementById(`row-setting-${def.key.replace(/\./g, '-')}`)
+    if (old && !old.contains(document.activeElement)) old.replaceWith(row(def))
+  }
+  syncPresentation()
+  renderSaveBar()
 }
 
 async function load (): Promise<void> {
@@ -433,7 +475,12 @@ $('#savebar-discard').addEventListener('click', () => {
   setStatus($('#savebar-status'), '')
   render()
 })
-document.addEventListener('visibilitychange', () => { if (!document.hidden) renderSaveBar() })
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return
+  renderSaveBar()
+  refresh().catch(console.error)
+})
+window.addEventListener('focus', () => { refresh().catch(console.error) })
 window.addEventListener('pageshow', () => { renderSaveBar() })
 window.addEventListener('beforeunload', e => { if (Object.keys(draft).length) e.preventDefault() })
 onStatus(next => {
@@ -466,8 +513,6 @@ function watchLiveSections (): void {
     if (node) observer.observe(node)
   }
 }
-setInterval(() => {
-  if (!document.hidden && onScreen.size) loadDebug().catch(console.error)
-}, 5000)
+poll(loadDebug, { everyMs: 5000, when: () => onScreen.size > 0 })
 
 load().catch(console.error)

@@ -51,9 +51,7 @@ Torrent detail requests use `torrent-engine.info()` to describe a ready torrent 
   - `main.ts`: the process: config, app, startup checks (sources, ffmpeg, Explore's counts), listening, and graceful shutdown on SIGTERM/SIGINT.
   - `services/`: play (probe → decide → direct URL, a browser-remux `/raw` URL, or an HLS session), tabs (one session per player tab, and fencing for closed tabs; "tab" is a browser concept), Explore (cache, parameter checks), search (rebuilt when sources change; recognizes magnets before contacting sources, using torrent-engine parsing to return one release without fetching metadata), torrents (adding by private link id), playlists, subtitles, and the status registry and checks.
   - `http/`: routes typed against `api-contract`, request parsing from `unknown`, the error→status mapping, static and built-client serving, `/raw`/`/tar`, `/hls` and the speed test.
-- **`apps/client`**: page entry points (search, explore, title, torrent, player, settings) and UI helpers. Imports API types and codec keys from `api-contract`.
-
-- **`public/`**: static HTML and CSS only; the server links the pages to the hashed builds as it serves them.
+- **`apps/client`**: the HTML pages, their entry scripts in `src/` (search, explore, title, torrent, player, settings), the stylesheet and UI helpers. Imports API types and codec keys from `api-contract`. The Player's playback engine is `src/lib/playback-controller.ts`, which has no DOM rendering; `player.ts` draws its snapshots.
 
 The player's pure `lib/playback-status.ts` diagnoses the current wait; `lib/playback-flow.ts` presents it as four independently observed stages and an attributed wait location. It uses existing status and browser signals, exact selected-file completion, and published HLS readiness. `lib/playback-status-view.ts` retains nodes and controls across updates, including inspection, Diagnostics, focus, and common recovery menus. `player.ts` owns the page-local pin and retains a source-only snapshot for at most six seconds through session restarts; session and browser readiness do not survive those restarts. No new server endpoints or delivery-rate estimates support the flow. See [UI behavior](user-interface.md#playback-wait-explanations).
 
@@ -115,7 +113,7 @@ The lint baseline is `recommendedTypeChecked`, plus exhaustive switches, consist
 Assertions require a nearby invariant or a documented boundary: bounded indices into nonempty collections, successful pattern captures, schema-validated values, owned static markup and deliberately partial test doubles. The sole production double cast bridges Node fetch's async-iterable body and this project's DOM declarations in `indexers/release.ts`. Vendor declarations stay minimal in the consuming package; no explicit `any` is used. Inline lint suppressions must name a rule and explain the reason; the router's `@ts-expect-error` is a deliberate negative type test. The [Phase 7 checkpoint](checkpoints/2026-10-19-typescript-review.md) records the audit and validation.
 
 - **Server:** runs `.ts` directly with Node's built-in type stripping; no emit step. Only erasable TypeScript syntax is allowed (no `enum`, `namespace` or parameter properties).
-- **Client:** TypeScript requires a browser build, so esbuild bundles each page entry and the stylesheet into gitignored `dist/client/assets/` as `[name]-[hash]` files with sourcemaps, plus a metafile (`dist/client/meta.json`). The server reads the metafile (again after each rebuild) and rewrites the pages' `/search.js`-style links to the hashed URLs. `hls.js` becomes an npm import instead of the `/vendor/hls.min.js` global. `tsc` does type checking only.
+- **Client:** one esbuild command (`npm run build`) bundles each page script in `apps/client/src` and the stylesheet into gitignored `dist/client/assets/` with sourcemaps. Entries keep their names (`search.js`, `style.css`), so the pages in `apps/client` link them as written and are served unchanged, with nothing rewritten at build or request time. The chunks they share are `[name]-[hash]`. Entries and pages revalidate with a content ETag; hashed chunks are immutable. Page routes are defined only in the server. hls.js and the mediabunny codec chunks are loaded on demand, only by a Player that needs them. `npm run dev` runs the build with `--watch` next to `node --watch`; reload the page after a change. `tsc` does type checking only.
 - **Node baseline:** 24 LTS.
 - **Container image:** the runtime stage is Alpine 3.24's `nodejs` package. `node:24-alpine` stays the build image only, because the runtime does not need the npm, yarn and headers it adds. The dependency stage keeps the current platform's native prebuild, strips its debug info, and drops other platforms, tests, TypeScript sources and duplicate published builds; Mediabunny accounts for most of that. `magplay` adds Alpine's `ffmpeg` package and no other ffmpeg. Client source maps stay, because the server serves them. Sizes are in [the image-size checkpoint](checkpoints/2026-10-19-docker-image-size.md). Cutting files out of `node_modules` changes the download, not the resident set in [container memory](resources.md#container-memory).
 - **Linting:** ESLint (latest major, pinned, flat config) with typescript-eslint type-aware rules and neostandard for style. neostandard matches the existing code style (no semicolons, space before function parentheses), so no separate formatter is needed. Lint covers:
@@ -125,14 +123,14 @@ Assertions require a nearby invariant or a documented boundary: bounded indices 
 
   `npm run lint` runs in CI next to `typecheck`.
 
-Requirements for the client build, kept from the earlier Vite criteria:
+Requirements for the client build:
 
-- Preserve `/`, `/explore`, `/title/…`, `/t/…` and `/play/…`, ordinary links and reload/Back behavior. No SPA router or SSR.
-- Keep sources and generated output separate; never write into `public/`.
+- Preserve `/`, `/explore`, `/title/…`, `/t/…` and `/play/…`, ordinary links and reload/Back behavior. The client router must keep every one of them working on reload and Back, and the server answers only the listed page routes. No SSR.
+- Keep sources and generated output separate; build output goes only to gitignored `dist/`.
 - Update Node serving, Docker packaging and smoke tests together, and test the production artifact (deep links, `hls.js` loading, playback), not only a dev setup.
-- Revalidate HTML (`no-cache` with a content ETag). Only content-hashed `/assets/…` files are `immutable`, so reverse proxies and browsers pick up a release on the next page revalidation. Preserve media Range/cancellation policies and non-cacheable live responses/errors.
+- Revalidate HTML (`no-cache` with a content ETag). Page scripts and the stylesheet revalidate like pages; only content-hashed chunks are `immutable`, so reverse proxies and browsers pick up a release on the next revalidation. Preserve media Range/cancellation policies and non-cacheable live responses/errors.
 
-Vite remains an option if a dev server or bundled browser-media/WASM dependencies become a need; the requirements above apply to it too. No build system makes decoding or server remuxing faster by itself.
+A Vite build was tried (`2220994`) and dropped on the vanilla client: for separate pages with no component state it added a second dev process with a proxy, a route list mirroring the server's, and a much larger dependency tree, while esbuild already split the lazy hls.js and mediabunny imports. A bundler with a dev server stays an option if hot reload or WASM assets become a need; the requirements above apply to it too. No build system makes decoding or server remuxing faster by itself.
 
 ## Desktop distribution direction
 
@@ -166,7 +164,7 @@ The published Alpine image's ffmpeg includes VAAPI and, on x86_64, Quick Sync su
 
 ## Framework and browser-media triggers
 
-Preact is a conditional option, not a chosen destination. Consider it only if shared reactive state or component composition becomes the dominant maintenance problem. Keep the media controller imperative even if a framework eventually owns its surrounding shell. The player's lifecycle and abort ownership is described in [lifetime rules](lifecycle.md).
+The trigger for a framework, shared reactive state and component composition becoming the dominant maintenance problem, was reached in the Player and Settings. The client is moving to React with TanStack Router and Query, built by Vite; see [the React client plan](plans/react-client.md). The media controller stays imperative, a plain TypeScript class that React only renders. The player's lifecycle and abort ownership is described in [lifetime rules](lifecycle.md).
 
 Browser remuxing exists for servers without ffmpeg (see [Probe and playback modes](#probe-and-playback-modes)); when ffmpeg is present the server still remuxes, because it works in every browser and costs the client nothing. Browsers can't reach ordinary TCP/UDP swarms, so browser torrenting still needs compatible peers or a bridge. Cross-origin hosting and general browser video transcoding are not current requirements.
 

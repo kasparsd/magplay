@@ -43,16 +43,21 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     const html = await (await fetch(origin + url)).text()
     for (const [, asset] of html.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css))"/g)) assets.add(asset!)
   }
-  // Every script and stylesheet a page links is content-hashed, so a release changes its URL
+  // Pages link each page's script and the stylesheet by name; those revalidate like pages, and the chunks they
+  // import are content-hashed, so a release changes their URLs
   assert.ok(assets.size >= 7)
-  for (const asset of assets) assert.match(asset, /^\/assets\/[\w-]+-[A-Z0-9]{8}\.(?:js|css)$/)
-  for (const url of [...pages, ...assets, `${[...assets][0]}.map`]) {
+  for (const asset of assets) assert.match(asset, /^\/assets\/[a-z]+\.(?:js|css)$/)
+  const entry = await (await fetch(`${origin}/assets/player.js`)).text()
+  const chunks = [...entry.matchAll(/"\.\/([\w-]+-[A-Z0-9]{8}\.js)"/g)].map(([, chunk]) => `/assets/${chunk!}`)
+  assert.ok(chunks.length > 0, 'entries import hashed chunks')
+  const hashed = (url: string): boolean => /-[A-Z0-9]{8}\.js(?:\.map)?$/.test(url)
+  for (const url of [...pages, ...assets, '/assets/player.js.map', chunks[0]!, `${chunks[0]!}.map`]) {
     const res = await fetch(origin + url)
     assert.equal(res.status, 200, url)
-    assert.equal(res.headers.get('cache-control'), url.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache', url)
+    assert.equal(res.headers.get('cache-control'), hashed(url) ? 'public, max-age=31536000, immutable' : 'no-cache', url)
     const etag = res.headers.get('etag')
     assert.ok(etag)
-    if (!url.startsWith('/assets/')) assert.doesNotMatch(etag, /^W\//, 'page validators hash the content')
+    if (!hashed(url)) assert.doesNotMatch(etag, /^W\//, 'revalidated files hash the content')
     const length = res.headers.get('content-length')
     assert.ok((await res.text()).length > 0, url)
     const cached = await fetch(origin + url, { headers: { 'If-None-Match': `"old", ${etag.replace(/^W\//, '')}` } })
@@ -64,7 +69,7 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     assert.equal(head.headers.get('content-length'), length)
     assert.equal(await head.text(), '')
   }
-  for (const [url, status] of [['/t/%ZZ', 400], ['/playlistXm3u', 404], ['/search.js', 404], ['/style.css', 404], ['/assets/search.js', 404], ['/assets/..%2Fexplore.html', 404], ['/api/search', 400], ['/api/torrents/bad', 400], ['/api/explore', 404], ['/lib/api.js', 404], ['/lib/api-types.js', 404], ['/vendor/hls.min.js', 404], ['/lib/api.test.js', 404], ['/lib/requests.test.js', 404], ['/lib/capabilities.test.js', 404], ['/lib/subtitles.test.js', 404], ['/lib/progress.test.js', 404]] as const) {
+  for (const [url, status] of [['/t/%ZZ', 400], ['/playlistXm3u', 404], ['/search.js', 404], ['/style.css', 404], ['/index.html', 404], ['/src/search.js', 404], ['/src/style.css', 404], ['/assets/api.js', 404], ['/assets/search-ABCDEFGH.js', 404], ['/assets/..%2Fexplore.html', 404], ['/api/search', 400], ['/api/torrents/bad', 400], ['/api/explore', 404], ['/lib/api.js', 404], ['/lib/api-types.js', 404], ['/vendor/hls.min.js', 404], ['/lib/api.test.js', 404], ['/lib/requests.test.js', 404], ['/lib/capabilities.test.js', 404], ['/lib/subtitles.test.js', 404], ['/lib/progress.test.js', 404]] as const) {
     const res = await fetch(origin + url)
     assert.equal(res.status, status, url)
     assert.equal(res.headers.get('cache-control'), 'no-store')

@@ -1,186 +1,119 @@
-import Hls from 'hls.js'
-// The player page, /play/<infohash>/<file index>. One chrome over the video for every playback mode:
-// direct files play from /raw, a browser remux repackages /raw in the page, and remux and transcode go through
-// an HLS playlist that covers the whole file. In every mode video.currentTime is the position in the file and
-// seeking is a normal seek; whatever converts (the page or the server) starts from where it is asked to.
-import type { PlaybackDecision, ProbeResult, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@magplay/api-contract'
-import { api } from './lib/api.ts'
-import type { ApiError } from './lib/api.ts'
-import type { BrowserRemux } from './lib/browser-remux.ts'
-import { browserCanRemux, measureCaps } from './lib/capabilities.ts'
+// The player page, /play/<infohash>/<file index>. One chrome over the video for every playback mode; the playback
+// itself (sessions, hls.js, browser remux, subtitles, polling, the countdown) is the PlaybackController, and this page
+// draws its snapshots. Each part of the page is redrawn only when the snapshot values it shows have changed, so open
+// menus stay open and focus stays put.
 import { icon } from './lib/icons.ts'
-import { pickByLanguage, releaseName } from './lib/naming.ts'
-import { performanceView, record } from './lib/performance.ts'
-import type { PerfSample } from './lib/performance.ts'
+import { releaseName } from './lib/naming.ts'
+import { performanceView } from './lib/performance.ts'
+import { fileLabel, fileRanges, isLocal, nothingToPlay, PlaybackController, playbackSignals, sessionStatus } from './lib/playback-controller.ts'
+import type { Overlay } from './lib/playback-controller.ts'
+import { playbackPresentation } from './lib/playback-flow.ts'
+import { playbackStatusView } from './lib/playback-status-view.ts'
 import { factRows } from './lib/player-facts.ts'
 import { keyCommand } from './lib/player-keys.ts'
 import type { PlayerCommand } from './lib/player-keys.ts'
-import { SPEEDS, savedSpeed, speedLabel, steppedSpeed } from './lib/player-speed.ts'
-import { audioTrackLabel, audioTrackName, preferredSubtitle, subtitleOptions } from './lib/player-tracks.ts'
-import type { SubtitleOption } from './lib/player-tracks.ts'
-import { parseVtt } from './lib/subtitles.ts'
-import { progressKey, progressEntry, resumePosition } from './lib/progress.ts'
-import { layerBackground, seekHint, seekOutcome, seekTarget, spans } from './lib/seek.ts'
-import { $, copyButton, el, episodeLabel, fill, formatClock as clock, menu, menuChoice, menuHeading, menuSeparator, recall, remember } from './lib/ui.ts'
+import { SPEEDS, speedLabel } from './lib/player-speed.ts'
+import { audioTrackLabel, audioTrackName } from './lib/player-tracks.ts'
+import { layerBackground, seekHint, seekOutcome } from './lib/seek.ts'
+import { $, copyButton, el, episodeLabel, fill, formatClock as clock, menu, menuChoice, menuHeading, menuSeparator } from './lib/ui.ts'
 import type { Child } from './lib/ui.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
-
-import { serialLatest, delay as sleep } from './lib/requests.ts'
-import { playbackPresentation } from './lib/playback-flow.ts'
-import type { PlaybackAction, PlaybackPhase, PlaybackProblem } from './lib/playback-status.ts'
-import { playbackStatusView } from './lib/playback-status-view.ts'
+import { parts } from './lib/view.ts'
 import './lib/topbar.ts'
 
-/** The server's decision for the current session; `complete` is set while no ffmpeg is running for it. */
-type Current = PlaybackDecision & { complete?: boolean }
-/** A rejected play() or a failed request: DOMException, ApiError or a network error. */
-type Failure = Partial<ApiError> & { name: string, message: string }
-
-const requestPlayback = serialLatest()
 const video = $<HTMLVideoElement>('#video')
 const stage = $('#stage')
+const seek = $<HTMLInputElement>('#seek')
 const [, , ih = '', idxPart] = location.pathname.split('/')
 const idx = Number(idxPart)
-let tab = Math.random().toString(36).slice(2) // new id for each document activation
-let pageLife = new AbortController()
-let playLife: AbortController | null = null
-let subtitleLife: AbortController | null = null
-let cancelNext = (): void => {}
-let lastProgressSave = 0
-
-let info: ProbeResult | null = null
-let cur: Current | null = null
-let hls: Hls | null = null
-let remux: BrowserRemux | null = null // the in-page conversion in browser-remux mode
-let audio = 0
-let generation = 0 // bumped on every (re)start so stale async work stops
-let pendingPosition = 0 // keep the intended position while a replacement request is in flight
-let deferredSeek = 0 // a growing playlist starts at the beginning: where to jump once it has been converted that far
-let starting = '' // what the busy spinner says until playback resumes ("Switching audio…")
-let searchTitle = ''
-let file: TorrentFileInfo | undefined // this file's entry from the torrent's file list
-let next: TorrentFileInfo | null = null // the next video in the torrent, if any
-let lastStatus: TorrentStatus | null = null // the latest /status poll, for the details panel and the seek bar
-let sourceSnapshot: { status: Extract<TorrentStatus, { loaded: true }>, at: number } | null = null
-const history: PerfSample[] = [] // the last 3 minutes of status polls, for the Performance lanes
-let stalled = false // waiting for data right now
-let stallSeen = false // waited at some point since the last sample
-let playbackPhase: PlaybackPhase = 'loading'
-let playbackProblem: PlaybackProblem | null = null
-let waitingAt = Date.now()
-let statusAt = 0
-let slowSamples = 0
+const player = new PlaybackController({ ih, idx, video })
+let snap = player.getSnapshot()
 let flowPinned = false
-const subTrack = video.addTextTrack('subtitles', 'Subtitles')
+let dragging = false
+
+const button = (label: string, onclick: () => void, primary?: boolean): HTMLButtonElement => el('button', { type: 'button', className: `button${primary ? ' primary' : ''}`, textContent: label, onclick })
+const linkButton = (label: string, href: string, primary?: boolean): HTMLAnchorElement => el('a', { className: `button${primary ? ' primary' : ''}`, href, textContent: label })
+
+const { when, forget } = parts()
+/** View state the snapshot doesn't have. Kept here and written to the DOM, never read back from it. */
+const ui = { details: false, performance: false, keys: false }
+
 const showPlaybackStatus = playbackStatusView($('#playback-status'), $('#playback-announcement'), name => {
-  if (name === 'retry') return button('Try again', () => { if (info) start(position()).catch(console.error); else retryInfo() }, true)
-  if (name === 'play') return button('Play', togglePlay, true)
-  if (name === 'release') return linkButton('Choose another release', urls.search(searchTitle))
-  if (!file) return null
+  if (name === 'retry') return button('Try again', () => { player.retry() }, true)
+  if (name === 'play') return button('Play', () => { player.togglePlay() }, true)
+  if (name === 'release') return linkButton('Choose another release', urls.search(snap.torrent ? releaseName(snap.torrent.name) : ''))
+  if (!snap.file) return null
   return menu('Open in player', [
-    ...playerApps(ih, idx, file.name).map(([text, href]) => el('a', { textContent: text, href })),
-    copyButton('Copy stream link', streamUrl(ih, idx, file.name)),
+    ...playerApps(ih, idx, snap.file.name).map(([text, href]) => el('a', { textContent: text, href })),
+    copyButton('Copy stream link', streamUrl(ih, idx, snap.file.name)),
   ], { className: 'button playback-external' })
 }, toggleFlowPin)
 
 function toggleFlowPin (): void {
   flowPinned = !flowPinned
-  renderPlaybackStatus()
-  renderMore()
+  render()
   wake()
 }
 
-/** Direct and browser-remux play the whole file's timeline locally: no server session, seeking inside the browser. */
-const isLocal = (decision: { mode: string } | null | undefined): boolean => decision?.mode === 'direct' || decision?.mode === 'browser-remux'
-
-/** The file's ranges on the server, from the latest poll. */
-const fileRanges = (): Array<[number, number]> | null => lastStatus?.loaded ? lastStatus.file?.ranges ?? null : null
-/** The current HLS session's status from the latest poll. */
-const sessionStatus = (): TorrentStatus['session'] => cur?.session && lastStatus?.session?.id === cur.session ? lastStatus.session : null
-
-function setPlaybackPhase (phase: PlaybackPhase): void {
-  if (!['playing', 'paused', 'idle', 'error'].includes(phase) && ['playing', 'paused', 'idle', 'error'].includes(playbackPhase)) waitingAt = Date.now()
-  playbackPhase = phase
-  renderPlaybackStatus()
-}
-
-function failPlayback (title: string, description: string, actions: PlaybackAction[] = ['retry', 'external']): void {
-  playbackProblem = { title, description, actions }
-  setPlaybackPhase('error')
+function render (): void {
+  snap = player.getSnapshot()
+  const s = snap
+  when('title', [s.torrent, s.file, s.next], renderTitle)
+  when('aspect', [s.info], setAspect)
+  when('overlay', [s.overlay], () => { renderOverlay(s.overlay) })
+  if (s.active) renderPlaybackStatus()
+  when('play', [s.media.paused, nothingToPlay(s)], renderPlayButton)
+  when('volume', [s.media.muted, s.media.volume], renderVolume)
+  when('audio', [s.info, s.audio], renderAudioMenu)
+  when('subtitles', [s.subtitleOptions, s.subtitles], renderSubtitlesMenu)
+  when('speed', [s.media.rate], renderSpeedMenu)
+  when('more', [s.file, s.media.pip, s.media.pipAllowed, s.media.rate, flowPinned], renderMore)
+  if (ui.details) when('facts', [s.decision, s.file, s.info, s.audio, s.status], renderFacts)
+  if (ui.performance) when('performance', [s.history, s.decision], renderPerformance)
+  updateTimeline()
 }
 
 function renderPlaybackStatus (): void {
-  if (pageLife.signal.aborted) return
-  const now = Date.now()
-  const model = playbackPresentation({
-    phase: playbackPhase,
-    decision: cur,
-    status: lastStatus,
-    statusAge: statusAt ? now - statusAt : now - waitingAt,
-    waitingMs: now - waitingAt,
-    buffer: bufferedAhead(),
-    position: video.currentTime,
-    rate: video.playbackRate,
-    slowSamples,
-    problem: playbackProblem,
-    ...(sourceSnapshot ? { source: { status: sourceSnapshot.status, age: now - sourceSnapshot.at } } : {}),
-    ...(remux ? { remux: remux.stats() } : {}),
-  }, flowPinned)
-  if (model && !file) model.actions = model.actions.filter(name => name !== 'external' && name !== 'release')
-  showPlaybackStatus(model, now - waitingAt, starting ? `${starting} · Waiting ${Math.floor((now - waitingAt) / 1000)} s` : '')
-  renderPlayButton()
+  const s = snap
+  const model = playbackPresentation(playbackSignals(s), flowPinned)
+  if (model && !s.file) model.actions = model.actions.filter(name => name !== 'external' && name !== 'release')
+  const waiting = s.now - s.waitingAt
+  showPlaybackStatus(model, waiting, s.starting ? `${s.starting} · Waiting ${Math.floor(waiting / 1000)} s` : '')
   stage.classList.toggle('has-playback-wait', !!model && model.kind !== 'warning' && model.kind !== 'debug' && model.key !== 'brief')
   if (model && model.kind !== 'warning' && model.kind !== 'debug') stage.classList.remove('idle')
 }
 
-async function tickPlaybackStatus (signal = pageLife.signal): Promise<void> {
-  while (!signal.aborted) {
-    renderPlaybackStatus()
-    try { await sleep(1000, signal) } catch { return }
+/** Messages on the video: a chip ('busy' spinner, 'notice', 'warn') or a centred card with actions. */
+function renderOverlay (overlay: Overlay | null): void {
+  const box = $('#overlay')
+  if (!overlay) return fill(box)
+  const card = (text: string, ...actions: HTMLElement[]): void => fill(box, el('div', { className: 'card' }, el('p', { textContent: text }), el('p', { className: 'actions' }, ...actions)))
+  switch (overlay.kind) {
+    case 'resume':
+      return card(`Resume from ${clock(overlay.at)}?`,
+        button('Resume', () => { player.playFrom(overlay.at) }, true),
+        button('Start over', () => { player.startOver() }))
+    case 'countdown':
+      return card(`Next: ${fileLabel(overlay.next)} in ${overlay.left} s`,
+        linkButton('Play now', urls.player(ih, overlay.next.idx), true),
+        button('Cancel', () => { player.cancelCountdown() }))
+    case 'missing':
+      // Retrying can't help, so offer only the way back and hide the empty controls
+      ui.details = ui.performance = false
+      for (const sel of ['#title-actions', '#details', '#performance', '#chrome']) $(sel).hidden = true
+      return card(overlay.message, linkButton('Back to files', urls.torrent(ih), true))
+    case 'busy': case 'notice': case 'warn':
+      return fill(box, el('div', { className: `toast ${overlay.kind}` }, overlay.text))
   }
 }
 
-// Remembered choices, in localStorage through recall()/remember() (stored as "magplay:<key>"):
-//   player:volume            0–1
-//   player:muted             true | false
-//   player:speed             playback rate, 1 = normal
-//   player:audioLanguage     language code of the last chosen audio track ("eng"), or null
-//   player:subtitleLanguage  language code of the last chosen subtitles, "off", or "any" for a track without a language
-const PREF = { volume: 'player:volume', muted: 'player:muted', speed: 'player:speed', audio: 'player:audioLanguage', subtitles: 'player:subtitleLanguage' }
-
-/**
- * Messages on the video itself: 'busy' (spinner in the middle), 'notice' and 'warn' (chips, with optional
- * link buttons), or a centred card with actions for errors and questions. An empty text clears it.
- */
-function notify (text: string, kind: 'busy' | 'notice' | 'warn' | 'error' = 'notice', actions: HTMLElement[] = []): void {
-  const overlay = $('#overlay')
-  if (!text) return fill(overlay)
-  if (kind === 'error') {
-    setPlaybackPhase('idle') // resume/countdown prompts own the stage until answered
-    return fill(overlay, el('div', { className: 'card' }, el('p', { textContent: text }), actions.length > 0 && el('p', { className: 'actions' }, ...actions)))
-  }
-  fill(overlay, el('div', { className: `toast ${kind}` }, text, ...actions))
-}
-
-const button = (label: string, onclick: () => void, primary?: boolean): HTMLButtonElement => el('button', { type: 'button', className: `button${primary ? ' primary' : ''}`, textContent: label, onclick })
-const linkButton = (label: string, href: string, primary?: boolean): HTMLAnchorElement => el('a', { className: `button${primary ? ' primary' : ''}`, href, textContent: label })
-
-/** A file number this torrent doesn't have: retrying can't help, so offer only the way back and hide the empty controls. */
-function missingFile (err: Failure): void {
-  for (const sel of ['#title-actions', '#details', '#performance', '#chrome']) $(sel).hidden = true
-  return notify(err.message, 'error', [linkButton('Back to files', urls.torrent(ih), true)])
-}
-
-const fileLabel = (f: TorrentFileInfo): string => episodeLabel(f) || baseName(f.name)
-
-/** Names the page after the file, links back to its torrent, offers external players and finds the next episode. */
-async function loadTitle (signal = pageLife.signal): Promise<void> {
+/** Names the page after the file, links back to its torrent, offers external players and the next episode. */
+function renderTitle (): void {
+  const { torrent: t, file, next } = snap
   $<HTMLAnchorElement>('#back').href = urls.torrent(ih)
-  const t = await api<TorrentInfo>(`/api/torrents/${ih}`, { signal }).catch(() => null)
-  if (signal.aborted) return
-  file = t?.files.find(x => x.idx === idx)
-  if (t) { $('#back').textContent = `← ${t.name}`; searchTitle = releaseName(t.name) }
-  if (!t || !file) return
+  if (!t) return
+  $('#back').textContent = `← ${t.name}`
+  if (!file) return
   // The title is the release's name and episode ("Fleabag · S01E01"); the file name is in Details
   const title = [releaseName(t.name), episodeLabel(file)].filter(Boolean).join(' · ')
   $('#title').textContent = title
@@ -192,9 +125,6 @@ async function loadTitle (signal = pageLife.signal): Promise<void> {
     ...playerApps(ih, idx, file.name).map(([text, href, title = '']) => el('a', { href, title, textContent: text })),
     copyButton('Copy stream link', streamUrl(ih, idx, file.name), 'Copy the stream link for any player'),
   ], { className: 'button' }))
-  // The file list is sorted by season and episode, so the next video is the next entry
-  const videos = t.files.filter(f => f.isVideo)
-  next = videos[videos.findIndex(f => f.idx === idx) + 1] ?? null
   if (next) {
     const name = `Next: ${fileLabel(next)}`
     const link = $<HTMLAnchorElement>('#next')
@@ -202,282 +132,17 @@ async function loadTitle (signal = pageLife.signal): Promise<void> {
     link.setAttribute('aria-label', name)
     fill(link, el('span', { className: 'pill wide-only', textContent: name }), el('span', { className: 'narrow-only' }, icon('next')))
   }
-  renderMore()
-  setMediaSession(t, file)
-  renderFacts()
-  renderPlaybackStatus()
-}
-
-/** At the end of a video: play the next one after 10 s unless cancelled. */
-function countdownToNext (): void {
-  cancelNext()
-  if (!next || pageLife.signal.aborted) return
-  const upcoming = next
-  const target = urls.player(ih, upcoming.idx)
-  let left = 10
-  const timer = setInterval(() => {
-    if (--left <= 0) { cancel(); location.href = target } else render()
-  }, 1000)
-  const cancel = (): void => {
-    clearInterval(timer)
-    video.removeEventListener('play', cancel)
-    cancelNext = () => {}
-    notify('')
-  }
-  cancelNext = cancel
-  const render = (): void => notify(`Next: ${fileLabel(upcoming)} in ${left} s`, 'error',
-    [linkButton('Play now', target, true), button('Cancel', cancel)])
-  render()
-  video.addEventListener('play', cancel, { once: true })
 }
 
 /** The ⓘ panel: how this file is being played, and how the torrent is doing. */
 function renderFacts (): void {
-  const rows = factRows({ decision: cur, file, info, audio, status: lastStatus, buffered: bufferedAhead() })
+  const rows = factRows({ decision: snap.decision, file: snap.file ?? undefined, info: snap.info, audio: snap.audio, status: snap.status, buffered: snap.media.ahead })
   fill($('#facts'), ...rows.flatMap(([k, value]) => [el('dt', { textContent: k }), el('dd', { textContent: value })]))
 }
 
-const caps = measureCaps(video, window)
-const browserRemux = browserCanRemux(window)
-
-/** Before the media has loaded, the position playback was asked to start at. */
-const position = (): number => cur && video.readyState > 0 ? video.currentTime : pendingPosition
-/**
- * A growing HLS playlist (no keyframe index) can be seeked only as far as the server has converted; null for other
- * files. The browser's seekable range lags the server and isn't kept for a live playlist that has since ended.
- */
-function growingEnd (): number | null {
-  if ((cur?.mode !== 'remux' && cur?.mode !== 'transcode') || !cur.growing) return null
-  return Math.max(sessionStatus()?.ready.at(-1)?.[1] ?? 0, spans(video.seekable).at(-1)?.[1] ?? 0)
-}
-/** The whole file's duration: HLS sessions only know their own part, and direct decisions may not know it at all. */
-const duration = (): number => cur?.duration || info?.duration || (isLocal(cur) && Number.isFinite(video.duration) ? video.duration : 0)
-/** Seconds the browser has buffered past the playhead. */
-function bufferedAhead (): number {
-  const now = video.currentTime
-  const range = spans(video.buffered).find(([a, b]) => now >= a - 0.5 && now <= b)
-  return range ? range[1] - now : 0
-}
-
-function persistProgress (force = false, ended = false): void {
-  if (!cur || video.readyState < 2) return
-  const now = Date.now()
-  if (!force && now - lastProgressSave < 5000) return
-  // A growing HLS playlist's local duration is not the whole file duration.
-  const total = cur.duration ?? (isLocal(cur) ? video.duration : null)
-  const entry = progressEntry(position(), total, { ended, at: now })
-  if (entry) {
-    remember(progressKey(ih, idx), entry)
-    lastProgressSave = now
-  }
-}
-
-function teardown (): void {
-  playLife?.abort()
-  subtitleLife?.abort()
-  cancelNext()
-  hls?.destroy()
-  hls = null
-  remux?.dispose()
-  remux = null
-  if (cur?.session) navigator.sendBeacon(`/api/play/${cur.session}`)
-  video.removeAttribute('src')
-  video.load()
-}
-
-/**
- * Asks the server how to play from `at` seconds and loads the result.
- * `message` is what the spinner says until the video plays again, such as "Switching audio…".
- */
-async function start (at = 0, message = ''): Promise<void> {
-  if (pageLife.signal.aborted) return
-  const gen = ++generation
-  pendingPosition = at
-  starting = message
-  teardown()
-  const signal = (playLife = new AbortController()).signal
-  const requestTab = tab
-  const pageSignal = pageLife.signal
-  const current = (): boolean => gen === generation && !signal.aborted
-  cur = null
-  lastStatus = null
-  statusAt = 0
-  slowSamples = 0
-  playbackProblem = null
-  waitingAt = Date.now()
-  notify('')
-  setPlaybackPhase('starting')
-  const selectedAudio = audio
-  let decision: Current
-  try {
-    const result = await requestPlayback(async current => {
-      if (gen !== generation) return null
-      const result = await api<PlaybackDecision>('/api/play', { json: { ih, idx, audio: selectedAudio, start: at, caps, browserRemux, tab: requestTab }, signal: pageSignal })
-      if (!current() || gen !== generation) {
-        if (result.session) navigator.sendBeacon(`/api/play/${result.session}`)
-        return null
-      }
-      return result
-    })
-    if (gen !== generation || !result) return
-    decision = cur = result
-    lastStatus = null // discard polls from before this session existed
-    statusAt = 0
-  } catch (error) {
-    if (!current()) return
-    const err = error as Failure
-    cur = null
-    if (err.status === 404) return missingFile(err)
-    return failPlayback(err.status === 422 ? 'This browser cannot play this video' : 'Playback could not start', err.message,
-      err.status === 422 ? ['external', 'release'] : ['retry', 'external'])
-  }
-  if (gen !== generation) return
-  updateTimeline()
-
-  let startPlayback = true
-  if (decision.mode === 'direct') {
-    video.src = decision.url
-    if (at) video.currentTime = at
-  } else if (decision.mode === 'browser-remux') {
-    setPlaybackPhase('playlist')
-    try {
-      const { startBrowserRemux } = await import('./lib/browser-remux.ts')
-      const started = await startBrowserRemux(video, { url: decision.url, audio: decision.audio, duration: decision.duration, start: at, onError: (title, detail) => { if (current()) failPlayback(title, detail) } })
-      if (!current()) { started.dispose(); return }
-      remux = started
-    } catch (err) {
-      if (current()) failPlayback('This browser could not repackage the file', (err as Failure).message, ['external', 'release'])
-      return
-    }
-    if (at) video.currentTime = at
-  } else {
-    // The playlist covers the whole file, except a growing one, which starts at the beginning
-    const from = decision.growing ? 0 : at
-    deferredSeek = decision.growing ? at : 0
-    if (deferredSeek) notify(`This file is converted from the start. Playback jumps to ${clock(at)} when conversion gets there.`)
-    setPlaybackPhase('playlist')
-    // Safari plays HLS (and HEVC) natively; other browsers use hls.js
-    if (!Hls.isSupported() || (navigator.vendor.includes('Apple') && video.canPlayType('application/vnd.apple.mpegurl'))) {
-      video.src = decision.url
-      if (from) video.addEventListener('loadedmetadata', () => { if (current()) video.currentTime = from }, { once: true, signal })
-    } else {
-      // hls.js only attaches a media source after it has parsed the manifest, so
-      // calling play() synchronously here can be lost on slower or incomplete streams.
-      startPlayback = false
-      // A segment the server hasn't converted yet answers once it has, which can take a while on a slow torrent
-      const patient = { maxTimeToFirstByteMs: 120_000, maxLoadTimeMs: 300_000, timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 }, errorRetry: { maxNumRetry: 3, retryDelayMs: 1000, maxRetryDelayMs: 8000 } }
-      const player = hls = new Hls({ startPosition: from, maxBufferLength: 60, fragLoadPolicy: { default: patient } })
-      player.on(Hls.Events.ERROR, (_, data) => { if (current() && data.fatal) failPlayback('Playback stopped', `Playback error: ${data.details}`) })
-      player.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (!current()) return
-        video.play().catch(handlePlayError)
-      })
-      player.loadSource(decision.url)
-      player.attachMedia(video)
-    }
-  }
-  renderFacts()
-  const handlePlayError = (err: unknown): void => {
-    if (!current()) return
-    if (!(err instanceof Error) || err.name !== 'NotAllowedError') return failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
-    video.muted = true
-    autoMuted = true
-    video.play().then(() => { if (current()) notify('Muted: autoplay with sound was blocked. Click the video or press M to unmute.') },
-      (err: unknown) => {
-        if (!current()) return
-        if (err instanceof Error && err.name === 'NotAllowedError') setPlaybackPhase('blocked')
-        else failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
-      })
-  }
-  // Browsers may block autoplay with sound until the page has been clicked; start muted then
-  if (startPlayback) video.play().catch(handlePlayError)
-  loadSubtitles(gen).catch(console.error)
-}
-
-/** Jumps to time `t`; the server converts from there if it must. The seek tooltip predicts the outcome through seekOutcome(). */
-function seekTo (t: number): void {
-  if (!cur) return
-  deferredSeek = 0
-  // A browser remux restarts its own conversion when the target isn't buffered; the server does for HLS
-  video.currentTime = seekTarget(Math.max(0, Math.min(t, (duration() || Infinity) - 1)), growingEnd())
-}
-
-// Subtitles share one text track. Parsing is pure; polling and adding new cues are owned by this page.
-// All cues are on the file's timeline.
-let subtitleRun = 0
-let subsChoice = '' // '' (off), 'embedded:<n>' or 'file:<idx>'
-let lastSubs = '' // the last track turned on, for C
-let subOptions: SubtitleOption[] = []
-async function loadSubtitles (gen = generation): Promise<void> {
-  subtitleLife?.abort()
-  const signal = (subtitleLife = new AbortController()).signal
-  const run = ++subtitleRun
-  for (const cue of [...(subTrack.cues ?? [])]) subTrack.removeCue(cue)
-  const choice = subsChoice
-  subTrack.mode = choice ? 'showing' : 'hidden'
-  if (!choice || !cur) return
-  const session = cur
-  const [kind, n] = choice.split(':')
-  let url: string | undefined
-  if (kind === 'file') {
-    url = `/subs/${ih}/${n}/file.vtt`
-  } else if (session.mode === 'direct') {
-    url = `/subs/${ih}/${idx}/${n}.vtt`
-    notify('Extracting subtitles (needs the whole file downloaded)…', 'busy')
-  } else if (session.mode === 'browser-remux') {
-    return notify('Embedded subtitles need ffmpeg on the server; add an .srt file to the torrent folder.', 'warn')
-  } else {
-    url = session.subtitles.find(s => s.index === Number(n))?.url
-  }
-  if (!url) return
-  const added = new Set<string>()
-  // Session subtitles grow as ffmpeg converts more of the file, wherever it is asked to, so keep polling
-  const live = url.startsWith('/hls/')
-  for (;;) {
-    const res = await fetch(url, { cache: 'no-store', signal }).catch(() => null)
-    if (signal.aborted || gen !== generation || run !== subtitleRun || subsChoice !== choice) return
-    const growing = live && !session.complete
-    if (res?.ok) {
-      let text
-      try { text = await res.text() } catch {
-        if (!signal.aborted) notify('Subtitle response was interrupted. Select the track again to retry.', 'warn')
-        return
-      }
-      if (signal.aborted || gen !== generation || run !== subtitleRun || subsChoice !== choice) return
-      const cues = parseVtt(text)
-      const ready = growing ? cues.slice(0, -1) : cues // the last cue may be half-written
-      // Each ffmpeg run writes the cues of the part it converts, so the same cue can arrive twice
-      for (const c of ready) {
-        const key = `${c.from}|${c.to}|${c.text}`
-        if (added.has(key)) continue
-        added.add(key)
-        subTrack.addCue(new VTTCue(c.from, c.to, c.text))
-      }
-      if (url.startsWith('/subs/')) notify('')
-    } else if (!live) {
-      const body = await res?.json().catch(() => null) as { error?: string } | null | undefined
-      return notify(`Subtitles failed: ${body?.error || 'unknown error'}`, 'warn')
-    }
-    if (!live) return
-    try { await sleep(10_000, signal) } catch { return }
-  }
-}
-
-/** Turns subtitles on with `choice`, or off with ''. Remembers the language for the next file unless `save` is false. */
-function setSubtitles (choice: string, save = true): void {
-  subsChoice = choice
-  const option = subOptions.find(o => o.value === choice)
-  if (choice) lastSubs = choice
-  if (save) remember(PREF.subtitles, !choice ? 'off' : option?.language || 'any')
-  renderSubtitlesMenu()
-  loadSubtitles().catch(console.error)
-}
-
-/** C: subtitles off, or back on with the last track used (the first text track if none was). */
-function toggleSubtitles (): void {
-  if (subsChoice) return setSubtitles('')
-  const choice = lastSubs || subOptions.find(o => !o.disabled)?.value
-  if (choice) setSubtitles(choice)
+/** Redrawn on each poll, only while the disclosure is open. */
+function renderPerformance (): void {
+  fill($('#performance'), ...performanceView(snap.history, { direct: isLocal(snap.decision) }))
 }
 
 // Chrome menus open upward and stay inside the stage, so they work in fullscreen too
@@ -487,65 +152,41 @@ const chromeMenu = (label: string | Node, items: Child[], ariaLabel: string, cla
 const withValue = <E extends HTMLElement>(item: E, value: string | number): E => { item.dataset.value = String(value); return item }
 
 function renderSubtitlesMenu (): void {
-  const current = subOptions.find(o => o.value === subsChoice)
+  const { subtitleOptions: options, subtitles: choice } = snap
+  const current = options.find(o => o.value === choice)
   const name = `Subtitles: ${current ? current.name : 'Off'}`
   const box = $<HTMLDetailsElement>('#subs-slot details') ?? (fill($('#subs-slot'), chromeMenu(icon('subtitles'), [], name)), $<HTMLDetailsElement>('#subs-slot details'))
   const summary = $('summary', box)
   summary.setAttribute('aria-label', name)
   summary.title = `${name} (C)`
   summary.classList.toggle('on', !!current)
-  fill($('.menu-items', box), menuHeading('Subtitles'), withValue(menuChoice('Off', !subsChoice, () => setSubtitles('')), ''),
-    ...subOptions.map(o => withValue(menuChoice(o.label, o.value === subsChoice, () => setSubtitles(o.value), { disabled: o.disabled, title: o.disabled ? 'Image subtitles are not supported' : '' }), o.value)))
-  $('#subs-slot').hidden = subOptions.length === 0
+  fill($('.menu-items', box), menuHeading('Subtitles'), withValue(menuChoice('Off', !choice, () => { player.setSubtitles('') }), ''),
+    ...options.map(o => withValue(menuChoice(o.label, o.value === choice, () => { player.setSubtitles(o.value) }, { disabled: o.disabled, title: o.disabled ? 'Image subtitles are not supported' : '' }), o.value)))
+  $('#subs-slot').hidden = options.length === 0
 }
 
 function renderAudioMenu (): void {
-  const tracks = info?.audio ?? []
-  const selected = tracks[audio]
+  const tracks = snap.info?.audio ?? []
+  const selected = tracks[snap.audio]
   const name = `Audio: ${selected ? audioTrackName(selected) : 'Track 1'}`
   fill($('#audio-slot'), chromeMenu(icon('audio'), [
     menuHeading('Audio'),
-    ...tracks.map(a => withValue(menuChoice(audioTrackLabel(a), a.index === audio, () => setAudio(a.index)), a.index)),
+    ...tracks.map(a => withValue(menuChoice(audioTrackLabel(a), a.index === snap.audio, () => { player.setAudio(a.index) }), a.index)),
   ], name))
   $('#audio-slot').hidden = tracks.length < 2
 }
 
-/** Switching audio restarts the session at the current position with the other track. */
-function setAudio (index: number): void {
-  if (index === audio) return
-  audio = index
-  remember(PREF.audio, info?.audio[index]?.language ?? null)
-  renderAudioMenu()
-  start(position(), 'Switching audio…').catch(console.error)
-}
-
-const speedChoices = (): HTMLButtonElement[] => SPEEDS.map(rate => menuChoice(rate === 1 ? '1× (normal)' : speedLabel(rate), video.playbackRate === rate, () => setSpeed(rate)))
-
-function setSpeed (rate: number, save = true): void {
-  video.defaultPlaybackRate = video.playbackRate = rate // the default survives loading a new session
-  if (save) remember(PREF.speed, rate)
-  renderSpeedMenu()
-  renderMore()
-  slowSamples = 0
-  renderPlaybackStatus()
-}
-
-/** < and >: one step slower or faster. */
-function stepSpeed (direction: -1 | 1): void {
-  const nextRate = steppedSpeed(video.playbackRate, direction)
-  setSpeed(nextRate)
-  notify(`Speed ${speedLabel(nextRate)}`)
-  setTimeout(() => { if ($('#overlay .toast.notice')?.textContent?.startsWith('Speed')) notify('') }, 1200)
-}
+const speedChoices = (): HTMLButtonElement[] => SPEEDS.map(rate => menuChoice(rate === 1 ? '1× (normal)' : speedLabel(rate), snap.media.rate === rate, () => { player.setSpeed(rate) }))
 
 function renderSpeedMenu (): void {
-  const name = `Speed: ${speedLabel(video.playbackRate)}`
-  fill($('#speed-slot'), chromeMenu(el('span', { className: 'pill', textContent: speedLabel(video.playbackRate) }), [menuHeading('Speed'), ...speedChoices()], name))
+  const rate = snap.media.rate
+  fill($('#speed-slot'), chromeMenu(el('span', { className: 'pill', textContent: speedLabel(rate) }), [menuHeading('Speed'), ...speedChoices()], `Speed: ${speedLabel(rate)}`))
 }
 
 /** More: the same file actions as the torrent page's ⋯ menu, Picture in picture, the key list, and Speed on narrow screens. */
 function renderMore (): void {
-  const pip = document.pictureInPictureEnabled && !video.disablePictureInPicture
+  const { file } = snap
+  const pip = snap.media.pipAllowed
   const narrow = <E extends HTMLElement>(item: E): E => { item.classList.add('narrow-only'); return item }
   const items: Child[] = [
     ...(file
@@ -558,8 +199,8 @@ function renderMore (): void {
           menuSeparator(),
         ]
       : []),
-    pip && el('button', { type: 'button', textContent: document.pictureInPictureElement ? 'Exit picture in picture' : 'Picture in picture', onclick: togglePip }),
-    el('button', { type: 'button', textContent: 'Keyboard shortcuts', onclick: () => showKeys(true) }),
+    pip && el('button', { type: 'button', textContent: snap.media.pip ? 'Exit picture in picture' : 'Picture in picture', onclick: () => { player.togglePip() } }),
+    el('button', { type: 'button', textContent: 'Keyboard shortcuts', onclick: () => { showKeys(true) } }),
     menuChoice('Playback flow', flowPinned, toggleFlowPin),
     narrow(menuSeparator()),
     narrow(menuHeading('Speed')),
@@ -570,117 +211,33 @@ function renderMore (): void {
   else fill($('#more-slot'), chromeMenu(icon('more'), items, 'More'))
 }
 
-function togglePip (): void {
-  const action = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture()
-  action.catch((err: unknown) => notify(`Picture in picture: ${err instanceof Error ? err.message : String(err)}`, 'warn'))
+/** The video's display aspect ratio from the probe, corrected for non-square pixels. */
+function setAspect (): void {
+  const v = snap.info?.video
+  if (v?.width && v.height) stage.style.setProperty('--ar', String(v.width * (v.sampleAspect || 1) / v.height))
 }
 
-function retryInfo (): void {
-  playbackProblem = null
-  waitingAt = Date.now()
-  setPlaybackPhase('loading')
-  loadInfo().catch(console.error)
-}
-
-async function loadInfo (signal = pageLife.signal): Promise<void> {
-  let probe: ProbeResult
-  try {
-    probe = await api<ProbeResult>(`/api/probe/${ih}/${idx}`, { signal })
-    if (signal.aborted) return
-    info = probe
-  } catch (error) {
-    if (signal.aborted) return
-    const err = error as Failure
-    if (err.status === 404) return missingFile(err)
-    return failPlayback('Could not read the file', err.message, ['retry', 'external'])
-  }
-  setAspect()
-  // The remembered audio language picks the track, else track 1
-  audio = pickByLanguage(probe.audio, recall(PREF.audio) as string | null)?.index ?? 0
-  renderAudioMenu()
-  subOptions = subtitleOptions(probe)
-  // The remembered subtitle language turns subtitles on for this file when it has that language
-  subsChoice = lastSubs = preferredSubtitle(subOptions, recall(PREF.subtitles))
-  renderSubtitlesMenu()
-  const saved = resumePosition(recall(progressKey(ih, idx)), probe.duration)
-  pendingPosition = saved
-  updateTimeline()
-  if (saved) {
-    notify(`Resume from ${clock(saved)}?`, 'error', [
-      button('Resume', () => { start(saved).catch(console.error) }, true),
-      button('Start over', () => { remember(progressKey(ih, idx), progressEntry(0, probe.duration)); start(0).catch(console.error) }),
-    ])
-  } else start(0).catch(console.error)
-}
-
-/** Every 2 s: keeps the ffmpeg session alive, updates the seek bar and details, and warns when ffmpeg can't keep up. */
-async function pollStatus (signal = pageLife.signal): Promise<void> {
-  while (!signal.aborted) {
-    const session = cur?.session
-    const q = new URLSearchParams({ idx: String(idx), session: session ?? '', pos: String(video.currentTime) })
-    const gen = generation
-    const st = await api<TorrentStatus>(`/api/torrents/${ih}/status?${q}`, { signal }).catch(() => null)
-    if (signal.aborted) return
-    if (gen === generation && cur?.session === session && st) {
-      lastStatus = st
-      statusAt = Date.now()
-      if (st.loaded) sourceSnapshot = { status: { ...st, session: null, preparation: null }, at: statusAt }
-      const s = st.session
-      slowSamples = st.loaded && st.file?.progress === 1 && s?.running && !s.paused && s.speed != null && s.speed < video.playbackRate ? slowSamples + 1 : 0
-      if (s && cur) cur.complete = !s.running
-      if (st.loaded && cur) {
-        record(history, {
-          download: st.downloadSpeed,
-          peers: st.peers.length,
-          speed: s?.speed ?? null,
-          fps: s?.fps ?? null,
-          cpu: s?.cpu ?? null,
-          paused: !!s?.paused,
-          ahead: s ? Math.max(0, s.readyUntil - video.currentTime) : null,
-          buffer: bufferedAhead(),
-          stalled: stalled || stallSeen,
-        })
-        stallSeen = false
-      }
-      if (!$('#details').hidden) renderFacts()
-      if (!$('#performance').hidden) renderPerformance()
-      drawSeekbar()
-      if (deferredSeek && (growingEnd() ?? 0) > deferredSeek + 1) {
-        video.currentTime = deferredSeek
-        deferredSeek = 0
-        notify('')
-      }
-    } else if (!st) slowSamples = 0
-    renderPlaybackStatus()
-    try { await sleep(2000, signal) } catch { return }
-  }
-}
-
-// The chrome ---------------------------------------------------------------
-
-const seek = $<HTMLInputElement>('#seek')
-let dragging = false
-let autoMuted = false // muted by the autoplay fallback, not by choice
+// The seek bar ------------------------------------------------------------
 
 /** The four seek bar layers: on the server, converted by ffmpeg, in the browser, played. */
 function drawSeekbar (): void {
-  const total = duration()
+  const { duration: total, buffered, position } = snap.media
   const layer = (id: string, value: string): void => { $(id).style.backgroundImage = value }
   if (!total) {
     for (const id of ['#layer-server', '#layer-conv', '#layer-buf']) layer(id, 'none')
     $('#layer-played').style.width = '0'
     return
   }
-  layer('#layer-server', layerBackground(fileRanges() ?? [], 'var(--seek-server)'))
-  layer('#layer-conv', layerBackground((sessionStatus()?.ready ?? []).map(([a, b]) => [a / total, b / total]), 'var(--seek-conv)'))
-  layer('#layer-buf', layerBackground(cur ? spans(video.buffered).map(([a, b]) => [a / total, b / total]) : [], 'var(--seek-buf)'))
-  $('#layer-played').style.width = `${Math.min(100, (dragging ? Number(seek.value) : position()) / total * 100)}%`
+  layer('#layer-server', layerBackground(fileRanges(snap) ?? [], 'var(--seek-server)'))
+  layer('#layer-conv', layerBackground((sessionStatus(snap)?.ready ?? []).map(([a, b]) => [a / total, b / total]), 'var(--seek-conv)'))
+  layer('#layer-buf', layerBackground(snap.decision ? buffered.map(([a, b]) => [a / total, b / total]) : [], 'var(--seek-buf)'))
+  $('#layer-played').style.width = `${Math.min(100, (dragging ? Number(seek.value) : position) / total * 100)}%`
 }
 
 /** Time, slider range and its spoken value; while dragging the slider shows where it will land. */
 function updateTimeline (): void {
-  const total = duration()
-  const at = dragging ? Number(seek.value) : position()
+  const total = snap.media.duration
+  const at = dragging ? Number(seek.value) : snap.media.position
   seek.max = String(Math.floor(total))
   if (!dragging) seek.value = String(at)
   seek.setAttribute('aria-valuetext', `${clock(at)} of ${clock(total)}`)
@@ -691,10 +248,10 @@ function updateTimeline (): void {
 /** The tooltip over the seek bar: the time under the pointer and what jumping there will do. */
 function showTip (t: number, x: number): void {
   const tip = $('#seektip')
-  const total = duration()
-  if (!total) return
-  const outcome = cur
-    ? seekOutcome(t, { mode: cur.mode, duration: total, buffered: spans(video.buffered), ready: sessionStatus()?.ready ?? null, growingEnd: growingEnd(), ranges: fileRanges() })
+  const { decision, media } = snap
+  if (!media.duration) return
+  const outcome = decision
+    ? seekOutcome(t, { mode: decision.mode, duration: media.duration, buffered: media.buffered, ready: sessionStatus(snap)?.ready ?? null, growingEnd: snap.growingEnd, ranges: fileRanges(snap) })
     : 'seekable'
   $('b', tip).textContent = clock(t)
   $('span', tip).textContent = seekHint(outcome)
@@ -709,14 +266,15 @@ const hideTip = (): void => { $('#seektip').hidden = true }
 /** Seek bar x (in px from its left edge) for time `t`, matching the inset track. */
 function trackPosition (t: number): number {
   const track = $('#seekbar .track')
-  return track.offsetLeft + (duration() ? t / duration() : 0) * track.offsetWidth
+  const total = snap.media.duration
+  return track.offsetLeft + (total ? t / total : 0) * track.offsetWidth
 }
 
 $('#seekbar').addEventListener('pointermove', e => {
   if (dragging) return
   const track = $('#seekbar .track').getBoundingClientRect()
   const fraction = Math.max(0, Math.min(1, (e.clientX - track.left) / track.width))
-  showTip(fraction * duration(), e.clientX - $('#seekbar').getBoundingClientRect().left)
+  showTip(fraction * snap.media.duration, e.clientX - $('#seekbar').getBoundingClientRect().left)
 })
 $('#seekbar').addEventListener('pointerleave', () => { if (!dragging) hideTip() })
 seek.addEventListener('input', () => {
@@ -727,8 +285,10 @@ seek.addEventListener('input', () => {
 seek.addEventListener('change', () => {
   dragging = false
   hideTip()
-  seekTo(Number(seek.value))
+  player.seek(Number(seek.value))
 })
+
+// The chrome ---------------------------------------------------------------
 
 // Visibility: shown while paused, while a menu is open, while focus is inside it, and for 2.5 s after the last pointer move, touch or key
 let idleTimer = 0
@@ -738,7 +298,7 @@ function wake (): void {
   idleTimer = setTimeout(sleepChrome, 2500)
 }
 function sleepChrome (): void {
-  if (video.paused || !cur || stage.classList.contains('has-playback-wait') || $('#stage details.menu[open]') || !$('#keys').hidden || $('#stage :focus-visible') || dragging) return
+  if (video.paused || !snap.decision || stage.classList.contains('has-playback-wait') || $('#stage details.menu[open]') || ui.keys || $('#stage :focus-visible') || dragging) return
   stage.classList.add('idle')
   hideTip()
 }
@@ -747,20 +307,6 @@ stage.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') { c
 stage.addEventListener('toggle', wake, true)
 stage.addEventListener('focusin', wake)
 
-/** Before a session has loaded any media there is nothing to play or pause. */
-const nothingToPlay = (): boolean => ['loading', 'starting', 'playlist', 'error', 'idle'].includes(playbackPhase) && video.readyState === 0
-
-const togglePlay = (): void => {
-  if (nothingToPlay()) return
-  if (video.paused) {
-    if (playbackPhase === 'paused' || playbackPhase === 'blocked') setPlaybackPhase('buffering')
-    video.play().catch((err: unknown) => {
-      if (pageLife.signal.aborted) return
-      if (err instanceof Error && err.name === 'NotAllowedError') setPlaybackPhase('blocked')
-      else failPlayback('Playback could not start', err instanceof Error ? err.message : String(err))
-    })
-  } else video.pause()
-}
 // A tap on faded chrome shows it first; with the chrome showing, a tap or click plays or pauses
 let tapWoke = false
 video.addEventListener('pointerdown', e => {
@@ -771,55 +317,43 @@ video.addEventListener('pointerdown', e => {
 video.addEventListener('click', () => {
   if (tapWoke) return
   if ($('#stage details.menu[open]')) return // the click only closes the menu
-  if (autoMuted && video.muted) { video.muted = false; autoMuted = false; return }
-  togglePlay()
+  if (player.unmuteAutoplay()) return
+  player.togglePlay()
 })
 video.addEventListener('dblclick', toggleFullscreen)
+video.addEventListener('play', wake)
+video.addEventListener('pause', wake)
 
 function renderPlayButton (): void {
-  const label = video.paused ? 'Play' : 'Pause'
+  const label = snap.media.paused ? 'Play' : 'Pause'
   const b = $<HTMLButtonElement>('#playpause')
-  fill(b, icon(video.paused ? 'play' : 'pause'))
+  fill(b, icon(snap.media.paused ? 'play' : 'pause'))
   b.setAttribute('aria-label', label)
   b.title = `${label} (K)`
-  b.disabled = nothingToPlay()
+  b.disabled = nothingToPlay(snap)
 }
-$('#playpause').addEventListener('click', togglePlay)
-$('#back10').addEventListener('click', () => seekTo(position() - 10))
-$('#fwd10').addEventListener('click', () => seekTo(position() + 10))
+$('#playpause').addEventListener('click', () => { player.togglePlay() })
+$('#back10').addEventListener('click', () => { player.seekBy(-10) })
+$('#fwd10').addEventListener('click', () => { player.seekBy(10) })
 fill($('#back10'), icon('back'))
 fill($('#fwd10'), icon('forward'))
 fill($('#keys-close'), icon('close'))
 
-/** Volume and mute are saved only when the viewer changes them, not by the autoplay fallback. */
-function setVolume (value: number): void {
-  video.volume = Math.max(0, Math.min(1, Math.round(value * 100) / 100))
-  video.muted = video.volume === 0
-  autoMuted = false
-  remember(PREF.volume, video.volume)
-  remember(PREF.muted, video.muted)
-}
-function toggleMute (): void {
-  if (video.muted && video.volume === 0) video.volume = 0.5
-  video.muted = !video.muted
-  autoMuted = false
-  remember(PREF.muted, video.muted)
-  remember(PREF.volume, video.volume)
-}
 function renderVolume (): void {
-  const silent = video.muted || video.volume === 0
+  const { muted, volume } = snap.media
+  const silent = muted || volume === 0
   const label = silent ? 'Unmute' : 'Mute'
   const b = $('#mute')
-  fill(b, icon(silent ? 'muted' : video.volume < 0.5 ? 'volumeLow' : 'volume'))
+  fill(b, icon(silent ? 'muted' : volume < 0.5 ? 'volumeLow' : 'volume'))
   b.setAttribute('aria-label', label)
   b.title = `${label} (M)`
   const slider = $<HTMLInputElement>('#volume')
-  slider.value = String(silent ? 0 : video.volume)
-  slider.style.setProperty('--vol', `${silent ? 0 : video.volume * 100}%`)
-  slider.setAttribute('aria-valuetext', `${Math.round((silent ? 0 : video.volume) * 100)}%`)
+  slider.value = String(silent ? 0 : volume)
+  slider.style.setProperty('--vol', `${silent ? 0 : volume * 100}%`)
+  slider.setAttribute('aria-valuetext', `${Math.round((silent ? 0 : volume) * 100)}%`)
 }
-$('#mute').addEventListener('click', toggleMute)
-$<HTMLInputElement>('#volume').addEventListener('input', e => setVolume(Number((e.target as HTMLInputElement).value)))
+$('#mute').addEventListener('click', () => { player.toggleMute() })
+$<HTMLInputElement>('#volume').addEventListener('input', e => { player.setVolume(Number((e.target as HTMLInputElement).value)) })
 
 function toggleFullscreen (): void {
   if (document.fullscreenElement) document.exitFullscreen().catch(console.error)
@@ -838,47 +372,26 @@ $('#fullscreen').addEventListener('click', toggleFullscreen)
 document.addEventListener('fullscreenchange', () => { renderFullscreen(); wake() })
 
 /** The ? sheet over the video. */
-function showKeys (open = $('#keys').hidden): void {
+function showKeys (open = !ui.keys): void {
+  ui.keys = open
   $('#keys').hidden = !open
   if (open) $('#keys-close').focus()
   wake()
 }
-$('#keys-close').addEventListener('click', () => showKeys(false))
-
-function playNext (): void {
-  if (next) location.href = urls.player(ih, next.idx)
-}
-
-function setMediaSession (t: TorrentInfo, f: TorrentFileInfo): void {
-  if (!('mediaSession' in navigator)) return
-  const ep = episodeLabel(f)
-  navigator.mediaSession.metadata = new MediaMetadata({ title: ep ? `${ep} · ${baseName(f.name)}` : baseName(f.name), artist: ep, album: t.name })
-  try { navigator.mediaSession.setActionHandler('nexttrack', next ? playNext : null) } catch {}
-}
-if ('mediaSession' in navigator) {
-  const handlers: Partial<Record<MediaSessionAction, MediaSessionActionHandler>> = {
-    play: () => { video.play().catch(console.error) },
-    pause: () => video.pause(),
-    seekbackward: d => seekTo(position() - (d.seekOffset || 10)),
-    seekforward: d => seekTo(position() + (d.seekOffset || 10)),
-  }
-  for (const [action, handler] of Object.entries(handlers)) {
-    try { navigator.mediaSession.setActionHandler(action as MediaSessionAction, handler) } catch {} // older browsers lack some actions
-  }
-}
+$('#keys-close').addEventListener('click', () => { showKeys(false) })
 
 const commands: Record<PlayerCommand, () => void> = {
-  playPause: togglePlay,
-  back: () => seekTo(position() - 10),
-  forward: () => seekTo(position() + 10),
-  volumeUp: () => setVolume((video.muted ? 0 : video.volume) + 0.1),
-  volumeDown: () => setVolume((video.muted ? 0 : video.volume) - 0.1),
-  mute: toggleMute,
+  playPause: () => { player.togglePlay() },
+  back: () => { player.seekBy(-10) },
+  forward: () => { player.seekBy(10) },
+  volumeUp: () => { player.changeVolume(0.1) },
+  volumeDown: () => { player.changeVolume(-0.1) },
+  mute: () => { player.toggleMute() },
   fullscreen: toggleFullscreen,
-  subtitles: toggleSubtitles,
-  next: playNext,
-  slower: () => stepSpeed(-1),
-  faster: () => stepSpeed(1),
+  subtitles: () => { player.toggleSubtitles() },
+  next: () => { player.playNext() },
+  slower: () => { player.stepSpeed(-1) },
+  faster: () => { player.stepSpeed(1) },
 }
 
 // Keys. Ignored while typing; Space and Enter keep their usual meaning on buttons and links.
@@ -890,69 +403,26 @@ document.addEventListener('keydown', e => {
   if ((e.key === ' ' || e.key === 'Enter') && target.closest('button, summary, a')) return
   wake()
   if (e.key === '?') { showKeys(); return }
-  if (e.key === 'Escape' && !$('#keys').hidden) { showKeys(false); return }
-  if (!cur) return
+  if (e.key === 'Escape' && ui.keys) { showKeys(false); return }
+  if (!snap.decision) return
   const command = keyCommand(e.key)
   if (!command) return
   e.preventDefault() // no page scroll, and the seek slider doesn't also move by one step
   commands[command]()
 })
 
-// Player events
-video.addEventListener('timeupdate', () => {
-  persistProgress()
-  if (cur) updateTimeline()
-})
-video.addEventListener('progress', drawSeekbar)
-video.addEventListener('durationchange', updateTimeline)
-video.addEventListener('play', () => { renderPlayButton(); wake() })
-video.addEventListener('pause', () => {
-  renderPlayButton(); wake(); persistProgress(true)
-  if (video.readyState >= 2 && !video.ended && ['playing', 'buffering'].includes(playbackPhase)) {
-    stalled = false
-    setPlaybackPhase('paused')
-  }
-})
-video.addEventListener('seeked', () => { persistProgress(true); renderPlaybackStatus() })
-video.addEventListener('ratechange', () => { slowSamples = 0; renderPlaybackStatus() })
-video.addEventListener('waiting', () => {
-  if (!cur || ['paused', 'error', 'idle'].includes(playbackPhase)) return
-  stalled = stallSeen = true
-  setPlaybackPhase('buffering')
-})
-video.addEventListener('playing', () => {
-  if (pageLife.signal.aborted || playbackPhase === 'error') return
-  starting = ''
-  stalled = false
-  persistProgress(true)
-  playbackProblem = null
-  setPlaybackPhase('playing')
-  // For "Continue" on the torrent page and the home page
-  if (file) remember(`last:${ih}`, { idx, label: fileLabel(file), at: Date.now() })
-})
-video.addEventListener('error', () => { if (isLocal(cur)) failPlayback('Playback stopped', video.error?.message || `Media error ${video.error?.code}`) })
-video.addEventListener('ended', () => { persistProgress(true, true); setPlaybackPhase('idle'); countdownToNext() })
-video.addEventListener('volumechange', () => {
-  renderVolume()
-  if (!video.muted && $('#overlay .toast.notice')) notify('')
-})
-video.addEventListener('enterpictureinpicture', renderMore)
-video.addEventListener('leavepictureinpicture', renderMore)
 /** ⓘ Details and other disclosures under the title row: a button that shows and hides its panel. */
-function disclosure (toggle: HTMLElement, panel: HTMLElement, onOpen: () => void): void {
+function disclosure (toggle: HTMLElement, panel: HTMLElement, key: 'details' | 'performance', part: string): void {
   toggle.addEventListener('click', () => {
-    panel.hidden = !panel.hidden
-    toggle.setAttribute('aria-expanded', String(!panel.hidden))
-    if (!panel.hidden) onOpen()
+    ui[key] = !ui[key]
+    panel.hidden = !ui[key]
+    toggle.setAttribute('aria-expanded', String(ui[key]))
+    forget(part)
+    render()
   })
 }
-disclosure($('#details-toggle'), $('#details'), renderFacts)
-disclosure($('#perf-toggle'), $('#performance'), renderPerformance)
-
-/** Redrawn on each poll, only while the disclosure is open. */
-function renderPerformance (): void {
-  fill($('#performance'), ...performanceView(history, { direct: isLocal(cur) }))
-}
+disclosure($('#details-toggle'), $('#details'), 'details', 'facts')
+disclosure($('#perf-toggle'), $('#performance'), 'performance', 'performance')
 
 // Theater layout: the stage takes the largest box that fits the band's width and the viewport height
 // left by the top bar and the title row (see #stage in style.css). Phones in landscape give the video
@@ -970,51 +440,15 @@ rowObserver.observe($('.topbar'))
 addEventListener('resize', fitStage)
 fitStage()
 
-/** The video's display aspect ratio from the probe, corrected for non-square pixels. */
-function setAspect (): void {
-  const v = info?.video
-  if (v?.width && v.height) stage.style.setProperty('--ar', String(v.width * (v.sampleAspect || 1) / v.height))
-}
+addEventListener('pagehide', () => { player.suspend() })
+addEventListener('pageshow', e => { if (e.persisted) player.activate() })
 
-let resumeAt = 0
-addEventListener('pagehide', () => {
-  if (pageLife.signal.aborted) return
-  persistProgress(true)
-  resumeAt = position()
-  generation++
-  pageLife.abort()
-  teardown()
-  navigator.sendBeacon(`/api/play/tab/${tab}`)
-  cur = null
-})
-addEventListener('pageshow', e => {
-  if (!e.persisted) return
-  tab = Math.random().toString(36).slice(2)
-  pageLife = new AbortController()
-  if (info) start(resumeAt).catch(console.error)
-  else loadInfo().catch(console.error)
-  if (!file) loadTitle().catch(console.error)
-  pollStatus().catch(console.error)
-  tickPlaybackStatus().catch(console.error)
-})
-
-// Remembered volume, mute and speed; native controls stay off in every mode
-video.controls = false
-const savedVolume = recall(PREF.volume)
-if (typeof savedVolume === 'number' && savedVolume >= 0 && savedVolume <= 1) video.volume = savedVolume
-video.muted = recall(PREF.muted) === true
-setSpeed(savedSpeed(recall(PREF.speed)), false)
-renderPlayButton()
-renderVolume()
 renderFullscreen()
-renderSubtitlesMenu()
-renderAudioMenu()
-
-if (!/^[a-f0-9]{40}$/.test(ih) || !Number.isInteger(idx) || idx < 0) notify('This player link is incomplete. Open the file from its torrent page.', 'error', [linkButton('Search', '/')])
-else {
-  renderPlaybackStatus()
-  tickPlaybackStatus().catch(console.error)
-  loadTitle().catch(console.error)
-  loadInfo().catch(console.error)
-  pollStatus().catch(console.error)
+if (!/^[a-f0-9]{40}$/.test(ih) || !Number.isInteger(idx) || idx < 0) {
+  render()
+  fill($('#overlay'), el('div', { className: 'card' }, el('p', { textContent: 'This player link is incomplete. Open the file from its torrent page.' }), el('p', { className: 'actions' }, linkButton('Search', '/'))))
+} else {
+  player.subscribe(render)
+  player.activate()
+  render()
 }

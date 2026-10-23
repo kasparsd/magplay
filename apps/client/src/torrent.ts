@@ -5,8 +5,9 @@ import './lib/topbar.ts'
 import type { PeerStats, TorrentFileInfo, TorrentInfo, TorrentStatus } from '@magplay/api-contract'
 import type { Child } from './lib/ui.ts'
 import { api } from './lib/api.ts'
-import { requireElement, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setError, setStatus, shortHash, sleep, timeAgo } from './lib/ui.ts'
-import { backTarget } from './lib/back.ts'
+import { requireElement, copyButton, el, episodeLabel, fill, formatBytes, formatClock as clock, formatSpeed, menu, menuHeading, menuSeparator, recall, setError, setStatus, shortHash, timeAgo } from './lib/ui.ts'
+import { returnTarget, sessionReturns } from './lib/back.ts'
+import { poll } from './lib/resource.ts'
 import { baseName, playerApps, streamUrl, urls } from './lib/urls.ts'
 import { progressKey, resumePosition } from './lib/progress.ts'
 
@@ -14,11 +15,12 @@ const params = new URLSearchParams(location.search)
 const status = requireElement('#status', HTMLParagraphElement)
 let infoHash = location.pathname.split('/')[2] || null
 
-// Back to the results, Explore or title the user came from, without loading them again; no link after a direct visit
-const back = backTarget(document.referrer, location.origin)
+// Back to the results, Explore or title the user came from, without loading them again, also after playing a file;
+// no link after a direct visit
+const back = returnTarget(location.pathname, document.referrer, location.origin, sessionReturns())
 if (back) {
   Object.assign(requireElement('#back', HTMLAnchorElement), { href: back.href, textContent: back.label })
-  requireElement('#back', HTMLAnchorElement).addEventListener('click', e => { e.preventDefault(); history.back() })
+  if (back.history) requireElement('#back', HTMLAnchorElement).addEventListener('click', e => { e.preventDefault(); history.back() })
   requireElement('.back', HTMLParagraphElement).hidden = false
 }
 
@@ -47,6 +49,8 @@ async function load (): Promise<void> {
     clearInterval(timer)
   }
   infoHash = t.infoHash
+  // A result opened by its download link becomes /t/<infohash>, which the Player's back link returns to
+  if (back && location.pathname !== `/t/${t.infoHash}`) sessionReturns().set(`/t/${t.infoHash}`, back)
   history.replaceState(null, '', urls.torrent(t.infoHash))
   setStatus(status, '')
   showName(t.name)
@@ -150,7 +154,7 @@ function render (t: TorrentInfo): void {
   const bars: FileBars = new Map()
   const activity = el('div', { className: 'live' })
   fill(requireElement('#torrent', HTMLDivElement), renderSummary(t, videos), renderActions(t, videos), activity, ...renderFiles(t, videos, bars))
-  pollActivity(t.infoHash, activity, bars).catch(console.error)
+  pollActivity(t.infoHash, activity, bars)
 }
 
 function renderPeers (peers: PeerStats[]): HTMLTableElement {
@@ -164,10 +168,10 @@ function renderPeers (peers: PeerStats[]): HTMLTableElement {
       el('td', { textContent: `${Math.round(p.share * 100)}%` })))))
 }
 
-/** One activity line (peers, speed, how much is on the server) that opens into the peer table; every 2 s. */
-async function pollActivity (ih: string, box: HTMLDivElement, bars: FileBars): Promise<void> {
-  for (;;) {
-    const st = document.hidden ? null : await api<TorrentStatus>(`/api/torrents/${ih}/status`).catch(() => null)
+/** One activity line (peers, speed, how much is on the server) that opens into the peer table; every 2 s while visible. */
+function pollActivity (ih: string, box: HTMLDivElement, bars: FileBars): void {
+  poll(async signal => {
+    const st = await api<TorrentStatus>(`/api/torrents/${ih}/status`, { signal }).catch(() => null)
     if (st?.loaded) {
       for (const f of st.files) {
         const bar = bars.get(f.idx)
@@ -183,8 +187,7 @@ async function pollActivity (ih: string, box: HTMLDivElement, bars: FileBars): P
     } else if (st) {
       fill(box, el('p', { textContent: 'Not active right now. Playing or downloading a file starts it again.' }))
     }
-    await sleep(2000)
-  }
+  }, { everyMs: 2000 })
 }
 
 load().catch(console.error)

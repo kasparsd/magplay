@@ -5,6 +5,7 @@ import { byLevel, overallLevel, problems } from '@magplay/api-contract'
 import type { StatusCheck, StatusLevel, StatusResponse } from '@magplay/api-contract'
 import { api } from './api.ts'
 import { STORAGE_KEYS } from './preferences.ts'
+import { poll } from './resource.ts'
 import { connectionLevel, connectionWarning, readConnection } from './speedtest.ts'
 import { el, fill, formatSpeed, menu } from './ui.ts'
 
@@ -158,16 +159,7 @@ export function mountStatusMenu (bar: Element | null = document.querySelector('h
     if (box.open) refreshStatus().catch(console.error)
   })
 
-  let lastRefresh = 0
-  const poll = (): void => {
-    if (document.hidden || Date.now() - lastRefresh < 5000) return
-    lastRefresh = Date.now()
-    refreshStatus().catch(console.error)
-  }
-  poll()
-  setInterval(poll, POLL_MS)
-  document.addEventListener('visibilitychange', poll)
-  window.addEventListener('focus', poll)
+  poll(refreshStatus, { everyMs: POLL_MS, minGapMs: 5000 })
   // A connection test on the settings page (another tab) updates this one
   window.addEventListener('storage', e => { if (e.key === STORAGE_KEYS.connection) updateBrowserChecks() })
   return box

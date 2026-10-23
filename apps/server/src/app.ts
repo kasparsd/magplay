@@ -31,7 +31,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 export interface AppOptions {
   config: AppConfig
   logging?: Logging
-  publicDir?: string
+  pagesDir?: string
   distDir?: string
   /** Replaces ffmpeg for HLS sessions, for tests. */
   spawnProcess?: SpawnProcess
@@ -52,7 +52,7 @@ export interface App {
 }
 
 /** Fails if the HLS folder can't be created; the torrent engine is created after it, so nothing is left bound. */
-export function createApp ({ config, logging: suppliedLogging, publicDir = path.join(repoRoot, 'public'), distDir = path.join(repoRoot, 'dist/client'), spawnProcess }: AppOptions): App {
+export function createApp ({ config, logging: suppliedLogging, pagesDir = path.join(repoRoot, 'apps/client'), distDir = path.join(repoRoot, 'dist/client'), spawnProcess }: AppOptions): App {
   const current = config.current
   const boot = current()
   let port = boot.port
@@ -143,7 +143,7 @@ export function createApp ({ config, logging: suppliedLogging, publicDir = path.
     route('GET', '/health', ({ res }) => {
       json(res, closing ? 503 : 200, { ok: !closing, uptimeS: Math.round((Date.now() - startedAt) / 1000) })
     }),
-    ...staticRoutes({ publicDir, distDir }),
+    ...staticRoutes({ pagesDir, distDir }),
     ...apiRoutes({ engine, hls, tabs, play, search, explore, subtitles, settings: config.settings, status, checks, logger: log, requestLogger: req => requestLogs.get(req) ?? log }),
   ])
 
