@@ -9,8 +9,8 @@ import { createRequire } from 'node:module'
 import { PassThrough } from 'node:stream'
 import { Worker } from 'node:worker_threads'
 import type { Worker as WorkerInstance } from 'node:worker_threads'
-import { ALL_FORMATS, Conversion, FilePathSource, Input, Mp4OutputFormat, Output, QUALITY_HIGH, StreamTarget, UrlSource } from 'mediabunny'
-import type { InputAudioTrack, InputVideoTrack, StreamTargetChunk } from 'mediabunny'
+import { ALL_FORMATS, AudioSample, Conversion, FilePathSource, Input, Mp4OutputFormat, Output, QUALITY_HIGH, StreamTarget, UrlSource } from 'mediabunny'
+import type { ConversionAudioOptions, InputAudioTrack, InputVideoTrack, StreamTargetChunk } from 'mediabunny'
 import type { FfmpegProcess } from './hls.ts'
 import { TIMELINE_OFFSET } from './media.ts'
 import { boxes, child, children, fragmentStart, readInit } from './mp4.ts'
@@ -20,6 +20,8 @@ const require = createRequire(import.meta.url)
 
 /** How much media one step of the conversion produces before it checks for a pause or a cancel. */
 const STEP_S = 10
+/** How far the conversion may be asked to run past its last video fragment before the run is declared stuck. */
+const MAX_LAG_S = 60
 /** Bytes of /raw the conversion keeps in memory; the reads are sequential and Mediabunny prefetches at most 8 MiB ahead. */
 const READ_CACHE_BYTES = 16 * 1024 ** 2
 
@@ -83,6 +85,37 @@ async function prepare (): Promise<void> {
     }
   })()
   await prepared
+}
+
+/** 5.1 front/centre/surround weight, normalized so a full-scale mix can't clip, as ffmpeg's `-ac 2` does. */
+const SIDE = Math.SQRT1_2 / (1 + 2 * Math.SQRT1_2)
+const FRONT = 1 / (1 + 2 * Math.SQRT1_2)
+
+/**
+ * Downmixes 5.1 (L R C LFE SL SR) to stereo. Mediabunny would remix through its resampler, which holds 5 s of audio
+ * before it hands any to the encoder, so no fragment can close until 5 s past each step's end. The browser remux
+ * (apps/client/src/lib/browser-remux.ts) keeps its own copy, since the client imports only api-contract.
+ */
+function downmix (sample: AudioSample): AudioSample {
+  const frames = sample.numberOfFrames
+  const plane = (index: number): Float32Array => {
+    const data = new Float32Array(frames)
+    sample.copyTo(data, { planeIndex: index, format: 'f32-planar' })
+    return data
+  }
+  const [l, r, c, sl, sr] = [0, 1, 2, 4, 5].map(plane) as [Float32Array, Float32Array, Float32Array, Float32Array, Float32Array]
+  const out = new Float32Array(frames * 2)
+  for (let i = 0; i < frames; i++) {
+    out[i] = FRONT * l[i]! + SIDE * (c[i]! + sl[i]!)
+    out[frames + i] = FRONT * r[i]! + SIDE * (c[i]! + sr[i]!)
+  }
+  return new AudioSample({ data: out, format: 'f32-planar', numberOfChannels: 2, sampleRate: sample.sampleRate, timestamp: sample.timestamp })
+}
+
+/** Stereo (or mono) AAC for an audio track that isn't AAC already. */
+function aacOptions (channels: number): ConversionAudioOptions {
+  if (channels === 6) return { codec: 'aac', process: downmix, processedNumberOfChannels: 2, quality: QUALITY_HIGH }
+  return { codec: 'aac', numberOfChannels: Math.min(2, channels), quality: QUALITY_HIGH }
 }
 
 /** Adds `seconds` to every track's tfdt in a moof, in place (Mediabunny writes 64-bit tfdt). */
@@ -235,7 +268,7 @@ async function convert (
       input: file,
       output,
       video: (track: InputVideoTrack) => track.id === video.id ? {} : { discard: true },
-      audio: (track: InputAudioTrack) => track.id !== chosen?.id ? { discard: true } : track.codec === 'aac' ? {} : { codec: 'aac', numberOfChannels: Math.min(2, track.numberOfChannels), quality: QUALITY_HIGH },
+      audio: (track: InputAudioTrack) => track.id !== chosen?.id ? { discard: true } : track.codec === 'aac' ? {} : aacOptions(track.numberOfChannels),
       trim: { start },
       copy: { boundaryPolicy: 'expand' },
       tags: {},
@@ -245,12 +278,17 @@ async function convert (
     const dropped = conversion.discardedTracks.find(entry => entry.track.id === video.id)
     if (dropped) throw new Error(`The video can't be copied into MP4 (${dropped.reason.replace(/_/g, ' ')}).`)
     if (!conversion.isValid) throw new Error('The output configuration is not valid for this file.')
+    // Output time the conversion runs to next: the run is rebased to start near 0. It moves on by a step whether or
+    // not a fragment came out, since the muxer may still hold the last one, and a run that never emits one fails.
+    let until = 0
     while (!isKilled()) {
       if (isPaused()) {
         await new Promise<void>(resolve => onWake(resolve))
         continue
       }
-      await conversion.execute({ until: produced + STEP_S }) // output time: the run is rebased to start near 0
+      until += STEP_S
+      if (until - produced > MAX_LAG_S) throw new Error(`The remux stopped producing video after ${Math.max(0, produced).toFixed(1)} s.`)
+      await conversion.execute({ until })
       const wall = performance.now()
       const speed = wall > lastWall ? (produced - lastMedia) / ((wall - lastWall) / 1000) : 0
       lastWall = wall

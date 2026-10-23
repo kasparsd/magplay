@@ -2,8 +2,8 @@
 // where the browser can't play it as it is, and feeds fragmented MP4 to Media Source Extensions. Used when the server
 // has no ffmpeg. Conversion runs a bounded distance ahead of the playhead; a seek outside the buffered ranges restarts
 // it from the keyframe before the target, with the output placed at that time so the timeline stays the whole file.
-import { ALL_FORMATS, Conversion, EncodedPacketSink, Input, Mp4OutputFormat, Output, QUALITY_HIGH, StreamTarget, UrlSource } from 'mediabunny'
-import type { InputAudioTrack, InputVideoTrack, StreamTargetChunk } from 'mediabunny'
+import { ALL_FORMATS, AudioSample, Conversion, EncodedPacketSink, Input, Mp4OutputFormat, Output, QUALITY_HIGH, StreamTarget, UrlSource } from 'mediabunny'
+import type { ConversionAudioOptions, InputAudioTrack, InputVideoTrack, StreamTargetChunk } from 'mediabunny'
 
 export interface BrowserRemuxOptions {
   /** The same-origin /raw URL. */
@@ -38,6 +38,36 @@ const AHEAD_S = 60
 const BEHIND_S = 30
 /** The Range cache the demuxer keeps; the browser's own buffer holds the converted output. */
 const CACHE_BYTES = 48 * 1024 ** 2
+
+/** 5.1 front/centre/surround weight, normalized so a full-scale mix can't clip, as ffmpeg's `-ac 2` does. */
+const SIDE = Math.SQRT1_2 / (1 + 2 * Math.SQRT1_2)
+const FRONT = 1 / (1 + 2 * Math.SQRT1_2)
+
+/**
+ * Downmixes 5.1 (L R C LFE SL SR) to stereo, as the server's Node remux does. Mediabunny would remix through its
+ * resampler, which holds 5 s of audio before it hands any to the encoder, so playback would start that much later.
+ */
+function downmix (sample: AudioSample): AudioSample {
+  const frames = sample.numberOfFrames
+  const plane = (index: number): Float32Array => {
+    const data = new Float32Array(frames)
+    sample.copyTo(data, { planeIndex: index, format: 'f32-planar' })
+    return data
+  }
+  const [l, r, c, sl, sr] = [0, 1, 2, 4, 5].map(plane) as [Float32Array, Float32Array, Float32Array, Float32Array, Float32Array]
+  const out = new Float32Array(frames * 2)
+  for (let i = 0; i < frames; i++) {
+    out[i] = FRONT * l[i]! + SIDE * (c[i]! + sl[i]!)
+    out[frames + i] = FRONT * r[i]! + SIDE * (c[i]! + sr[i]!)
+  }
+  return new AudioSample({ data: out, format: 'f32-planar', numberOfChannels: 2, sampleRate: sample.sampleRate, timestamp: sample.timestamp })
+}
+
+/** Stereo (or mono) AAC for an audio track that isn't AAC already. */
+function aacOptions (channels: number): ConversionAudioOptions {
+  if (channels === 6) return { codec: 'aac', process: downmix, processedNumberOfChannels: 2, quality: QUALITY_HIGH }
+  return { codec: 'aac', numberOfChannels: Math.min(2, channels), quality: QUALITY_HIGH }
+}
 
 interface MediaSourceClass { new(): MediaSource, isTypeSupported: (type: string) => boolean }
 const mediaSourceClass = (): MediaSourceClass | null => {
@@ -169,7 +199,7 @@ export async function startBrowserRemux (video: HTMLVideoElement, { url, audio, 
         input,
         output,
         video: track => track.id === videoTrack!.id ? {} : { discard: true },
-        audio: track => track.id !== audioTrack?.id ? { discard: true } : track.codec === 'aac' ? {} : { codec: 'aac', numberOfChannels: Math.min(2, track.numberOfChannels), quality: QUALITY_HIGH },
+        audio: track => track.id !== audioTrack?.id ? { discard: true } : track.codec === 'aac' ? {} : aacOptions(track.numberOfChannels),
         trim: { start: origin },
         copy: { boundaryPolicy: 'expand' },
         tags: {},
