@@ -22,6 +22,8 @@ const require = createRequire(import.meta.url)
 const STEP_S = 10
 /** How far the conversion may be asked to run past its last video fragment before the run is declared stuck. */
 const MAX_LAG_S = 60
+/** Bytes of /raw the conversion keeps in memory; the reads are sequential and Mediabunny prefetches at most 8 MiB ahead. */
+const READ_CACHE_BYTES = 16 * 1024 ** 2
 
 export interface NodeRemuxOptions {
   /** A /raw URL or a local path. */
@@ -185,7 +187,7 @@ async function convert (
   onConversion: (conversion: Conversion) => void
 ): Promise<void> {
   const source = /^https?:\/\//i.test(input)
-    ? new UrlSource(input, { maxCacheSize: 48 * 1024 ** 2, getRetryDelay: attempts => attempts < 5 ? Math.min(5, 0.5 * 2 ** attempts) : null })
+    ? new UrlSource(input, { maxCacheSize: READ_CACHE_BYTES, getRetryDelay: attempts => attempts < 5 ? Math.min(5, 0.5 * 2 ** attempts) : null })
     : new FilePathSource(input)
   const file = new Input({ source, formats: ALL_FORMATS })
   try {
@@ -223,7 +225,8 @@ async function convert (
     // The muxer writes at absolute positions; keep the unsent tail and cut whole top-level boxes from it
     let bytes = Buffer.alloc(0)
     let base = 0
-    let end = 0
+    let end = 0 // contiguous bytes written
+    let high = 0 // furthest byte written, past a gap if the muxer wrote ahead
     let scan = 0
     const take = (): void => {
       for (;;) {
@@ -238,10 +241,11 @@ async function convert (
         const box = Buffer.from(bytes.subarray(offset, offset + size))
         scan += size
         emit(box, box.toString('latin1', 4, 8))
-        if (scan - base > 1024 ** 2) {
-          bytes = bytes.subarray(scan - base)
-          base = scan
-        }
+        // Copy the unsent tail into its own buffer: a subarray would keep the whole grown buffer alive
+        const tail = Buffer.alloc(Math.max(high - scan, 64 * 1024))
+        bytes.copy(tail, 0, scan - base, high - base)
+        bytes = tail
+        base = scan
       }
     }
     const writable = new WritableStream<StreamTargetChunk>({
@@ -250,10 +254,11 @@ async function convert (
         if (chunk.position < base) return
         if (need - base > bytes.length) {
           const grown = Buffer.alloc(Math.max(need - base, bytes.length * 2, 64 * 1024))
-          bytes.copy(grown, 0, 0, end - base)
+          bytes.copy(grown, 0, 0, high - base)
           bytes = grown
         }
         Buffer.from(chunk.data).copy(bytes, chunk.position - base)
+        high = Math.max(high, need)
         if (chunk.position <= end) end = Math.max(end, need)
         take()
       },
