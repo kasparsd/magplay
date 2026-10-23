@@ -1,6 +1,7 @@
 // Every page the app has, by URL. The server answers exactly these paths with the shell (apps/server/src/http/static.ts).
 import type { ReactNode } from 'react'
 import { Outlet, createRootRoute, createRoute, createRouter, stripSearchParams } from '@tanstack/react-router'
+import { Settings } from './Settings.tsx'
 import { Torrent } from './Torrent.tsx'
 import { Search } from './Search.tsx'
 import { Explore } from './Explore.tsx'
@@ -65,13 +66,14 @@ export const torrentRoute = createRoute({
   search: { middlewares: [stripSearchParams({ title: '', link: '', magnet: '' })] },
   component: Torrent,
 })
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: Settings })
 const routeTree = rootRoute.addChildren([
   searchRoute,
   exploreRoute,
   titleRoute,
   torrentRoute,
   page('/play/$ih/$idx', 'player'),
-  page('/settings', 'settings'),
+  settingsRoute,
 ])
 // Public URLs use ordinary string values, including numeric categories and years.
 // Router's default JSON serialization would quote those strings in shared links.

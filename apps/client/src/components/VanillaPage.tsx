@@ -3,13 +3,11 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import player from '../pages/player.html?raw'
-import settings from '../pages/settings.html?raw'
 
 interface Page { html: string, title: string, bodyClass?: string, load: () => Promise<unknown> }
 
 export const PAGES = {
   player: { html: player, title: 'magplay', bodyClass: 'player-page', load: () => import('../player.ts') },
-  settings: { html: settings, title: 'Settings · magplay', load: () => import('../settings.ts') },
 } satisfies Record<string, Page>
 
 /** The path of the vanilla page this document is showing, if any. */

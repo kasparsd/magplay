@@ -12,7 +12,7 @@ export const queryClient = new QueryClient({
 export const statusQuery = queryOptions({
   queryKey: ['status'],
   queryFn: refreshStatus,
-  refetchInterval: 30_000,
+  refetchInterval: query => query.state.data?.checks.some(c => c.required && c.level === 'unknown') ? 1000 : 30_000,
   staleTime: 5000,
 })
 
