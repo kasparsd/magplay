@@ -9,8 +9,10 @@ export function json<T> (res: ServerResponse, status: number, body: T): void {
   res.end(JSON.stringify(body))
 }
 
-/** A JSON object body of at most 1 MB; anything else is a 400 or 413. An empty body is {}. */
+/** A JSON object body (Content-Type: application/json) of at most 1 MB; anything else is a 400, 413 or 415. An empty body is {}. */
 export async function readJson (req: IncomingMessage): Promise<Record<string, unknown>> {
+  // A form or a text/plain fetch from another site needs no CORS preflight; JSON does
+  if (req.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json') throw new HttpError(415, 'Expected a JSON body')
   let body = ''
   for await (const chunk of req) {
     body += String(chunk)

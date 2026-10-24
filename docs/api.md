@@ -3,6 +3,8 @@
 Reference for magplay's JSON/HTTP API. The README keeps a short summary; this
 document holds the full table. Paths are relative to the server root.
 
+Any HTTP client can use the API. A request other than GET or HEAD that a browser marks as coming from a page on another site (`Sec-Fetch-Site` other than `same-origin`, or an `Origin` that doesn't match the host) is a 403; requests without those headers, such as curl or scripts, are not affected. A request body must be `Content-Type: application/json` (415 otherwise).
+
 | Method + path | Does |
 |---|---|
 | `GET /`, `/t/:ih`, `/play/:ih/:idx` | The pages: search, a torrent's files and activity, the player. Every step has its own URL, so reload, Back, bookmarks and new tabs work. `/t?link=<linkId>` opens a link-only search result and switches to `/t/<infohash>` once resolved. Old `/player.html?ih=&idx=` links redirect. |
@@ -26,7 +28,7 @@ document holds the full table. Paths are relative to the server root.
 | `GET /subs/:ih/:idx/:track.vtt` | Embedded text subtitle `track` as WebVTT (direct mode; reads the whole file), or `file.vtt` to convert a `.srt`/`.vtt`/`.ass` file in the torrent |
 | `GET /api/status` | `{level, checks:[{id, label, level, required, value, message, action}]}`. Checks run when asked and are cached (sources and Explore 60 s, disk 30 s, ffmpeg once; a missing ffmpeg is `warn`, not `error`). |
 | `GET /api/settings` | Server settings in use, secrets masked as `{set}`, with `meta[key] = {source: env\|file\|default, env, locked}` |
-| `PATCH /api/settings` | A partial update, validated as a whole (400 with `fields` per key, nothing saved) and written atomically. Same-origin only (403 otherwise), like every write below. |
+| `PATCH /api/settings` | A partial update, validated as a whole (400 with `fields` per key, nothing saved) and written atomically. |
 | `POST /api/settings/test` `{key: 'sources', item}` | Checks a source with unsaved values; returns a check result |
 | `GET /api/debug` | Version, uptime, ffmpeg versions, busy slots and limits, disk and cache use, and the bounded structured log tail plus capture level/drop count |
 | `POST /api/debug/clear-hls` | Stops every conversion and deletes its segments |
