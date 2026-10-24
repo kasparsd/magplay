@@ -1,5 +1,12 @@
 # @magplay/playback
 
+## 0.2.1
+
+### Patch
+
+- Videos with 5.1 or other multichannel audio play on iPhones and other browsers without Media Source Extensions when the server has no ffmpeg, instead of never starting. If that conversion ever stops producing video, playback now fails with an error instead of waiting forever.
+- A server without ffmpeg uses about 100 MiB less memory while it converts a video for playback.
+
 ## 0.2.0
 
 ### Minor
