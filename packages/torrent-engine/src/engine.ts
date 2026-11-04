@@ -14,6 +14,7 @@ import type { ListedFile, TorrentLike } from '@magplay/release-info'
 import { EngineBusyError, InvalidTorrentError, NoSuchFileError } from './errors.ts'
 import { createLimiter } from './limits.ts'
 import { waitForTorrent } from './ready.ts'
+import { announceList } from './trackers.ts'
 import { activity } from './activity.ts'
 import type { TorrentActivity } from './activity.ts'
 import { dirBytes, evict, listCached } from './store.ts'
@@ -257,7 +258,9 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
       .then(b => (JSON.parse(b.toString()) as { uploaded?: unknown }).uploaded).catch(() => 0)
     if (saved && !existing) parsed = await parseTorrent(saved)
     const { extraTrackers, metadataTimeoutMs, checkingTimeoutMs } = live()
-    parsed.announce = [...new Set([...(parsed.announce ?? []), ...extraTrackers])]
+    const announce = announceList(parsed, extraTrackers)
+    const extrasOnUnknown = !parsed.info && announce.length > (parsed.announce?.length ?? 0)
+    parsed.announce = announce
     const addNew = (): WtTorrent => {
       const added = client.add(parsed, { path: folder, deselect: true, storeCacheSlots: STORE_CACHE_SLOTS, ...(savedModtimes ? { fileModtimes: savedModtimes } : {}) })
       const before = typeof savedUploaded === 'number' && Number.isFinite(savedUploaded) && savedUploaded > 0 ? savedUploaded : 0
@@ -281,6 +284,7 @@ export function createTorrentEngine ({ dir, port, dht, lsd, live = () => DEFAULT
         onMetadata: () => {
           checkingAt ??= performance.now()
           log.debug('torrent.metadata.ready', { cacheClass: saved ? 'warm' : 'cold' })
+          if (extrasOnUnknown && (torrent as { private?: boolean }).private) log.warn('torrent.private.extra_trackers')
         }
       })
     } catch (err) { result = outcome(err); throw err } finally {

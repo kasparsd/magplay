@@ -207,7 +207,7 @@ env vars are listed first and locked; sources added in Settings follow them.
 | `CACHE_DIR` | `./data` | Torrent data (`torrents/<infohash>/`) and HLS sessions (`hls/`). The Docker image overrides this to `/data`. |
 | `CACHE_MAX_GB` | `50` | Least-recently-used torrent folders are deleted above this (checked every minute; torrents in use are kept) |
 | `TORRENT_PORT` | `6881` | TCP (peers) and UDP (DHT). Publish both in Compose. |
-| `EXTRA_TRACKERS` | opentrackr, stealth.si, torrent.eu.org, explodie.org, desync.com | Comma-separated, added to every torrent (BitMagnet magnets often have none) |
+| `EXTRA_TRACKERS` | none | Comma-separated tracker URLs (`udp:`, `http(s):`, `ws(s):`) added to every public torrent. BitMagnet magnets often have none, so peer discovery then relies on DHT; a list such as [ngosang/trackerslist](https://github.com/ngosang/trackerslist) helps. Each tracker sees your address and the info hash of what you open, so choose them yourself. A torrent flagged private never gets them; a magnet link can't say, so it does until its metadata shows otherwise, and a `torrent.private.extra_trackers` warning is logged then. |
 | `METADATA_TIMEOUT_S` | `60` | Give up fetching a torrent's file list after this |
 | `IDLE_TORRENT_MIN` | `30` | Unload torrents nobody has streamed or watched for this long (data stays on disk) |
 | `SEEDING_ENABLED` | `true` | Keep sharing a loaded torrent once all its data is downloaded. Playback keeps priority; needs a reachable `TORRENT_PORT`. |

@@ -22,8 +22,8 @@ test('invalid env values stop the server at startup, naming the variable', t => 
   assert.throws(() => loadConfig({ CACHE_DIR: dir, EXTRA_TRACKERS: 'udp://ok:1/announce, not a url' }), /EXTRA_TRACKERS/)
 })
 
-test('EXTRA_TRACKERS: unset means the defaults, empty means none, and each entry must be a tracker URL', () => {
-  assert.ok(trackersFromEnv(undefined).length > 0)
+test('EXTRA_TRACKERS: unset or empty means none, and each entry must be a tracker URL', () => {
+  assert.deepEqual(trackersFromEnv(undefined), [])
   assert.deepEqual(trackersFromEnv(''), [])
   assert.deepEqual(trackersFromEnv('udp://a:1/announce, wss://b/announce'), ['udp://a:1/announce', 'wss://b/announce'])
   assert.throws(() => trackersFromEnv('magnet:?xt=1'), /EXTRA_TRACKERS/)
@@ -47,8 +47,8 @@ test('saved settings change current() at once; env-only knobs aren’t settings'
   assert.deepEqual(seen, [['search.timeoutS', '45000']])
   assert.equal(app.current().port, 9000)
   assert.equal(app.settings.update({ 'server.port': 9999 }).ok, false)
-  assert.deepEqual(app.current().extraTrackers.length, 5)
-  assert.deepEqual(loadConfig({ CACHE_DIR: tempDir(t), EXTRA_TRACKERS: '' }).current().extraTrackers, [])
+  assert.deepEqual(app.current().extraTrackers, [])
+  assert.deepEqual(loadConfig({ CACHE_DIR: tempDir(t), EXTRA_TRACKERS: 'udp://a:1/announce' }).current().extraTrackers, ['udp://a:1/announce'])
 })
 
 test('starts without sources when nothing is configured', () => {

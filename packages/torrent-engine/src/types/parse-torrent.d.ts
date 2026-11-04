@@ -7,6 +7,8 @@ declare module 'parse-torrent' {
     files?: { name: string, path: string, length: number }[]
     announce?: string[]
     created?: Date
+    /** The info dictionary's private flag: set only when parsed from a .torrent file, which a bare magnet link cannot carry. */
+    private?: boolean
     /** The bencoded info dictionary, present when parsed from a .torrent file. */
     info?: Record<string, unknown>
   }

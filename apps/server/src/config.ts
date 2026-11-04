@@ -130,14 +130,6 @@ export function bitmagnetUrl (explicit: string | undefined, configs: readonly So
 /** Settings whose env vars need more than "first non-empty variable". */
 const readers: EnvReaders = { sources: sourceItemsFromEnv }
 
-const DEFAULT_TRACKERS = [
-  'udp://tracker.opentrackr.org:1337/announce',
-  'udp://open.stealth.si:80/announce',
-  'udp://tracker.torrent.eu.org:451/announce',
-  'udp://explodie.org:6969/announce',
-  'udp://exodus.desync.com:6969/announce',
-]
-
 const count = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max, integer: true })
 const seconds = (key: string, name: string, fallback: number, max: number): EnvOnlyDef => ({ key, env: [name], type: 'number', default: fallback, min: 1, max })
 type EnvOnlyDef = Omit<NumberDef, 'section' | 'scope' | 'label'> | Omit<TextDef, 'section' | 'scope' | 'label'> | Omit<ToggleDef, 'section' | 'scope' | 'label'>
@@ -169,9 +161,9 @@ const bool = (v: Values, key: string): boolean => v[key] as boolean
 const list = (v: Values, key: string): ListItem[] => v[key] as ListItem[]
 const GB = 1024 ** 3
 
-/** EXTRA_TRACKERS as a list; unset means the defaults, set but empty means none. A non-tracker URL throws, naming it. */
+/** EXTRA_TRACKERS as a list; unset or empty means none. A non-tracker URL throws, naming it. */
 export function trackersFromEnv (value: string | undefined): string[] {
-  if (value === undefined) return DEFAULT_TRACKERS
+  if (value === undefined) return []
   return splitList(value).map(tracker => {
     let protocol = ''
     try { protocol = new URL(tracker).protocol } catch {}
