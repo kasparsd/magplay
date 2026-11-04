@@ -34,15 +34,24 @@ test('API writes from this site and from clients that aren’t browsers reach th
   }
 })
 
-test('reads are not guarded', () => {
+test('reads refuse cross-site browser requests unless the browser is navigating', () => {
   const reads = routes.filter(r => !writes.includes(r))
-  assert.ok(reads.some(r => r.pattern === '/raw/:ih/:idx/:name?'))
+  assert.ok(reads.some(r => r.pattern === '/raw/:ih/:idx/:name?') && reads.some(r => r.pattern === '/api/torrents/:ih'))
   for (const { pattern, handler } of reads) {
-    try {
-      const result = call(handler, { 'sec-fetch-site': 'cross-site' })()
-      if (result instanceof Promise) result.catch(() => {})
-    } catch (err) {
-      assert.ok(!(err instanceof HttpError && err.status === 403), pattern)
+    assert.throws(call(handler, { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'no-cors' }), (err: unknown) => err instanceof HttpError && err.status === 403, pattern)
+    for (const headers of [{ 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' }, { 'sec-fetch-site': 'same-origin' }, {}]) {
+      try {
+        const result = call(handler, headers)()
+        if (result instanceof Promise) result.catch(() => {})
+      } catch (err) {
+        assert.ok(!(err instanceof HttpError && err.status === 403), pattern)
+      }
     }
+  }
+})
+
+test('writes refuse cross-site navigations too', () => {
+  for (const { handler } of writes) {
+    assert.throws(call(handler, { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' }), (err: unknown) => err instanceof HttpError && err.status === 403)
   }
 })

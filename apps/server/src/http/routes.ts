@@ -43,17 +43,18 @@ export interface RouteDeps {
 }
 
 /**
- * Every API route that isn't a read changes the server for everyone (settings, torrents it joins, conversions it runs).
- * There is no login, so a page on any other site the browser visits could otherwise call it; API clients that aren't
- * browsers stay welcome.
+ * There is no login, so a page on any other site the browser visits could otherwise call the server; API clients that
+ * aren't browsers stay welcome. Writes refuse every cross-site browser request. Reads refuse them too unless the browser
+ * is navigating to the URL (a link or a typed address), because several reads have effects: a torrent's info, probe, raw
+ * or subtitle URL joins that torrent, so an image or fetch from another site could add it without a POST.
  */
-function sameOriginWrites ({ methods, pattern, handler }: Route): Route {
-  if (methods.split('|').every(method => method === 'GET' || method === 'HEAD')) return { methods, pattern, handler }
+function sameOriginOnly ({ methods, pattern, handler }: Route): Route {
+  const read = methods.split('|').every(method => method === 'GET' || method === 'HEAD')
   return {
     methods,
     pattern,
     handler: ctx => {
-      if (isCrossSite(ctx.req)) throw new HttpError(403, 'Pages on other sites can’t change magplay.')
+      if (isCrossSite(ctx.req) && !(read && ctx.req.headers['sec-fetch-mode'] === 'navigate')) throw new HttpError(403, 'Pages on other sites can’t use magplay.')
       return handler(ctx)
     },
   }
@@ -139,5 +140,5 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       const text = await subtitles.vtt(params.ih, index(params.idx), params.track)
       sendCached(req, res, text, { 'Content-Type': 'text/vtt; charset=utf-8' })
     }),
-  ].map(sameOriginWrites)
+  ].map(sameOriginOnly)
 }
