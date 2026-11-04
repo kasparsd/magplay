@@ -74,7 +74,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-core.outputs.tags }}
           labels: ${{ steps.meta-core.outputs.labels }}
-          # Attestations are stored as extra untagged package versions.
+          # Attestations are stored as extra untagged package versions, and MikroTik's RouterOS cannot pull an
+          # image whose index carries them (docs/mikrotik.md), so keep them off here and for magplay below.
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max

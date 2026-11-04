@@ -94,7 +94,7 @@ pulling the image, replace `image:` with `build: .`; the repository's own
 There are two images, built from the same Dockerfile and published to GHCR:
 
 - **`ghcr.io/kasparsd/magplay`**: the one to start with. Alpine with Node 24 plus an `ffmpeg` built for it (libx264, AAC, VAAPI and, on x86_64, Quick Sync; reads every common video and audio format), about 43 MB to download, for server-side remux, transcode and embedded subtitles.
-- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about 40 MB to download. It plays MP4/WebM directly, repackages MKV and converts AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files itself, and hands everything else to an external player. Nothing is transcoded, and subtitles embedded in MKV need the full image. Meant for small hosts such as MikroTik RouterOS containers, where ffmpeg would not fit or run well. `magplay` is `magplay-core` plus the ffmpeg layer, so both behave identically apart from what ffmpeg adds.
+- **`ghcr.io/kasparsd/magplay-core`**: the same server without ffmpeg, about 40 MB to download. It plays MP4/WebM directly, repackages MKV and converts AC3/E-AC3/DTS audio **in the browser**, converts `.srt` subtitle files itself, and hands everything else to an external player. Nothing is transcoded, and subtitles embedded in MKV need the full image. Meant for small hosts such as MikroTik RouterOS containers, where ffmpeg would not fit or run well. `magplay` is `magplay-core` plus the ffmpeg layer, so both behave identically apart from what ffmpeg adds. See [Running on a MikroTik router](docs/mikrotik.md).
 
 Both build for `linux/arm64` and `linux/amd64`, run as `node`, and have a
 healthcheck on `GET /health`. From a checkout, `docker build .` builds the full
