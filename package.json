@@ -25,8 +25,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "build": "rm -rf dist/client && esbuild apps/client/src/*.ts apps/client/src/style.css --bundle --minify --format=esm --splitting --sourcemap --entry-names=[name] --chunk-names=[name]-[hash] --outdir=dist/client/assets --log-level=warning",
-    "dev": "npm run build -- --watch=forever & node --env-file-if-exists=.env --watch apps/server/src/main.ts",
+    "build": "rm -rf dist/client && esbuild apps/client/src/*.ts apps/client/src/style.css --bundle --minify --format=esm --splitting --entry-names=[name] --chunk-names=[name]-[hash] --outdir=dist/client/assets --log-level=warning",
+    "dev": "npm run build -- --sourcemap=inline --watch=forever & node --env-file-if-exists=.env --watch apps/server/src/main.ts",
     "release": "node packages/release/src/cli.ts"
   },
   "engines": {
