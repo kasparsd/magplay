@@ -1,5 +1,13 @@
 # magplay
 
+## 0.4.2
+
+### Patch
+
+- The image no longer carries node-datachannel, a 9 MB native WebRTC module magplay never used. WebRTC peers from `wss://` trackers are not supported; peers still connect over TCP and UDP.
+- Other websites open in your browser can no longer add torrents, start or stop playback, or change settings on magplay, whether by posting to it or by loading its URLs. Before, only settings were protected. Scripts and other API clients work as before, as long as they send JSON with a JSON content type.
+- The default image is 100 MB smaller (125 MB instead of 228 MB unpacked, 43 MB instead of 86 MB to download): its ffmpeg is built with only the codecs and formats magplay uses, and the browser's source maps are no longer shipped or served.
+
 ## 0.4.1
 
 ### Patch
