@@ -1,12 +1,17 @@
+# Alpine's own nodejs and npm run the install and the client build, so they use the same Node 24 as the runtime stage
+# and the same Alpine release on every platform. node:24-alpine has no linux/arm/v7 image, which this one has.
+FROM alpine:3.24 AS node
+RUN apk add --no-cache nodejs npm
+
 # Only the workspace manifests, so the install layers are cached until a package.json changes.
-FROM node:24-alpine AS manifests
+FROM node AS manifests
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN find apps packages -type f ! -name package.json -delete
 
-FROM node:24-alpine AS deps
+FROM node AS deps
 WORKDIR /app
 COPY --from=manifests /app ./
 # WebRTC is stubbed (packages/webrtc-polyfill), so the native node-datachannel addon is neither installed nor loaded.
@@ -29,7 +34,7 @@ RUN npm ci --omit=dev \
       node_modules/@opentelemetry/api/build/esm node_modules/@opentelemetry/api/build/esnext
 
 # Full install (dev dependencies: esbuild) to build the browser client into dist/client.
-FROM node:24-alpine AS build
+FROM node AS build
 WORKDIR /app
 COPY --from=manifests /app ./
 RUN npm ci

@@ -25,7 +25,7 @@ try {
   const get = (url, options = {}) => fetch(origin + url, { ...options, signal: AbortSignal.timeout(30_000) })
   for (let i = 0; ; i++) {
     if (await get('/health').then(r => r.ok, () => false)) break
-    if (i === 60) throw new Error('Container did not become healthy')
+    if (i === 600) throw new Error('Container did not become healthy')
     await sleep(200)
   }
   const metricsPort = (await docker('port', name, '9091/tcp')).split(':').at(-1)

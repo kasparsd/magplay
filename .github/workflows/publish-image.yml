@@ -29,8 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # node-datachannel has native dependencies, so build both advertised platforms
-      # instead of publishing an image that only works on amd64.
+      # The images are built for several platforms, so emulate the ones the runner is not.
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
@@ -64,13 +63,16 @@ jobs:
             type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
             type=edge
 
-      # No 32-bit ARM: node:24-alpine has no linux/arm/v7 manifest.
+      # The core image also builds for 32-bit ARM (linux/arm/v7), for routers and small boards.
+      # The full image stays 64-bit: it compiles ffmpeg, which is slow under emulation, and a host
+      # that small cannot transcode anyway. The Dockerfile's build stages use Alpine's nodejs
+      # because node:24-alpine has no linux/arm/v7 manifest.
       - name: Build and push magplay-core
         uses: docker/build-push-action@v6
         with:
           context: .
           target: core
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: ${{ steps.meta-core.outputs.tags }}
           labels: ${{ steps.meta-core.outputs.labels }}

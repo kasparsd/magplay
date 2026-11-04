@@ -2,7 +2,7 @@
 
 `ghcr.io/kasparsd/magplay-core` is meant for RouterOS's container runtime: no ffmpeg, about 107 MB unpacked and 37 MB to pull, and nothing it plays is transcoded. The full `magplay` image runs too, but a router's CPU cannot transcode, so there is no reason to use it there.
 
-**Status: run on an emulated router, not on hardware.** The image was pulled from GHCR, started and used on RouterOS 7.25.1 (an ARM64 CHR virtual machine under QEMU on a Mac, see [Testing without a router](#testing-without-a-router)). That settled the image's metadata, user, permissions and DNS questions below. Not yet done, and the reason roadmap item 4 stays open: a physical router, real peers, a playback, and memory or throughput numbers (an emulated CPU says nothing about speed).
+**Status: run on an emulated router, not on hardware.** The image was pulled from GHCR, started and used on RouterOS 7.25.1 (an ARM64 CHR virtual machine under QEMU on a Mac, see [Testing without a router](#testing-without-a-router)). That settled the image's metadata, user, permissions and DNS questions below. The `linux/arm/v7` image was also imported from a tarball and ran healthy on that arm64 router, which executes 32-bit containers (RouterOS reported `arch: arm`, 52 MiB at start); a 32-bit router's kernel is a different thing, so that is evidence, not proof. Not yet done, and the reason roadmap item 4 stays open: a physical router, real peers, a playback, and memory or throughput numbers (an emulated CPU says nothing about speed).
 
 ## Does the image need special metadata?
 
@@ -10,16 +10,16 @@ No. RouterOS pulls standard OCI images and reads the usual config. On 7.25.1 it 
 
 | Property of the image | Why RouterOS cares |
 | --- | --- |
-| **`linux/amd64` and `linux/arm64` only.** RouterOS's `arm64` is `linux/arm64` and its `x86` is `linux/amd64`. | RouterOS runs `arm`, `arm64` and `x86`. A 32-bit ARM router cannot run this image: there is no `linux/arm/v7` variant. A wrong architecture shows up as `exec format error` in the container log. |
+| **`linux/amd64`, `linux/arm64` and (core only) `linux/arm/v7`.** RouterOS's `arm64` is `linux/arm64`, `arm` is `linux/arm/v7` and `x86` is `linux/amd64`. | RouterOS runs `arm`, `arm64` and `x86`. A router older than ARMv7 cannot run the image, because Node 24 needs ARMv7; that includes the `arm32v5` hEX Refresh. A wrong architecture shows up as `exec format error` in the container log. |
 | **No attestations.** `publish-image.yml` sets `provenance: false`, and SBOM attestations are off by default. | BuildKit's provenance and SBOM attestations add an `unknown/unknown` manifest to the image index. RouterOS's registry pull fails on it (a 404 or `could not load next layer`) for any GitHub-built image. The published `edge` index pulled cleanly. **Keep `provenance: false` and don't enable `sbom`.** |
-| **Multi-arch index.** | A registry pull resolves the index to the router's own platform; verified (`arch=arm64`). Only an offline `.tar` needs the architecture picked by hand. |
+| **Multi-arch index.** | A registry pull resolves the index to the router's own platform; verified for `arm64`. Only an offline `.tar` needs the architecture picked by hand (`docker save --platform linux/arm/v7 ...`). |
 | **`USER node` (uid 1000), `CACHE_DIR=/data`.** | RouterOS runs the process as `node` (checked: `uid=1000`). See [Data and permissions](#data-and-permissions). |
 | **`ENV NODE_OPTIONS=--max-old-space-size=128`.** | Applied (checked inside the container). This is the heap ceiling that keeps Node inside a small memory limit ([container memory](resources.md#container-memory)). |
 | **`HEALTHCHECK`** | RouterOS reads it: a running container reports `healthcheck-status: good`. `stop-on-unhealthy=yes` makes RouterOS stop it when the check fails. |
 
 ## What the router needs
 
-- RouterOS 7 with the `container` package, on an `arm64` or `x86` device. Containers need RouterOS 7.4 or later; tested on 7.25.1. 7.20 added per-container memory limits, `name` and `/container/log`; `restart-policy` needs 7.23. A registry host inside `remote-image` (used below) needs 7.18.
+- RouterOS 7 with the `container` package, on an `arm`, `arm64` or `x86` device (32-bit `arm` means ARMv7 or newer). Containers need RouterOS 7.4 or later; tested on 7.25.1. 7.20 added per-container memory limits, `name` and `/container/log`; `restart-policy` needs 7.23. A registry host inside `remote-image` (used below) needs 7.18.
 - Container mode, enabled once, with a physical confirmation (the reset button, or a cold reboot on x86 and CHR) and a reboot: `/system/device-mode/update container=yes`.
 - **An external disk** for the container's root directory and temporary extraction, ideally 100 MB/s sequential and 10,000 random IOPS. MikroTik warns against the internal flash, and pulling needs free RAM for extraction.
 - Enough RAM. The container used 54-70 MiB right after starting on the emulated router. [Container memory](resources.md#container-memory) measured 140-190 MiB while streaming or remuxing, in a 384 MiB limit on arm64 Docker. A device with 256 MB total has little room beyond RouterOS itself.
@@ -110,7 +110,7 @@ From a LAN host: `curl http://172.17.0.2:8080/health` returns `{"ok":true,...}`,
 | Symptom | Likely cause |
 | --- | --- |
 | Pull fails with a 404, `could not load next layer` or an unsupported manifest | An image published with attestations. Check `publish-image.yml` still has `provenance: false`. As a workaround, `docker pull --platform linux/arm64`, `docker save`, put the tar on the router (`/tool/fetch` works) and `/container/add file=...`. |
-| `exec format error` in the log | Wrong architecture: a 32-bit ARM router, or a tar saved for another platform. |
+| `exec format error` in the log | Wrong architecture: a pre-ARMv7 router, or a tar saved for another platform. |
 | The container is added but never starts | Container mode not enabled (check `/system/device-mode/print`), or the extraction directory is out of space. |
 | Starts and serves, but search finds nothing and the log shows `ENOTFOUND` or `EAI_AGAIN` | DNS: see [DNS](#dns). |
 | Search shows `ECONNREFUSED` or a timeout for the indexer | The indexer address is not reachable from the container's subnet, or the masquerade rule is missing. |
