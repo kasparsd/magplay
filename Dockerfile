@@ -39,6 +39,46 @@ COPY apps ./apps
 COPY packages ./packages
 RUN npm run build
 
+# ffmpeg for the `full` image, built to do only what magplay asks of it (packages/playback/src/media.ts): copy or
+# re-encode one video and one audio track into fragmented MP4, convert text subtitles to WebVTT, and run the
+# one-frame encoder probes. Alpine's package is 107 MB because it links every codec, filter and device;
+# this one is a single binary plus x264, dav1d and libva. Every component below is named, so a codec added to the
+# players needs a line here. `tools/scripts/check-ffmpeg.mjs` runs the app's own arguments against the result.
+# Not built in: NVENC (it never ran on musl), Vulkan, v4l2, ffprobe, ffplay, TLS and every encoder but x264, AAC
+# and the hardware H.264 ones. Quick Sync (libvpl) is x86_64 only, as in Alpine's package.
+FROM alpine:3.24 AS ffmpeg
+ARG FFMPEG_VERSION=8.1.3
+ARG FFMPEG_SHA256=7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3
+RUN apk add --no-cache build-base nasm pkgconf curl xz zlib-dev x264-dev dav1d-dev libva-dev \
+ && if [ "$(apk --print-arch)" = x86_64 ]; then apk add --no-cache libvpl-dev; fi
+WORKDIR /src
+# ffmpeg.org first; Alpine's distfiles mirror serves the same tarball (its APKBUILD pins the same release).
+RUN curl -fsSL --retry 3 -o ffmpeg.tar.xz "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" \
+ || curl -fsSL --retry 3 -o ffmpeg.tar.xz "https://distfiles.alpinelinux.org/distfiles/v3.24/ffmpeg-$FFMPEG_VERSION.tar.xz"; \
+ echo "$FFMPEG_SHA256  ffmpeg.tar.xz" | sha256sum -c - \
+ && tar -xJf ffmpeg.tar.xz --strip-components=1 && rm ffmpeg.tar.xz
+RUN qsv=""; [ "$(apk --print-arch)" = x86_64 ] && qsv=1; \
+ ./configure \
+  --prefix=/opt/ffmpeg --enable-gpl --enable-small --enable-pic --enable-runtime-cpudetect \
+  --disable-everything --disable-autodetect --disable-debug --disable-doc \
+  --disable-ffplay --disable-ffprobe --disable-shared --enable-static \
+  --enable-zlib --enable-libx264 --enable-libdav1d --enable-vaapi ${qsv:+--enable-libvpl} \
+  --enable-avdevice --enable-indev=lavfi \
+  --enable-protocol=file,pipe,http,tcp \
+  --enable-demuxer=matroska,mov,avi,mpegts,mpegps,flv,asf,ogg,mp3,flac,wav,aac,ac3,eac3,dts,dtshd,truehd,mlp,h264,hevc,m4v,mpegvideo,vc1,ivf,mxf,nut,srt,ass,webvtt,subviewer,subviewer1,microdvd,sami,mpl2,vplayer,realtext,stl,jacosub,pjs,aqtitle \
+  --enable-parsers --enable-bsfs \
+  --enable-decoder=h264,hevc,mpeg1video,mpeg2video,mpeg4,msmpeg4v1,msmpeg4v2,msmpeg4v3,vc1,wmv1,wmv2,wmv3,vp8,vp9,libdav1d,mjpeg,theora,h263,h263p,flv \
+  --enable-decoder=aac,aac_latm,ac3,eac3,dca,truehd,mlp,flac,vorbis,opus,mp1float,mp2float,mp3float,alac,wmav1,wmav2,wmapro,wmalossless,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8,pcm_dvd,pcm_bluray,pcm_alaw,pcm_mulaw,adpcm_ms,adpcm_ima_wav \
+  --enable-decoder=subrip,srt,ass,ssa,movtext,webvtt,text,subviewer,subviewer1,microdvd,sami,realtext,stl,jacosub,pjs,aqtitle,mpl2,vplayer \
+  --enable-encoder=libx264,aac,h264_vaapi,webvtt ${qsv:+--enable-encoder=h264_qsv} \
+  --enable-muxer=mp4,webvtt,null \
+  --enable-filter=buffer,buffersink,abuffer,abuffersink,nullsrc,null,anull,scale,format,aformat,aresample,fifo,afifo,hwupload,hwdownload,scale_vaapi ${qsv:+--enable-filter=vpp_qsv} \
+ && make -j"$(nproc)" install \
+ && strip --strip-unneeded /opt/ffmpeg/bin/ffmpeg
+RUN /opt/ffmpeg/bin/ffmpeg -hide_banner -version | head -1 \
+ && ldd /opt/ffmpeg/bin/ffmpeg \
+ && ls -l /opt/ffmpeg/bin/ffmpeg
+
 # magplay-core (`--target core`): the server without ffmpeg. Files stream as they are, the browser repackages what
 # it can, and nothing is re-encoded. For small hosts such as RouterOS containers and single-board computers.
 # Alpine's nodejs is Node 24 without the npm, yarn and headers that node:24-alpine adds. 3.24 is the Alpine
@@ -65,9 +105,11 @@ EXPOSE 8080 6881/tcp 6881/udp
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 CMD ["node", "apps/server/src/main.ts"]
 
-# magplay (the default target): core plus Alpine's ffmpeg, which brings libx264, the AAC/AC3 codecs and the
-# VAAPI/Quick Sync hooks used for server-side remux, transcode and subtitle extraction.
+# magplay (the default target): core plus the ffmpeg built above, with the libraries it links (x264, dav1d, libva
+# and, on x86_64, Quick Sync's libvpl). No VAAPI driver or oneVPL GPU runtime is included; see the README.
 FROM core AS full
 USER root
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache x264-libs libdav1d libva \
+ && if [ "$(apk --print-arch)" = x86_64 ]; then apk add --no-cache libvpl; fi
+COPY --from=ffmpeg /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
 USER node

@@ -7,8 +7,8 @@ too.
 | Response class | Cache-Control | Validators / reason |
 |---|---|---|
 | HTML pages | `no-cache` | Content ETag; store, but revalidate on each use, so a release shows up on reload. |
-| Page scripts and the stylesheet (`/assets/search.js`, `/assets/style.css`) and their source maps | `no-cache` | Content ETag. The pages link them by name, so they revalidate like pages; usually a 304. |
-| Shared chunks (`/assets/chunk-…`, `hls.js`, mediabunny) and their source maps | `public, max-age=31536000, immutable` | Content-hashed file names: a release's entry scripts import new URLs, so any cache may keep these for good. Weak metadata ETag and Last-Modified. |
+| Page scripts and the stylesheet (`/assets/search.js`, `/assets/style.css`) | `no-cache` | Content ETag. The pages link them by name, so they revalidate like pages; usually a 304. |
+| Shared chunks (`/assets/chunk-…`, `hls.js`, mediabunny) | `public, max-age=31536000, immutable` | Content-hashed file names: a release's entry scripts import new URLs, so any cache may keep these for good. Weak metadata ETag and Last-Modified. |
 | Probe API summary | `private, no-cache` | Content ETag; stable media metadata, revalidated for software changes. |
 | Raw torrent files and tar downloads | `private, max-age=3600, must-revalidate` | Strong content-identity ETag; one hour of browser reuse, then revalidate. Range/If-Range retained. |
 | Completed `/subs/…` conversions | `private, no-cache` | Content ETag; revalidate generated output across releases. |

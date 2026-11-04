@@ -6,11 +6,11 @@ import path from 'node:path'
 import { FileNotFoundError, route, sendCached, serveFile } from '@magplay/http-kit'
 import type { Handler, Route } from '@magplay/http-kit'
 
-const CONTENT_TYPES: Readonly<Record<string, string>> = { '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json' }
-/** Shared chunks and their source maps, named by esbuild's `[name]-[hash]`; never client sources or tests. */
-const CHUNK = /^[\w-]+-[A-Z0-9]{8}\.js(?:\.map)?$/
-/** Page scripts, the stylesheet and their source maps, as the pages link them: `/assets/search.js`. */
-const ENTRY = /^[a-z]+\.(?:js|css)(?:\.map)?$/
+const CONTENT_TYPES: Readonly<Record<string, string>> = { '.js': 'text/javascript', '.css': 'text/css' }
+/** Shared chunks, named by esbuild's `[name]-[hash]`; never client sources, tests or source maps. */
+const CHUNK = /^[\w-]+-[A-Z0-9]{8}\.js$/
+/** Page scripts and the stylesheet, as the pages link them: `/assets/search.js`. */
+const ENTRY = /^[a-z]+\.(?:js|css)$/
 /** A hashed URL never changes content, so any cache may keep it for good. */
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
