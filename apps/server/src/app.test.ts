@@ -81,6 +81,20 @@ test('HTTP server serves pages and modules, rejects bad routes and remains healt
     assert.equal(res.headers.get('cache-control'), 'no-store')
     assert.equal(typeof await errorBody(res), 'string')
   }
+  // A page on another site can send a form or a text/plain body without a CORS preflight, so writes refuse
+  // cross-site browser requests and take only JSON; clients that aren't browsers send neither header and are fine
+  for (const [headers, status] of [
+    [{ 'Content-Type': 'text/plain;charset=UTF-8', 'Sec-Fetch-Site': 'cross-site' }, 403],
+    [{ 'Content-Type': 'application/json', Origin: 'http://evil.example' }, 403],
+    [{ 'Content-Type': 'text/plain;charset=UTF-8' }, 415],
+    [{ 'Content-Type': 'application/x-www-form-urlencoded' }, 415],
+    [{}, 415],
+    [{ 'Content-Type': 'application/json; charset=utf-8' }, 400],
+  ] as const) {
+    const res = await fetch(`${origin}/api/torrents`, { method: 'POST', headers, body: '{}' })
+    assert.equal(res.status, status, JSON.stringify(headers))
+    assert.equal(typeof await errorBody(res), 'string')
+  }
   for (const url of ['/health', '/api/recent', '/hls/missing/index.m3u8', '/hls/missing/seg_00000.m4s']) {
     const res = await fetch(origin + url, { headers: { 'If-None-Match': '*' } })
     assert.notEqual(res.status, 304)

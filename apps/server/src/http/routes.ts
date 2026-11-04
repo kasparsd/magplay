@@ -2,7 +2,7 @@
 import { noopLogger } from '@magplay/observability'
 import type { Logger } from '@magplay/observability'
 import type { IncomingMessage } from 'node:http'
-import { isSameOrigin, route, sendCached } from '@magplay/http-kit'
+import { isCrossSite, route, sendCached } from '@magplay/http-kit'
 import type { Route } from '@magplay/http-kit'
 import type { HlsSessions } from '@magplay/playback'
 import type { TorrentEngine } from '@magplay/torrent-engine'
@@ -42,9 +42,22 @@ export interface RouteDeps {
   checks: StatusChecks
 }
 
-/** Writes change the server for everyone, so only this site's own pages may make them. */
-function sameOriginOnly (req: IncomingMessage): void {
-  if (!isSameOrigin(req)) throw new HttpError(403, 'Settings can only be changed from magplay’s own pages.')
+/**
+ * There is no login, so a page on any other site the browser visits could otherwise call the server; API clients that
+ * aren't browsers stay welcome. Writes refuse every cross-site browser request. Reads refuse them too unless the browser
+ * is navigating to the URL (a link or a typed address), because several reads have effects: a torrent's info, probe, raw
+ * or subtitle URL joins that torrent, so an image or fetch from another site could add it without a POST.
+ */
+function sameOriginOnly ({ methods, pattern, handler }: Route): Route {
+  const read = methods.split('|').every(method => method === 'GET' || method === 'HEAD')
+  return {
+    methods,
+    pattern,
+    handler: ctx => {
+      if (isCrossSite(ctx.req) && !(read && ctx.req.headers['sec-fetch-mode'] === 'navigate')) throw new HttpError(403, 'Pages on other sites can’t use magplay.')
+      return handler(ctx)
+    },
+  }
 }
 
 /** The address the browser reached us on, for links in playlists; never 127.0.0.1 behind a proxy. */
@@ -60,13 +73,11 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
     route('GET', '/api/status', async ({ res }) => json<StatusResponse>(res, 200, await status.snapshot())),
     route('GET', '/api/settings', ({ res }) => json<SettingsResponse>(res, 200, settings.response())),
     route('PATCH', '/api/settings', async ({ req, res }) => {
-      sameOriginOnly(req)
       const result = settings.update(await readJson(req))
       if (!result.ok) return json<SettingsErrorResponse>(res, 400, { error: 'Some settings aren’t valid.', fields: result.fields })
       json<SettingsResponse>(res, 200, settings.response())
     }),
     route('POST', '/api/settings/test', async ({ req, res }) => {
-      sameOriginOnly(req)
       const { key, item } = await readJson(req)
       if (key !== 'sources' || !item || typeof item !== 'object' || Array.isArray(item)) throw new HttpError(400, 'Only sources can be tested')
       const checked = settings.unsavedItem(key, item as Record<string, unknown>)
@@ -74,8 +85,7 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       json<Pick<StatusCheck, 'level' | 'value' | 'message' | 'action'>>(res, 200, await checkSource(sourceConfigs([checked.item])[0]!))
     }),
     route('GET', '/api/debug', async ({ res }) => json<DebugInfo>(res, 200, await checks.debugInfo())),
-    route('POST', '/api/debug/clear-hls', ({ req, res }) => {
-      sameOriginOnly(req)
+    route('POST', '/api/debug/clear-hls', ({ res }) => {
       const stopped = hls.stopAll()
       logger.info('hls.cache.cleared', { count: stopped })
       json(res, 200, { stopped })
@@ -130,5 +140,5 @@ export function apiRoutes ({ engine, hls, tabs, play, search, explore, subtitles
       const text = await subtitles.vtt(params.ih, index(params.idx), params.track)
       sendCached(req, res, text, { 'Content-Type': 'text/vtt; charset=utf-8' })
     }),
-  ]
+  ].map(sameOriginOnly)
 }

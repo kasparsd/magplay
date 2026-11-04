@@ -4,7 +4,7 @@
 
 A single-user media app for a trusted local network, with no accounts. Keep the Node service and multi-page browser clients. Prioritize watching reliably on the actual device. Alongside that, finish splitting the server into isolated, strictly typed packages while it is cheap (decided 2026-10-17; see [architecture](architecture.md)); the remaining client, test and script files become TypeScript when they are next changed.
 
-**Not for public/untrusted exposure:** there is no authentication or request-origin protection. Resource safeguards are now present, but they are not an authorization boundary. Require an authenticated gateway or application-level protection before changing that deployment assumption.
+**Not for public/untrusted exposure:** there is no authentication. API writes refuse browser requests from pages on other sites and take only JSON ([architecture](architecture.md#settings-and-status)), which stops other sites the browser visits, but not anyone who can reach the port; there is no `Host` allowlist against DNS rebinding. Resource safeguards are present, but they are not an authorization boundary. Require an authenticated gateway or application-level protection before changing that deployment assumption.
 
 [architecture.md](architecture.md) describes package boundaries, build tooling and invariants. [user-interface.md](user-interface.md) holds UI expectations and the UI cleanup todo. This document owns priorities; [the build report](checkpoints/2026-10-17-build-report.md) is historical evidence, not the current acceptance checklist.
 
@@ -58,6 +58,10 @@ A single-user media app for a trusted local network, with no accounts. Keep the 
 
 29. **VOD HLS playback:** remux (by ffmpeg, or in Node without it) and transcode play from one playlist that covers the whole file on its own timeline; segments are cut on keyframes from the file's index (Matroska cues, MP4 sample tables) or every 6 s when transcoding, made on demand, and kept until the HLS disk budget needs the space. A seek is an ordinary seek: the server restarts ffmpeg at a segment the running conversion won't reach soon. The client lost its session offset, restart-on-seek and playlist wait. Files without an index play from a growing playlist. See [architecture](architecture.md#hls-streaming) and [the checkpoint](checkpoints/2026-10-23-vod-playback.md).
 
+30. **Client state without a framework:** the Player's engine is `PlaybackController`, and the pages share `takeLatest`/`createCache`/`poll`, a typed URL-state schema and `parts()` redraws instead of hand-written loops, generation counters and DOM-read state; Search and Explore are TypeScript; the build is one esbuild command again. A React client was built and not merged. See [the decision](architecture.md#framework-and-browser-media-triggers) and [the checkpoint](checkpoints/2026-10-23-vanilla-client.md).
+
+31. **Same-origin API writes:** every non-GET API route, not only the settings writes, refuses browser requests from pages on other sites, and request bodies must be JSON, so a page elsewhere can no longer make the server join a swarm or start conversions. Clients that aren't browsers need no extra headers. See [architecture](architecture.md#settings-and-status).
+
 The earlier extraction and test-layout commits are prerequisites already delivered, not future migration tasks. No Vite, UI framework, watch-history database or general dependency-injection framework was introduced.
 
 ## Verification and confidence
@@ -85,8 +89,9 @@ Items 1–2 need the owner's devices and server. The TypeScript Phase 7 review a
 | 3 | **P3 / conditional** | Interface translation ([i18n plan](plans/i18n-support.md)) | Only if a second interface language is wanted, starting with `Intl.PluralRules` plus one catalog. |
 | 4 | **P2** | Run `magplay-core` on the MikroTik container host | Pull `ghcr.io/kasparsd/magplay-core:edge` on the device and record RAM at idle and during one playback with the server's real peer counts, plus `/raw` throughput over the LAN. Image trimming is already done and does not reduce resident memory ([container memory](resources.md#container-memory), [checkpoint](checkpoints/2026-10-19-node-container-memory.md)); size the container from that guidance. A fit check on the device is still required. |
 | 5 | **P3 / conditional** | Cross-origin hosting | Only for a demonstrated deployment need. |
+| 6 | **P3** | Finish the client primitives | Settings drafts use a per-section `parts()` instead of the `errorSlots`/`readouts` maps, so inputs stay mounted; Title uses `urlState` and `createCache` like Search; a lint rule bans module-level `let` in page files and reading UI state back from the DOM. |
 
-**Do not automatically schedule accounts.** It is a conditional scope change, not a missing product feature. The playback-controller extraction and the React client are approved and in progress ([plan](plans/react-client.md)). Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
+**Do not automatically schedule accounts.** It is a conditional scope change, not a missing product feature. The client stays separate pages without a UI framework ([decision](architecture.md#framework-and-browser-media-triggers)). Logging and the remaining Player work must preserve the [lifetime rules](lifecycle.md), including shared-job ownership and cancellation behavior.
 
 Before public/untrusted exposure, authentication, media/API access protection and Origin/CSRF handling become mandatory deployment gates. They are intentionally not account features on the local-only roadmap.
 

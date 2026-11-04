@@ -104,7 +104,7 @@ test('a live setting applies without a restart, and env-set values are read-only
 })
 
 test('writes from another site are refused', async ({ page, app }) => {
-  for (const [method, url] of [['patch', '/api/settings'], ['post', '/api/settings/test'], ['post', '/api/debug/clear-hls']]) {
+  for (const [method, url] of [['patch', '/api/settings'], ['post', '/api/settings/test'], ['post', '/api/debug/clear-hls'], ['post', '/api/torrents'], ['post', '/api/play'], ['post', '/api/play/tab/evil'], ['delete', '/api/play/evil']]) {
     const res = await page.request[method](`${app.origin}${url}`, { headers: { Origin: 'http://evil.example' }, data: { 'cache.maxGb': 1 } })
     expect(res.status(), url).toBe(403)
   }
