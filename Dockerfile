@@ -9,7 +9,7 @@ RUN find apps packages -type f ! -name package.json -delete
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY --from=manifests /app ./
-# Install scripts fetch prebuilt native modules (node-datachannel, which WebTorrent loads at startup).
+# WebRTC is stubbed (packages/webrtc-polyfill), so the native node-datachannel addon is neither installed nor loaded.
 # hls.js is bundled into the client at build time, so the runtime never serves it from node_modules.
 # What remains is the current platform's prebuild, stripped, and the one build variant Node loads:
 # published packages also ship other platforms, browser bundles, TypeScript sources and tests.
@@ -25,7 +25,7 @@ RUN npm ci --omit=dev \
  && rm -rf node_modules/mediabunny/dist/bundles node_modules/mediabunny/src \
       node_modules/@mediabunny/*/dist/modules node_modules/@mediabunny/*/src \
  && find node_modules/@mediabunny \( -path '*/dist/bundles/*.min.mjs' -o -path '*/dist/bundles/*' -name '*.js' \) -delete \
- && rm -rf node_modules/webtorrent/dist node_modules/xml2js/lib/xml2js.bc.js node_modules/node-datachannel/src \
+ && rm -rf node_modules/webtorrent/dist node_modules/xml2js/lib/xml2js.bc.js \
       node_modules/@opentelemetry/api/build/esm node_modules/@opentelemetry/api/build/esnext
 
 # Full install (dev dependencies: esbuild) to build the browser client into dist/client.

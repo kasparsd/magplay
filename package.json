@@ -46,7 +46,6 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "node-datachannel@0.32.3": true,
     "bufferutil@4.1.0": true,
     "utf-8-validate@6.0.6": true,
     "utp-native@2.5.3": true,

@@ -18,12 +18,17 @@ Plus `ffmpeg` from Alpine Linux in the `magplay` image only; `magplay-core` has 
 
 WebTorrent pulls in about 180 transitive packages, mostly from the WebTorrent
 project (feross, mafintosh, jhiesey, ThaUnknown…) and common Node utilities.
-`npm ls --omit=dev --all` lists them all. One is worth knowing about:
-`node-datachannel` (Murat Doğan) is a native WebRTC module that WebTorrent
-loads at startup even though magplay doesn't use WebRTC. Its install script
-downloads a prebuilt binary during `npm ci`, which is why the Dockerfile runs
-install scripts. uTP is turned off (it would share the DHT's UDP port), so
-`utp-native` prints a harmless "Cannot find module" warning at startup on
-Linux.
+`npm ls --omit=dev --all` lists them all. Two are worth knowing about:
+
+- `webrtc-polyfill` is replaced by a workspace of the same name and version
+  (`packages/webrtc-polyfill`). The registry package loads `node-datachannel`,
+  a 9 MB native WebRTC addon that WebTorrent's tracker client imports at
+  startup even though magplay doesn't use WebRTC. The stub's connections fail
+  with an error, which `bittorrent-tracker` reports as a warning, so a `wss://`
+  tracker in `EXTRA_TRACKERS` still announces but never gets WebRTC peers.
+  Peers connect over TCP and UDP only. Restoring WebRTC means deleting the
+  workspace and allowing `node-datachannel`'s install script again.
+- uTP is turned off (it would share the DHT's UDP port), so `utp-native` prints
+  a harmless "Cannot find module" warning at startup on Linux.
 
 See also the README's [Development](../README.md#development) section.

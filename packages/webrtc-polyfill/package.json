@@ -1,0 +1,10 @@
+{
+  "name": "webrtc-polyfill",
+  "version": "1.2.2",
+  "private": true,
+  "type": "module",
+  "description": "Stand-in for the registry package of this name, so node-datachannel (native WebRTC, unused here) is never installed or loaded",
+  "exports": {
+    ".": "./index.js"
+  }
+}
